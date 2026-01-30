@@ -14,7 +14,7 @@
 
 ### 🔗 相关仓库
 
-- **后端仓库**：[玺记 Spring Boot 后端](https://gitee.com/duyuanyua/xiji.git)
+- **后端仓库**：[玺记 Spring Boot 后端](https://github.com/liberty-ask/xiji.git)
 
 ## 📱 功能特性
 
