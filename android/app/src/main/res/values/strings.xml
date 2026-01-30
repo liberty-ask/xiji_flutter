@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">玺记</string>
+    <string name="voice_transaction_widget_title">语音记账</string>
+    <string name="voice_transaction_widget_subtitle">点击快速记账</string>
+    <string name="voice_transaction_widget_description">快速语音记账小部件</string>
+    <string name="voice_transaction_widget_icon">语音记账图标</string>
+    <string name="finance_summary_widget_description">本月财务汇总小部件，展示收入支出并支持语音记账</string>
+</resources>
+

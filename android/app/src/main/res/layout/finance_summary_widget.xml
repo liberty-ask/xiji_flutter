@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:gravity="center">
+
+    <!-- 左侧语音记账按钮区域 -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_marginRight="12dp">
+        
+        <!-- 大语音记账按钮 -->
+        <ImageView
+            android:id="@+id/voice_button"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:src="@android:drawable/ic_btn_speak_now"
+            android:contentDescription="语音记账"
+            android:tint="#4CAF50" />
+        
+        <!-- 按钮文字 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="语音记账"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+
+    <!-- 右侧收支数据区域 -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1.5"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:layout_marginLeft="4dp">
+        
+        <!-- 标题 -->
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="本月财务汇总"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp"
+            android:gravity="center" />
+        
+        <!-- 收入 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp"
+            android:gravity="center">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="收入："
+                android:textColor="#B0B0B0"
+                android:textSize="12sp" />
+            
+            <TextView
+                android:id="@+id/income_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="¥0.00"
+                android:textColor="#4CAF50"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginLeft="4dp" />
+        </LinearLayout>
+        
+        <!-- 支出 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="支出："
+                android:textColor="#B0B0B0"
+                android:textSize="12sp" />
+            
+            <TextView
+                android:id="@+id/expense_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="¥0.00"
+                android:textColor="#F44336"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginLeft="4dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

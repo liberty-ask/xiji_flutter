@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 财务汇总小部件配置 -->
+<!-- 更新周期：30分钟 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="200dp"
+    android:minHeight="120dp"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/finance_summary_widget"
+    android:description="@string/finance_summary_widget_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2" />
