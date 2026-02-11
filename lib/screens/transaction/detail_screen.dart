@@ -1310,7 +1310,10 @@ class _DetailScreenState extends State<DetailScreen> {
         // 在异步操作后使用 mounted 检查，确保 widget 仍然存在
         if (mounted) {
           CustomSnackBar.showSuccess(context, AppLocalizations.of(context)!.deleteSuccess);
-          _loadTransactions();
+          // 直接从列表中移除对应的交易，而不是重新加载整个列表
+          setState(() {
+            _transactions.removeWhere((t) => t.id == transaction.id);
+          });
         }
       } catch (e) {
         // 在异步操作后使用 mounted 检查，确保 widget 仍然存在
@@ -1657,7 +1660,22 @@ class _DetailScreenState extends State<DetailScreen> {
                         // 使用局部变量 localDialogContext 代替 dialogContext
                         Navigator.pop(localDialogContext);
                         CustomSnackBar.showSuccess(localDialogContext, AppLocalizations.of(localContext)!.editSuccess);
-                        _loadTransactions();
+                        // 直接更新列表中对应的交易，而不是重新加载整个列表
+                        setState(() {
+                          final index = _transactions.indexWhere((t) => t.id == transaction.id);
+                          if (index != -1) {
+                            _transactions[index] = Transaction(
+                              id: transaction.id,
+                              type: selectedType,
+                              category: selectedCategory!.name,
+                              amount: double.parse(amountController.text),
+                              date: selectedDate,
+                              userId: transaction.userId,
+                              description: noteController.text.isNotEmpty ? noteController.text : null,
+                              counterparty: transaction.counterparty,
+                            );
+                          }
+                        });
                       } catch (e) {
                         setDialogState(() {
                           isLoading = false;
