@@ -316,6 +316,12 @@ abstract class AppLocalizations {
   /// **'has been saved'**
   String get successfullySaved;
 
+  /// No description provided for @languageDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the display language for the app. Settings will be saved locally and retained even after logging out.'**
+  String get languageDescription;
+
   /// No description provided for @recentActivities.
   ///
   /// In en, this message translates to:

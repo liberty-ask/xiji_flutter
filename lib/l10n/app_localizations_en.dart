@@ -117,6 +117,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get successfullySaved => 'has been saved';
 
   @override
+  String get languageDescription =>
+      'Select the display language for the app. Settings will be saved locally and retained even after logging out.';
+
+  @override
   String get recentActivities => 'Recent Activities';
 
   @override

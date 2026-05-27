@@ -35,5 +35,6 @@
   "error": "错误",
   "warning": "警告",
   "info": "提示",
-  "successfullySaved": "设置已保存"
+  "successfullySaved": "设置已保存",
+  "languageDescription": "选择应用的显示语言，设置会保存到本地，即使退出登录也会保留。"
 }

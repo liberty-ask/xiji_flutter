@@ -36,6 +36,7 @@
   "warning": "Warning",
   "info": "Info",
   "successfullySaved": "has been saved",
+  "languageDescription": "Select the display language for the app. Settings will be saved locally and retained even after logging out.",
   "recentActivities": "Recent Activities",
   "all": "All",
   "unknown": "Unknown",

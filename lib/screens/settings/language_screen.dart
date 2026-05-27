@@ -137,7 +137,7 @@ class _LanguageScreenState extends State<LanguageScreen> {
                         ),
                         const SizedBox(height: 4),
                         ScaledText(
-                          '选择应用的显示语言，设置会保存到本地，即使退出登录也会保留。',
+                          AppLocalizations.of(context)!.languageDescription,
                           style: TextStyle(
                             fontSize: 10,
                             color: Colors.white.withValues(alpha: 0.4),

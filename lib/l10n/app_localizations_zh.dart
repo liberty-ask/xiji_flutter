@@ -117,6 +117,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get successfullySaved => '设置已保存';
 
   @override
+  String get languageDescription => '选择应用的显示语言，设置会保存到本地，即使退出登录也会保留。';
+
+  @override
   String get recentActivities => 'Recent Activities';
 
   @override
@@ -2328,6 +2331,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get successfullySaved => '已保存';
+
+  @override
+  String get languageDescription => '選擇應用程式的顯示語言，設定會保存到本機，即使退出登入也會保留。';
 
   @override
   String get recentActivities => '近期動態';
