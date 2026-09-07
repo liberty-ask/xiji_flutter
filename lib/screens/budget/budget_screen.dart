@@ -102,6 +102,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currency = AppLocalizations.of(context)!.currencySymbol;
     return Scaffold(
       appBar: AppBar(
         title: ScaledText(AppLocalizations.of(context)!.monthlyBudget),
@@ -145,8 +146,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            const ScaledText(
-                              '¥',
+                            ScaledText(
+                              currency,
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -169,13 +170,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             Expanded(
                               child: _buildStatItem(
                                 AppLocalizations.of(context)!.expense,
-                                '¥${_budgetData!['used'] ?? 0}',
+                                '$currency${_budgetData!['used'] ?? 0}',
                               ),
                             ),
                             Expanded(
                               child: _buildStatItem(
                                 AppLocalizations.of(context)!.net,
-                                '¥${_budgetData!['remaining'] ?? 0}',
+                                '$currency${_budgetData!['remaining'] ?? 0}',
                               ),
                             ),
                           ],
@@ -214,7 +215,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     decoration: InputDecoration(
                       labelText: AppLocalizations.of(context)!.amount,
                       prefixIcon: Icon(Icons.account_balance_wallet),
-                      suffixText: '¥',
+                      suffixText: currency,
                       hintText: AppLocalizations.of(context)!.pleaseEnterAmount,
                     ),
                   ),
@@ -234,7 +235,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
-                        child: ScaledText('¥${amount.toStringAsFixed(0)}'),
+                        child: ScaledText('$currency${amount.toStringAsFixed(0)}'),
                       );
                     }).toList(),
                   ),

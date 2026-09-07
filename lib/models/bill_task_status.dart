@@ -1,3 +1,4 @@
+import '../l10n/app_localizations.dart';
 import 'bill_upload_result.dart';
 
 class BillTaskFullStatus {
@@ -125,31 +126,51 @@ class BillTaskResponse {
 }
 
 enum TaskStatus {
-  pending(0, '待处理'),
-  processing(1, '处理中'),
-  success(2, '成功'),
-  failed(3, '失败');
+  pending(0),
+  processing(1),
+  success(2),
+  failed(3);
 
   final int value;
-  final String label;
 
-  const TaskStatus(this.value, this.label);
+  const TaskStatus(this.value);
 
   static TaskStatus fromValue(int value) {
     return TaskStatus.values.firstWhere((status) => status.value == value, orElse: () => TaskStatus.pending);
   }
+
+  String localizedLabel(AppLocalizations l10n) {
+    switch (this) {
+      case TaskStatus.pending:
+        return l10n.pending;
+      case TaskStatus.processing:
+        return l10n.processing;
+      case TaskStatus.success:
+        return l10n.success;
+      case TaskStatus.failed:
+        return l10n.failed;
+    }
+  }
 }
 
 enum TaskType {
-  uploadParse(1, '上传解析'),
-  import(2, '导入');
+  uploadParse(1),
+  import(2);
 
   final int value;
-  final String label;
 
-  const TaskType(this.value, this.label);
+  const TaskType(this.value);
 
   static TaskType fromValue(int value) {
     return TaskType.values.firstWhere((type) => type.value == value, orElse: () => TaskType.uploadParse);
+  }
+
+  String localizedLabel(AppLocalizations l10n) {
+    switch (this) {
+      case TaskType.uploadParse:
+        return l10n.taskUploadParse;
+      case TaskType.import:
+        return l10n.taskImport;
+    }
   }
 }

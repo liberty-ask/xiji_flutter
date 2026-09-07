@@ -397,5 +397,19 @@
   "themePreviewDescription": "After selecting a theme, you can preview the effect in real-time and save it after confirmation. Theme settings are saved locally and will be retained even after logging out.",
   "previewingTheme": "Previewing: {themeName}",
   "previewingThemeDescription": "Click the button below to confirm saving, or return to cancel",
-  "confirmAndSave": "Confirm and Save"
+  "confirmAndSave": "Confirm and Save",
+  "comparedToLastWeek": "Vs last week {change}",
+  "comparedToLastMonth": "Vs last month {change}",
+  "comparedToLastYear": "Vs last year {change}",
+  "currencySymbol": "¥",
+  "transactionCount": "{count} transactions",
+  "pending": "Pending",
+  "failed": "Failed",
+  "uploading": "Uploading...",
+  "selectImageFailedPleaseRetry": "Failed to select image, please retry",
+  "uploadImageFailed": "Failed to upload image: {error}",
+  "taskUploadParse": "Upload & Parse",
+  "taskImport": "Import",
+  "taskInProgress": "{task} in progress",
+  "pageUnderDevelopment": "{title} page\nComing soon..."
 }

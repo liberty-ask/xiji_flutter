@@ -385,5 +385,19 @@
   "themePreviewDescription": "选择主题后可以实时预览效果，确认后保存。主题设置会保存到本地，即使退出登录也会保留。",
   "previewingTheme": "正在预览：{themeName}",
   "previewingThemeDescription": "点击下方按钮确认保存，或返回取消",
-  "confirmAndSave": "确认并保存"
+  "confirmAndSave": "确认并保存",
+  "comparedToLastWeek": "较上周 {change}",
+  "comparedToLastMonth": "较上月 {change}",
+  "comparedToLastYear": "较上年 {change}",
+  "currencySymbol": "¥",
+  "transactionCount": "{count}笔交易",
+  "pending": "待处理",
+  "failed": "失败",
+  "uploading": "上传中...",
+  "selectImageFailedPleaseRetry": "选择图片失败，请重试",
+  "uploadImageFailed": "上传图片失败: {error}",
+  "taskUploadParse": "上传解析",
+  "taskImport": "导入",
+  "taskInProgress": "{task}中",
+  "pageUnderDevelopment": "{title} 页面\n正在开发中..."
 }

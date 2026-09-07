@@ -1130,6 +1130,63 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get confirmAndSave => 'Confirm and Save';
+
+  @override
+  String comparedToLastWeek(Object change) {
+    return 'Vs last week $change';
+  }
+
+  @override
+  String comparedToLastMonth(Object change) {
+    return 'Vs last month $change';
+  }
+
+  @override
+  String comparedToLastYear(Object change) {
+    return 'Vs last year $change';
+  }
+
+  @override
+  String get currencySymbol => '¥';
+
+  @override
+  String transactionCount(Object count) {
+    return '$count transactions';
+  }
+
+  @override
+  String get pending => 'Pending';
+
+  @override
+  String get failed => 'Failed';
+
+  @override
+  String get uploading => 'Uploading...';
+
+  @override
+  String get selectImageFailedPleaseRetry =>
+      'Failed to select image, please retry';
+
+  @override
+  String uploadImageFailed(Object error) {
+    return 'Failed to upload image: $error';
+  }
+
+  @override
+  String get taskUploadParse => 'Upload & Parse';
+
+  @override
+  String get taskImport => 'Import';
+
+  @override
+  String taskInProgress(Object task) {
+    return '$task in progress';
+  }
+
+  @override
+  String pageUnderDevelopment(Object title) {
+    return '$title page\nComing soon...';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -2218,6 +2275,62 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get confirmAndSave => '确认并保存';
+
+  @override
+  String comparedToLastWeek(Object change) {
+    return '较上周 $change';
+  }
+
+  @override
+  String comparedToLastMonth(Object change) {
+    return '较上月 $change';
+  }
+
+  @override
+  String comparedToLastYear(Object change) {
+    return '较上年 $change';
+  }
+
+  @override
+  String get currencySymbol => '¥';
+
+  @override
+  String transactionCount(Object count) {
+    return '$count笔交易';
+  }
+
+  @override
+  String get pending => '待处理';
+
+  @override
+  String get failed => '失败';
+
+  @override
+  String get uploading => '上传中...';
+
+  @override
+  String get selectImageFailedPleaseRetry => '选择图片失败，请重试';
+
+  @override
+  String uploadImageFailed(Object error) {
+    return '上传图片失败: $error';
+  }
+
+  @override
+  String get taskUploadParse => '上传解析';
+
+  @override
+  String get taskImport => '导入';
+
+  @override
+  String taskInProgress(Object task) {
+    return '$task中';
+  }
+
+  @override
+  String pageUnderDevelopment(Object title) {
+    return '$title 页面\n正在开发中...';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -3309,4 +3422,60 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get confirmAndSave => '確認並保存';
+
+  @override
+  String comparedToLastWeek(Object change) {
+    return '較上周 $change';
+  }
+
+  @override
+  String comparedToLastMonth(Object change) {
+    return '較上月 $change';
+  }
+
+  @override
+  String comparedToLastYear(Object change) {
+    return '較上年 $change';
+  }
+
+  @override
+  String get currencySymbol => '¥';
+
+  @override
+  String transactionCount(Object count) {
+    return '$count筆交易';
+  }
+
+  @override
+  String get pending => '待處理';
+
+  @override
+  String get failed => '失敗';
+
+  @override
+  String get uploading => '上傳中...';
+
+  @override
+  String get selectImageFailedPleaseRetry => '選擇圖片失敗，請重試';
+
+  @override
+  String uploadImageFailed(Object error) {
+    return '上傳圖片失敗: $error';
+  }
+
+  @override
+  String get taskUploadParse => '上傳解析';
+
+  @override
+  String get taskImport => '導入';
+
+  @override
+  String taskInProgress(Object task) {
+    return '$task中';
+  }
+
+  @override
+  String pageUnderDevelopment(Object title) {
+    return '$title 頁面\n正在開發中...';
+  }
 }

@@ -121,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final todayExpense = data['todayExpense'] as String? ?? '0';
           final yesterdayExpense = data['yesterdayExpense'] as String? ?? '0';
           final activities = data['activities'] as List<dynamic>? ?? [];
+          final currency = AppLocalizations.of(context)!.currencySymbol;
           
           // 计算今日支出趋势
           final todayExpenseNum = double.tryParse(todayExpense) ?? 0.0;
@@ -410,7 +411,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   textBaseline: TextBaseline.alphabetic,
                                   children: [
                                     ScaledText(
-                                      '¥',
+                                      currency,
                                       style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
@@ -473,7 +474,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                             const SizedBox(height: 4),
                                             ScaledText(
-                                              '¥$income',
+                                              '$currency$income',
                                               style: const TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
@@ -509,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                             const SizedBox(height: 4),
                                             ScaledText(
-                                              '¥$expense',
+                                              '$currency$expense',
                                               style: const TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
@@ -644,7 +645,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           ScaledText(
-                                            '¥${budget['used'] ?? 0}',
+                                            '$currency${budget['used'] ?? 0}',
                                             style: const TextStyle(
                                               fontSize: 20,
                                               fontWeight: FontWeight.bold,
@@ -705,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       const SizedBox(height: 8),
                                       ScaledText(
-                                        '¥$todayExpense',
+                                        '$currency$todayExpense',
                                         style: const TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.bold,
@@ -727,8 +728,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           const SizedBox(width: 4),
                                           ScaledText(
                                             expenseDiff >= 0
-                                                ? '+¥${expenseDiff.toStringAsFixed(2)}'
-                                                : '¥${expenseDiff.toStringAsFixed(2)}',
+                                                ? '+$currency${expenseDiff.toStringAsFixed(2)}'
+                                                : '$currency${expenseDiff.toStringAsFixed(2)}',
                                             style: TextStyle(
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
@@ -1040,12 +1041,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.amount,
-                '¥${amount.toStringAsFixed(2)}',
+                '${AppLocalizations.of(context)!.currencySymbol}${amount.toStringAsFixed(2)}',
                 color: isIncome ? ThemeHelper.primary(context) : Colors.white
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.date,
-                DateFormat.yMMMMd(Localizations.localeOf(context).languageCode).format(transactionDate)
+                DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(transactionDate)
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.user,

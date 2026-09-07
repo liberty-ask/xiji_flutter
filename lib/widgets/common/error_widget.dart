@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../utils/theme_helper.dart';
+import '../../l10n/app_localizations.dart';
 
 class CustomErrorWidget extends StatelessWidget {
   final String message;
@@ -37,7 +38,7 @@ class CustomErrorWidget extends StatelessWidget {
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: onRetry,
-                child: const Text('重试'),
+                child: Text(AppLocalizations.of(context)!.retry),
               ),
             ],
           ],

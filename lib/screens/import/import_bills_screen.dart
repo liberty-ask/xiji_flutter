@@ -189,7 +189,22 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
     }
   }
 
+  void _resetProgressForNewTask() {
+    _currentTaskId = null;
+    _currentTaskStatus = null;
+    _targetProgress = 0.0;
+    _currentAnimationValue = 0.0;
+    _progressAnimation = Tween<double>(begin: 0, end: 0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    _animationController.reset();
+  }
+
   Future<void> _uploadAndParseFile(String platform, PlatformFile file) async {
+    _resetProgressForNewTask();
     setState(() {
       _isLoading = true;
       _error = null;
@@ -265,6 +280,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
         return;
       }
 
+    _resetProgressForNewTask();
     setState(() {
       _isLoading = true;
       _error = null;
@@ -311,10 +327,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
       _currentTaskStatus = null;
       _currentTaskType = null;
       _billUploadId = null; // 清空billUploadId
-      // 重置动画进度
-      _targetProgress = 0.0;
-      _currentAnimationValue = 0.0;
     });
+    _resetProgressForNewTask();
   }
   
   // 启动轮询
@@ -545,7 +559,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
             
             // 任务标题
             ScaledText(
-              '${taskType.label}${AppLocalizations.of(context)!.inProgress}',
+              AppLocalizations.of(context)!.taskInProgress(taskType.localizedLabel(AppLocalizations.of(context)!)),
               style: ResponsiveHelper.responsiveTextStyle(
                 context,
                 fontSize: 24,
@@ -556,7 +570,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
             
             // 任务状态
             ScaledText(
-              status.label,
+              status.localizedLabel(AppLocalizations.of(context)!),
               style: ResponsiveHelper.responsiveTextStyle(
                 context,
                 color: Colors.white70,
@@ -969,146 +983,139 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
       return const SizedBox.shrink();
     }
 
-    return SingleChildScrollView(
-      padding: ResponsiveHelper.containerMargin(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(height: ResponsiveHelper.spacing(context, small: 16, normal: 24)),
-          // 统计信息
-          Container(
-            padding: ResponsiveHelper.cardPadding(context),
-            decoration: BoxDecoration(
-              color: ThemeHelper.surface(context),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ScaledText(
-                  AppLocalizations.of(context)!.successfullySaved,
-                  style: ResponsiveHelper.responsiveTextStyle(
-                    context,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildStatRow(AppLocalizations.of(context)!.platform, _uploadResult!.platform),
-                _buildStatRow(AppLocalizations.of(context)!.total, '${_uploadResult!.totalCount}'),
-                _buildStatRow(AppLocalizations.of(context)!.success, '${_uploadResult!.successCount}',
-                    color: Colors.green),
-                if (_uploadResult!.errorCount > 0)
-                  _buildStatRow(AppLocalizations.of(context)!.error, '${_uploadResult!.errorCount}',
-                      color: ThemeHelper.expenseColor(context)),
-                if (_uploadResult!.metadata != null && _uploadResult!.metadata!.dateRange != null)
-                  _buildStatRow(
-                    AppLocalizations.of(context)!.date,
-                    '${_uploadResult!.metadata!.dateRange!.start} ${AppLocalizations.of(context)!.to} ${_uploadResult!.metadata!.dateRange!.end}',
-                  ),
-                if (_uploadResult!.metadata != null && _uploadResult!.metadata!.totalAmount != null)
-                  _buildStatRow(
-                    AppLocalizations.of(context)!.totalAmount,
-                    '¥${_uploadResult!.metadata!.totalAmount!.toStringAsFixed(2)}',
-                  ),
-              ],
-            ),
-          ),
-          SizedBox(height: ResponsiveHelper.spacing(context)),
-          // 错误列表
-          if (_uploadResult!.errors.isNotEmpty) ...[
-            Container(
-              padding: ResponsiveHelper.cardPadding(context),
-              decoration: BoxDecoration(
-                color: ThemeHelper.expenseColor(context).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: ThemeHelper.expenseColor(context).withValues(alpha: 0.3),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        color: ThemeHelper.expenseColor(context),
-                        size: 20,
+    final previewPadding = ResponsiveHelper.containerMargin(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: previewPadding,
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    SizedBox(height: ResponsiveHelper.spacing(context, small: 16, normal: 24)),
+                    Container(
+                      padding: ResponsiveHelper.cardPadding(context),
+                      decoration: BoxDecoration(
+                        color: ThemeHelper.surface(context),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      ScaledText(
-                      '${AppLocalizations.of(context)!.error} (${_uploadResult!.errors.length}${AppLocalizations.of(context)!.transactions})',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ScaledText(
+                            AppLocalizations.of(context)!.successfullySaved,
+                            style: ResponsiveHelper.responsiveTextStyle(
+                              context,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildStatRow(AppLocalizations.of(context)!.platform, _uploadResult!.platform),
+                          _buildStatRow(AppLocalizations.of(context)!.total, '${_uploadResult!.totalCount}'),
+                          _buildStatRow(AppLocalizations.of(context)!.success, '${_uploadResult!.successCount}',
+                              color: Colors.green),
+                          if (_uploadResult!.errorCount > 0)
+                            _buildStatRow(AppLocalizations.of(context)!.error, '${_uploadResult!.errorCount}',
+                                color: ThemeHelper.expenseColor(context)),
+                          if (_uploadResult!.metadata != null && _uploadResult!.metadata!.dateRange != null)
+                            _buildStatRow(
+                              AppLocalizations.of(context)!.date,
+                              '${_uploadResult!.metadata!.dateRange!.start} ${AppLocalizations.of(context)!.to} ${_uploadResult!.metadata!.dateRange!.end}',
+                            ),
+                          if (_uploadResult!.metadata != null && _uploadResult!.metadata!.totalAmount != null)
+                            _buildStatRow(
+                              AppLocalizations.of(context)!.totalAmount,
+                              '${AppLocalizations.of(context)!.currencySymbol}${_uploadResult!.metadata!.totalAmount!.toStringAsFixed(2)}',
+                            ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: ResponsiveHelper.spacing(context)),
+                    if (_uploadResult!.errors.isNotEmpty) ...[
+                      Container(
+                        padding: ResponsiveHelper.cardPadding(context),
+                        decoration: BoxDecoration(
+                          color: ThemeHelper.expenseColor(context).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: ThemeHelper.expenseColor(context).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: ThemeHelper.expenseColor(context),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                ScaledText(
+                                  '${AppLocalizations.of(context)!.error} (${_uploadResult!.errors.length}${AppLocalizations.of(context)!.transactions})',
+                                  style: ResponsiveHelper.responsiveTextStyle(
+                                    context,
+                                    fontWeight: FontWeight.bold,
+                                    color: ThemeHelper.expenseColor(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ..._uploadResult!.errors.take(5).map((error) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: ScaledText(
+                                    '${AppLocalizations.of(context)!.row} ${error.row}: ${error.reason}',
+                                    style: ResponsiveHelper.responsiveTextStyle(
+                                      context,
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                )),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: ResponsiveHelper.spacing(context)),
+                    ],
+                    ScaledText(
+                      '${AppLocalizations.of(context)!.previewData} (${AppLocalizations.of(context)!.total}${_uploadResult!.preview.length}${AppLocalizations.of(context)!.items})',
                       style: ResponsiveHelper.responsiveTextStyle(
                         context,
                         fontWeight: FontWeight.bold,
-                        color: ThemeHelper.expenseColor(context),
                       ),
                     ),
-                  ],
+                    const SizedBox(height: 16),
+                  ]),
                 ),
-                const SizedBox(height: 12),
-                ..._uploadResult!.errors.take(5).map((error) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ScaledText(
-                        '${AppLocalizations.of(context)!.row} ${error.row}: ${error.reason}',
-                        style: ResponsiveHelper.responsiveTextStyle(
-                          context,
-                          fontSize: 12,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    )),
-                ],
               ),
-            ),
-            SizedBox(height: ResponsiveHelper.spacing(context)),
-          ],
-          // 预览数据
-          Container(
-            padding: ResponsiveHelper.cardPadding(context),
-            decoration: BoxDecoration(
-              color: ThemeHelper.surface(context),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
+              SliverPadding(
+                padding: previewPadding.copyWith(top: 0),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildPreviewItem(_uploadResult!.preview[index]),
+                    childCount: _uploadResult!.preview.length,
+                  ),
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ScaledText(
-                  '${AppLocalizations.of(context)!.previewData} (${AppLocalizations.of(context)!.total}${_uploadResult!.preview.length}${AppLocalizations.of(context)!.items})',
-                  style: ResponsiveHelper.responsiveTextStyle(
-                    context,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: ResponsiveHelper.responsiveValue(
-                    context,
-                    small: 300.0,
-                    normal: 400.0,
-                    large: 500.0,
-                  ),
-                  child: ListView.builder(
-                    itemCount: _uploadResult!.preview.length,
-                    itemBuilder: (context, index) {
-                      return _buildPreviewItem(_uploadResult!.preview[index]);
-                    },
-                  ),
-                ),
-              ],
-            ),
+              SliverToBoxAdapter(
+                child: SizedBox(height: ResponsiveHelper.spacing(context, small: 16, normal: 24)),
+              ),
+            ],
           ),
-          SizedBox(height: ResponsiveHelper.spacing(context, small: 24, normal: 32)),
-          // 确认按钮（仅在successCount > 0时显示）
-          if (_uploadResult!.successCount > 0)
-            ElevatedButton(
+        ),
+        if (_uploadResult!.successCount > 0)
+          Padding(
+            padding: previewPadding.copyWith(top: 8),
+            child: ElevatedButton(
               onPressed: _confirmImport,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1125,9 +1132,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
                 ),
               ),
             ),
-          SizedBox(height: ResponsiveHelper.spacing(context)),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -1195,7 +1201,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
                       ),
                     ),
                     ScaledText(
-                      '¥${item.amount.toStringAsFixed(2)}',
+                      '${AppLocalizations.of(context)!.currencySymbol}${item.amount.toStringAsFixed(2)}',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,

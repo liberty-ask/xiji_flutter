@@ -2253,6 +2253,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirm and Save'**
   String get confirmAndSave;
+
+  /// No description provided for @comparedToLastWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'Vs last week {change}'**
+  String comparedToLastWeek(Object change);
+
+  /// No description provided for @comparedToLastMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Vs last month {change}'**
+  String comparedToLastMonth(Object change);
+
+  /// No description provided for @comparedToLastYear.
+  ///
+  /// In en, this message translates to:
+  /// **'Vs last year {change}'**
+  String comparedToLastYear(Object change);
+
+  /// No description provided for @currencySymbol.
+  ///
+  /// In en, this message translates to:
+  /// **'¥'**
+  String get currencySymbol;
+
+  /// No description provided for @transactionCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} transactions'**
+  String transactionCount(Object count);
+
+  /// No description provided for @pending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get pending;
+
+  /// No description provided for @failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get failed;
+
+  /// No description provided for @uploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading...'**
+  String get uploading;
+
+  /// No description provided for @selectImageFailedPleaseRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to select image, please retry'**
+  String get selectImageFailedPleaseRetry;
+
+  /// No description provided for @uploadImageFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload image: {error}'**
+  String uploadImageFailed(Object error);
+
+  /// No description provided for @taskUploadParse.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload & Parse'**
+  String get taskUploadParse;
+
+  /// No description provided for @taskImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get taskImport;
+
+  /// No description provided for @taskInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{task} in progress'**
+  String taskInProgress(Object task);
+
+  /// No description provided for @pageUnderDevelopment.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} page\nComing soon...'**
+  String pageUnderDevelopment(Object title);
 }
 
 class _AppLocalizationsDelegate

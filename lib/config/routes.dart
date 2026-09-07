@@ -32,6 +32,7 @@ import '../providers/home_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/category_provider.dart';
 import '../models/user.dart';
+import '../l10n/app_localizations.dart';
 
 // 临时占位页面
 class PlaceholderScreen extends StatelessWidget {
@@ -49,7 +50,7 @@ class PlaceholderScreen extends StatelessWidget {
             const Icon(Icons.construction, size: 64, color: Colors.white54),
             const SizedBox(height: 16),
             Text(
-              '$title 页面\n正在开发中...',
+              AppLocalizations.of(context)!.pageUnderDevelopment(title),
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70),
             ),

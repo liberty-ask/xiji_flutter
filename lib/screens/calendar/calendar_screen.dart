@@ -144,48 +144,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return DateTime(date.year, date.month + 1, 0).day;
   }
 
-  // 获取星期几的文本
-  String _getWeekday(int day) {
-    final locale = AppLocalizations.of(context)?.localeName ?? 'zh_CN';
-    if (locale.startsWith('zh')) {
-      const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-      return weekdays[day % 7];
-    } else {
-      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      return weekdays[day % 7];
-    }
-  }
+  String get _localeTag => Localizations.localeOf(context).toString();
 
-  // 格式化年月显示
   String _formatYearMonth(DateTime date) {
-    final locale = AppLocalizations.of(context)?.localeName ?? 'zh_CN';
-    if (locale.startsWith('zh')) {
-      return '${date.year}年 ${date.month}月';
-    } else {
-      final monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return '${monthNames[date.month]} ${date.year}';
-    }
+    return DateFormat.yMMM(_localeTag).format(date);
   }
 
-  // 格式化日期显示
   String _formatDate(int day) {
-    final locale = AppLocalizations.of(context)?.localeName ?? 'zh_CN';
-    if (locale.startsWith('zh')) {
-      return '${_currentDate.month}月$day日';
-    } else {
-      final monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      return '${monthNames[_currentDate.month]} $day';
-    }
+    return DateFormat.MMMd(_localeTag).format(
+      DateTime(_currentDate.year, _currentDate.month, day),
+    );
   }
 
-  // 格式化星期几显示
-  String _formatWeekday(String weekday) {
-    final locale = AppLocalizations.of(context)?.localeName ?? 'zh_CN';
-    if (locale.startsWith('zh')) {
-      return '星期$weekday';
-    } else {
-      return weekday;
-    }
+  String _formatWeekday(DateTime date) {
+    return DateFormat.EEEE(_localeTag).format(date);
   }
 
   // 获取指定日期的汇总信息（income, expense）
@@ -397,7 +369,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Expanded(
                         child: _buildSummaryCard(
                           AppLocalizations.of(context)!.monthlyIncome,
-                          '¥${_calendarData!['monthlyIncome'] ?? '0'}',
+                          '${AppLocalizations.of(context)!.currencySymbol}${_calendarData!['monthlyIncome'] ?? '0'}',
                           ThemeHelper.primary(context),
                           context,
                         ),
@@ -406,7 +378,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Expanded(
                         child: _buildSummaryCard(
                           AppLocalizations.of(context)!.monthlyExpense,
-                          '¥${_calendarData!['monthlyExpense'] ?? '0'}',
+                          '${AppLocalizations.of(context)!.currencySymbol}${_calendarData!['monthlyExpense'] ?? '0'}',
                           ThemeHelper.expenseColor(context),
                           context,
                         ),
@@ -448,7 +420,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                           if (_calendarData != null)
                             ScaledText(
-                              '${AppLocalizations.of(context)!.monthlySurplus} ¥${_calendarData!['surplus'] ?? '0'}',
+                              '${AppLocalizations.of(context)!.monthlySurplus} ${AppLocalizations.of(context)!.currencySymbol}${_calendarData!['surplus'] ?? '0'}',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: ThemeHelper.primary(context),
@@ -539,7 +511,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _currentDate.month,
       selectedDay > 0 ? selectedDay : 1,
     );
-    final weekday = _getWeekday(selectedDateObj.weekday % 7);
+    final weekday = selectedDay > 0 ? _formatWeekday(selectedDateObj) : '';
 
     // 计算固定高度（确保与实际内容高度匹配）
     const double headerHeight = 240.0;
@@ -596,7 +568,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                           const SizedBox(height: 4),
                           ScaledText(
-                            selectedDay > 0 ? _formatWeekday(weekday) : '',
+                            weekday,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[400],
@@ -939,7 +911,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 const SizedBox(height: 8),
                 ScaledText(
-                  '¥${formatAmount(income)}',
+                  '${AppLocalizations.of(context)!.currencySymbol}${formatAmount(income)}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -978,7 +950,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 const SizedBox(height: 8),
                 ScaledText(
-                  '¥${formatAmount(expense)}',
+                  '${AppLocalizations.of(context)!.currencySymbol}${formatAmount(expense)}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -1004,7 +976,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 const SizedBox(height: 8),
                 ScaledText(
-                  '¥${formatAmount(net)}',
+                  '${AppLocalizations.of(context)!.currencySymbol}${formatAmount(net)}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

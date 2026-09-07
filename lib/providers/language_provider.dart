@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/app_localizations.dart';
 
 class LanguageProvider with ChangeNotifier {
   static const String _languageKey = 'app_language';
@@ -44,18 +45,24 @@ class LanguageProvider with ChangeNotifier {
   // 获取支持的语言列表
   List<LanguageOption> get supportedLanguages {
     return [
-      LanguageOption(null, '跟随系统', Icons.settings_system_daydream),
-      LanguageOption(const Locale('zh', 'CN'), '简体中文', Icons.language),
-      LanguageOption(const Locale('zh', 'TW'), '繁体中文', Icons.language),
-      LanguageOption(const Locale('en', 'US'), 'English', Icons.language),
+      LanguageOption(null, Icons.settings_system_daydream),
+      LanguageOption(const Locale('zh', 'CN'), Icons.language),
+      LanguageOption(const Locale('zh', 'TW'), Icons.language),
+      LanguageOption(const Locale('en', 'US'), Icons.language),
     ];
   }
 }
 
 class LanguageOption {
   final Locale? locale;
-  final String name;
   final IconData icon;
   
-  LanguageOption(this.locale, this.name, this.icon);
+  LanguageOption(this.locale, this.icon);
+
+  String displayName(AppLocalizations l10n) {
+    if (locale == null) return l10n.followSystem;
+    if (locale!.languageCode == 'en') return l10n.english;
+    if (locale!.countryCode == 'TW') return l10n.traditionalChinese;
+    return l10n.simplifiedChinese;
+  }
 }

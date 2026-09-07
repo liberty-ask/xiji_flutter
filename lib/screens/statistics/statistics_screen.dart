@@ -618,7 +618,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
           const SizedBox(height: 2),
           ScaledText(
-            '¥${_formatAmount(amount)}',
+            _formatCurrency(context, amount),
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -631,14 +631,28 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  // 格式化金额
-  String _formatAmount(double amount) {
-    if (amount >= 10000) {
-      return '${(amount / 10000).toStringAsFixed(1)}w';
-    } else if (amount >= 1000) {
-      return '${(amount / 1000).toStringAsFixed(1)}k';
+  String _formatAmount(BuildContext context, double amount) {
+    if (amount.abs() < 1000) {
+      return amount.toStringAsFixed(0);
     }
-    return amount.toStringAsFixed(0);
+    final locale = Localizations.localeOf(context).toString();
+    return NumberFormat.compact(locale: locale).format(amount);
+  }
+
+  String _formatCurrency(BuildContext context, double amount) {
+    return '${AppLocalizations.of(context)!.currencySymbol}${_formatAmount(context, amount)}';
+  }
+
+  String _comparedToPreviousLabel(BuildContext context, String change) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (_period) {
+      case 'week':
+        return l10n.comparedToLastWeek(change);
+      case 'year':
+        return l10n.comparedToLastYear(change);
+      default:
+        return l10n.comparedToLastMonth(change);
+    }
   }
 
   // 构建Tab导航
@@ -1031,7 +1045,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               interval: maxY / 5,
               getTitlesWidget: (value, meta) {
                 return ScaledText(
-                  _formatAmount(value),
+                  _formatAmount(context, value),
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.white.withValues(alpha: 0.5),
@@ -1138,7 +1152,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 final isIncome = touchedSpot.barIndex == 0;
                 final value = touchedSpot.y;
                 return LineTooltipItem(
-                  '${isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense}: ¥${_formatAmount(value)}',
+                  '${isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense}: ${_formatCurrency(context, value)}',
                   TextStyle(
                     color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context),
                     fontWeight: FontWeight.bold,
@@ -1214,7 +1228,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.center,
             child: ScaledText(
-              '¥${_formatAmount(value)}',
+              _formatCurrency(context, value),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -1368,7 +1382,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               interval: maxY / 5,
               getTitlesWidget: (value, meta) {
                 return ScaledText(
-                  _formatAmount(value),
+                  _formatAmount(context, value),
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.white.withValues(alpha: 0.5),
@@ -1411,7 +1425,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               final item = items[groupIndex] as Map<String, dynamic>;
               final memberName = item['memberName'] as String? ?? '';
               return BarTooltipItem(
-                '$memberName\n¥${_formatAmount(rod.toY)}',
+                '$memberName\n${_formatCurrency(context, rod.toY)}',
                 TextStyle(
                   color: _type == TransactionType.expense 
                       ? ThemeHelper.expenseColor(context)
@@ -1528,7 +1542,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                       const SizedBox(width: 12),
                       ScaledText(
-                        '$percentage | $count${AppLocalizations.of(context)!.transactions}',
+                        '$percentage | ${AppLocalizations.of(context)!.transactionCount(count)}',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.white.withValues(alpha: 0.3),
@@ -1762,7 +1776,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 }
 
                 return Tooltip(
-                  message: '$dateStr\n${AppLocalizations.of(context)!.incomeAmount}: ¥${_formatAmount(income)}\n${AppLocalizations.of(context)!.expenseAmount}: ¥${_formatAmount(expense)}',
+                  message: '$dateStr\n${AppLocalizations.of(context)!.incomeAmount}: ${_formatCurrency(context, income)}\n${AppLocalizations.of(context)!.expenseAmount}: ${_formatCurrency(context, expense)}',
                   child: Container(
                     width: 40,
                     height: 40,
@@ -1837,15 +1851,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       dateObj = DateTime.now();
     }
 
-    // 根据当前语言环境格式化日期
-    final locale = AppLocalizations.of(context)?.localeName ?? 'zh_CN';
-    String dateLabel;
-    if (locale.startsWith('zh')) {
-      dateLabel = DateFormat('MM月dd日 EEEE', 'zh_CN').format(dateObj);
-      dateLabel = dateLabel.replaceAll('星期', '周');
-    } else {
-      dateLabel = DateFormat('MMM d, EEEE', locale).format(dateObj);
-    }
+    final locale = Localizations.localeOf(context).toString();
+    final dateLabel = DateFormat.MMMEd(locale).format(dateObj);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -1883,7 +1890,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 ),
                 Expanded(
                   child: ScaledText(
-                    '${AppLocalizations.of(context)!.net}: ¥${_formatAmount(net)}',
+                    '${AppLocalizations.of(context)!.netIncome}: ${_formatCurrency(context, net)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: net >= 0 
@@ -1913,7 +1920,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: ScaledText(
-                          '${AppLocalizations.of(context)!.incomeAmount}: ¥${_formatAmount(income)}',
+                          '${AppLocalizations.of(context)!.incomeAmount}: ${_formatCurrency(context, income)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.8),
@@ -1937,7 +1944,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: ScaledText(
-                          '${AppLocalizations.of(context)!.expenseAmount}: ¥${_formatAmount(expense)}',
+                          '${AppLocalizations.of(context)!.expenseAmount}: ${_formatCurrency(context, expense)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.white.withValues(alpha: 0.8),
@@ -1953,7 +1960,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 Container(
                   constraints: const BoxConstraints(maxWidth: 80),
                   child: ScaledText(
-                    '$count${AppLocalizations.of(context)!.transactions}',
+                    AppLocalizations.of(context)!.transactionCount(count),
                     style: TextStyle(
                       fontSize: 10,
                       color: Colors.white.withValues(alpha: 0.5),
@@ -2044,7 +2051,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '总${_type == TransactionType.expense ? AppLocalizations.of(context)!.totalExpenseLabel : AppLocalizations.of(context)!.totalIncomeLabel}',
+                  '${_type == TransactionType.expense ? AppLocalizations.of(context)!.totalExpenseLabel : AppLocalizations.of(context)!.totalIncomeLabel}',
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.white.withValues(alpha: 0.3),
@@ -2054,7 +2061,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '¥$total',
+                  '${AppLocalizations.of(context)!.currencySymbol}$total',
                   style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
@@ -2063,7 +2070,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '较上月 $change',
+                  _comparedToPreviousLabel(context, change),
                   style: TextStyle(
                     fontSize: 10,
                     color: ThemeHelper.primary(context),
@@ -2163,34 +2170,19 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   String _getDateDisplayText() {
-    // 获取当前语言环境
-    final locale = AppLocalizations.of(context)?.localeName ?? 'zh_CN';
-    final isChinese = locale.startsWith('zh');
-    
+    final locale = Localizations.localeOf(context).toString();
+
     switch (_period) {
       case 'week':
-        // 显示周的开始和结束日期
         final weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
         final weekEnd = weekStart.add(const Duration(days: 6));
-        if (isChinese) {
-          return '${DateFormat('MM月dd日').format(weekStart)} - ${DateFormat('MM月dd日').format(weekEnd)}';
-        } else {
-          return '${DateFormat('MM/dd').format(weekStart)} - ${DateFormat('MM/dd').format(weekEnd)}';
-        }
-      case 'month':
-        if (isChinese) {
-          return DateFormat('yyyy年MM月').format(_selectedDate);
-        } else {
-          return DateFormat('MMMM yyyy', 'en_US').format(_selectedDate);
-        }
+        final rangeFormat = DateFormat.MMMd(locale);
+        return '${rangeFormat.format(weekStart)} - ${rangeFormat.format(weekEnd)}';
       case 'year':
         return '${_selectedDate.year}';
+      case 'month':
       default:
-        if (isChinese) {
-          return DateFormat('yyyy年MM月').format(_selectedDate);
-        } else {
-          return DateFormat('MMMM yyyy', 'en_US').format(_selectedDate);
-        }
+        return DateFormat.yMMMM(locale).format(_selectedDate);
     }
   }
 

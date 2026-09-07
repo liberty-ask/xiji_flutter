@@ -163,7 +163,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   decoration: InputDecoration(
                     labelText: AppLocalizations.of(context)!.amount,
                     prefixIcon: Icon(Icons.attach_money, size: ResponsiveHelper.iconSize(context)),
-                    suffixText: '¥',
+                    suffixText: AppLocalizations.of(context)!.currencySymbol,
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {

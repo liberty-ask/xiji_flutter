@@ -386,5 +386,19 @@
   "themePreviewDescription": "選擇主題後可以即時預覽效果，確認後保存。主題設定會保存到本機，即使退出登入也會保留。",
   "previewingTheme": "正在預覽：{themeName}",
   "previewingThemeDescription": "點擊下方按鈕確認保存，或返回取消",
-  "confirmAndSave": "確認並保存"
+  "confirmAndSave": "確認並保存",
+  "comparedToLastWeek": "較上周 {change}",
+  "comparedToLastMonth": "較上月 {change}",
+  "comparedToLastYear": "較上年 {change}",
+  "currencySymbol": "¥",
+  "transactionCount": "{count}筆交易",
+  "pending": "待處理",
+  "failed": "失敗",
+  "uploading": "上傳中...",
+  "selectImageFailedPleaseRetry": "選擇圖片失敗，請重試",
+  "uploadImageFailed": "上傳圖片失敗: {error}",
+  "taskUploadParse": "上傳解析",
+  "taskImport": "導入",
+  "taskInProgress": "{task}中",
+  "pageUnderDevelopment": "{title} 頁面\n正在開發中..."
 }

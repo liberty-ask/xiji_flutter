@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:image_picker/image_picker.dart';
 import '../../utils/theme_helper.dart';
+import '../../l10n/app_localizations.dart';
 
 /// 图片选择结果回调（仅选择模式）
 typedef ImagePickerCallback = void Function(XFile? file, String? previewPath);
@@ -52,7 +53,7 @@ class ImagePickerWidget extends StatefulWidget {
   final bool showPickButton;
 
   /// 选择按钮文本
-  final String pickButtonText;
+  final String? pickButtonText;
 
   /// 选择按钮图标
   final IconData? pickButtonIcon;
@@ -61,7 +62,7 @@ class ImagePickerWidget extends StatefulWidget {
   final bool showPreviewLabel;
 
   /// 预览标签文本
-  final String previewLabelText;
+  final String? previewLabelText;
 
   /// 是否禁用
   final bool disabled;
@@ -84,10 +85,10 @@ class ImagePickerWidget extends StatefulWidget {
     this.imageQuality = 85,
     this.avatarSize = 128,
     this.showPickButton = true,
-    this.pickButtonText = '选择图片',
+    this.pickButtonText,
     this.pickButtonIcon,
     this.showPreviewLabel = false,
-    this.previewLabelText = '头像预览',
+    this.previewLabelText,
     this.disabled = false,
     this.onError,
     this.onUploading,
@@ -102,6 +103,8 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
   XFile? _selectedImageFile;
   String? _previewPath;
   bool _isUploading = false;
+
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
 
   @override
   void initState() {
@@ -140,7 +143,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
 
           // 验证文件大小
           if (bytes.length > widget.maxFileSize) {
-            final errorMsg = '图片大小不能超过${(widget.maxFileSize / 1024 / 1024).toStringAsFixed(0)}MB';
+            final errorMsg = _l10n.imageSizeCannotExceed5MB;
             if (widget.onError != null) {
               widget.onError!(errorMsg);
             } else if (mounted) {
@@ -177,7 +180,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
           }
         } catch (fileError) {
           // 处理文件操作错误
-          final errorMsg = '处理图片文件失败: ${fileError.toString()}';
+          final errorMsg = _l10n.processingImageFailed(fileError.toString());
           if (widget.onError != null) {
             widget.onError!(errorMsg);
           } else if (mounted) {
@@ -189,14 +192,14 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
       }
     } catch (e) {
       // 更友好的错误提示
-      String errorMessage = '选择图片失败';
+      String errorMessage = _l10n.selectImageFailed;
       if (e.toString().contains('Permission') || e.toString().contains('权限')) {
-        errorMessage = '需要相册访问权限，请在设置中开启';
+        errorMessage = _l10n.needGalleryPermission;
       } else if (e.toString().contains('User cancelled') || e.toString().contains('取消')) {
         // 用户取消选择，不显示错误
         return;
       } else {
-        errorMessage = '选择图片失败，请重试';
+        errorMessage = _l10n.selectImageFailedPleaseRetry;
       }
 
       if (widget.onError != null) {
@@ -236,7 +239,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
         });
         widget.onUploading?.call(false);
         
-        final errorMsg = '上传图片失败: ${e.toString().replaceFirst('Exception: ', '')}';
+        final errorMsg = _l10n.uploadImageFailed(e.toString().replaceFirst('Exception: ', ''));
         if (widget.onError != null) {
           widget.onError!(errorMsg);
         } else {
@@ -418,7 +421,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
                     widget.pickButtonIcon ?? Icons.photo_camera,
                     size: 18,
                   ),
-            label: Text(_isUploading ? '上传中...' : widget.pickButtonText),
+            label: Text(_isUploading ? _l10n.uploading : (widget.pickButtonText ?? _l10n.selectImage)),
             style: ElevatedButton.styleFrom(
               backgroundColor: ThemeHelper.primary(context).withValues(alpha: 0.1),
               foregroundColor: ThemeHelper.primary(context),
@@ -435,7 +438,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
         if (widget.showPreviewLabel) ...[
           const SizedBox(height: 8),
           Text(
-            widget.previewLabelText,
+            widget.previewLabelText ?? _l10n.avatarPreview,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,

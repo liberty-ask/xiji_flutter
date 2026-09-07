@@ -1126,7 +1126,7 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             Expanded(
               child: ScaledText(
-                '${isIncome ? '+' : '-'}¥${transaction.amount.toStringAsFixed(2)}',
+                '${isIncome ? '+' : '-'}${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -1220,9 +1220,9 @@ class _DetailScreenState extends State<DetailScreen> {
               _buildDetailRow(AppLocalizations.of(context)!.type, isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense,
                   color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context)),
               _buildDetailRow(AppLocalizations.of(context)!.category, transaction.category),
-              _buildDetailRow(AppLocalizations.of(context)!.amount, '¥${transaction.amount.toStringAsFixed(2)}',
+              _buildDetailRow(AppLocalizations.of(context)!.amount, '${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
                   color: isIncome ? ThemeHelper.primary(context) : Colors.white),
-              _buildDetailRow(AppLocalizations.of(context)!.date, DateFormat.yMMMMd(Localizations.localeOf(context).languageCode).format(transaction.date)),
+              _buildDetailRow(AppLocalizations.of(context)!.date, DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(transaction.date)),
               _buildDetailRow(AppLocalizations.of(context)!.user, userName),
               if (transaction.counterparty != null && transaction.counterparty!.isNotEmpty)
                 _buildDetailRow(AppLocalizations.of(context)!.counterparty, transaction.counterparty!),
@@ -1477,7 +1477,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       labelText: AppLocalizations.of(context)!.amount,
                       labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                       prefixIcon: Icon(Icons.attach_money, color: Colors.white.withValues(alpha: 0.6)),
-                      suffixText: '¥',
+                      suffixText: AppLocalizations.of(context)!.currencySymbol,
                       suffixStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                     ),
                     validator: (value) {
@@ -1564,7 +1564,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         initialDate: selectedDate,
                         firstDate: DateTime(AppConstants.datePickerFirstYear),
                         lastDate: DateTime.now(),
-                        locale: const Locale('zh', 'CN'), // 设置为中文
+                        locale: Localizations.localeOf(dialogContext),
                         builder: (pickerContext, child) {
                           return Theme(
                             data: ThemeData.dark().copyWith(

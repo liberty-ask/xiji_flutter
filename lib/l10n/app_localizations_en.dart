@@ -1131,4 +1131,61 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get confirmAndSave => 'Confirm and Save';
+
+  @override
+  String comparedToLastWeek(Object change) {
+    return 'Vs last week $change';
+  }
+
+  @override
+  String comparedToLastMonth(Object change) {
+    return 'Vs last month $change';
+  }
+
+  @override
+  String comparedToLastYear(Object change) {
+    return 'Vs last year $change';
+  }
+
+  @override
+  String get currencySymbol => '¥';
+
+  @override
+  String transactionCount(Object count) {
+    return '$count transactions';
+  }
+
+  @override
+  String get pending => 'Pending';
+
+  @override
+  String get failed => 'Failed';
+
+  @override
+  String get uploading => 'Uploading...';
+
+  @override
+  String get selectImageFailedPleaseRetry =>
+      'Failed to select image, please retry';
+
+  @override
+  String uploadImageFailed(Object error) {
+    return 'Failed to upload image: $error';
+  }
+
+  @override
+  String get taskUploadParse => 'Upload & Parse';
+
+  @override
+  String get taskImport => 'Import';
+
+  @override
+  String taskInProgress(Object task) {
+    return '$task in progress';
+  }
+
+  @override
+  String pageUnderDevelopment(Object title) {
+    return '$title page\nComing soon...';
+  }
 }

@@ -170,7 +170,7 @@ class _LanguageScreenState extends State<LanguageScreen> {
                       _buildLanguageOption(
                         context, 
                         option.locale, 
-                        option.name, 
+                        option.displayName(AppLocalizations.of(context)!), 
                         option.icon,
                         currentTheme
                       ),
