@@ -23,19 +23,6 @@ class CategoryService {
     return list.map((json) => Category.fromJson(json as Map<String, dynamic>)).toList();
   }
 
-  // 获取支出分类
-  Future<List<Category>> getExpenseCategories() async {
-    final categories = await getCategories();
-    return categories.where((c) => c.type == 1).toList();
-  }
-
-  // 获取收入分类
-  Future<List<Category>> getIncomeCategories() async {
-    final categories = await getCategories();
-    return categories.where((c) => c.type == 0).toList();
-  }
-
-  // 添加新分类
   Future<Map<String, dynamic>> addCategory({
     required String name,
     required String icon,

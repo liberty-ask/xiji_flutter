@@ -81,8 +81,6 @@ flutter devices
 flutter run
 ```
 
-国内也可从 Gitee 镜像克隆：`https://gitee.com/liberty-warehouse/xiji_flutter.git`。
-
 Web：
 
 ```bash
@@ -118,8 +116,6 @@ flutter build web
 1. Fork GitHub 仓库
 2. 新建分支（例如 `feat/xxx` 或 `fix/xxx`）
 3. 提交变更并向 GitHub 发起 Pull Request
-
-Issue 请尽量写清复现步骤、系统版本和期望结果。Gitee 镜像不作为代码合入入口。
 
 ---
 

@@ -12,10 +12,6 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # UI 相关
-  cupertino_icons: ^1.0.6
-  
-  # 状态管理
   provider: ^6.1.1
   
   # 路由导航
@@ -30,14 +26,7 @@ dependencies:
   
   # 工具库
   intl: ^0.20.2
-  json_annotation: ^4.8.1
-  
-  # 图表
   fl_chart: ^0.65.0
-  
-  # 其他工具
-  url_launcher: ^6.2.2
-  package_info_plus: ^9.0.0
   image_picker: ^1.0.7
   file_picker: ^8.1.2
   
@@ -48,16 +37,11 @@ dependencies:
   # 二维码
   qr_flutter: ^4.1.0
   mobile_scanner: ^5.2.3
-  
-  # 手机小部件
-  # home_widget: ^0.5.0  # 暂时注释，存在兼容性问题
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
-  build_runner: ^2.4.7
-  json_serializable: ^6.7.1
   flutter_launcher_icons: ^0.13.1
 
 flutter:
@@ -67,12 +51,6 @@ flutter:
   # 资源文件
   assets:
     - assets/images/
-  
-  # 字体（后续添加）
-  # fonts:
-  #   - family: CustomFont
-  #     fonts:
-  #       - asset: assets/fonts/CustomFont-Regular.ttf
 
 # 应用图标配置
 flutter_launcher_icons:

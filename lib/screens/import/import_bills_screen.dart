@@ -867,9 +867,6 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> with SingleTicker
       case 'wechat':
         icon = Icons.wechat;
         break;
-      case 'cmb':
-        icon = Icons.account_balance;
-        break;
       default:
         icon = Icons.receipt;
     }

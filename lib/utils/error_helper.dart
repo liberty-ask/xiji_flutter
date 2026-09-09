@@ -85,26 +85,6 @@ class ErrorHelper {
         return error.message ?? defaultMessage;
     }
   }
-  
-  /// 从 DioException 中提取错误消息（保留旧方法以兼容）
-  static String extractDioErrorMessage(dynamic error, {String defaultMessage = 'Network request failed'}) {
-    if (error is DioException) {
-      return _extractDioErrorMessage(error, defaultMessage: defaultMessage);
-    }
-    
-    final errorStr = error.toString();
-    
-    if (errorStr.contains('Exception:')) {
-      final message = errorStr.split('Exception:').last.trim();
-      return message.isNotEmpty ? message : defaultMessage;
-    }
-    
-    if (errorStr.isNotEmpty) {
-      return errorStr;
-    }
-    
-    return defaultMessage;
-  }
 }
 
 

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/home_provider.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
-import '../../widgets/common/font_size_inherited.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
@@ -96,9 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 获取字号缩放因子
-    final fontSizeScale = FontSizeInherited.of(context).fontSizeScale;
-    
     return Scaffold(
       body: Consumer<HomeProvider>(
         builder: (context, provider, _) {

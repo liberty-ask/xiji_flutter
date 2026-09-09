@@ -170,29 +170,5 @@ class StatisticsService {
     }
     return await _api.get('/v1/statistics/by-date', queryParameters: queryParams);
   }
-
-  // 获取对比数据
-  Future<Map<String, dynamic>> getCompare({
-    required String type, // 'period' | 'member'
-    required String comparisonType, // 'month' | 'year'
-    required Map<String, dynamic> period1,
-    required Map<String, dynamic> period2,
-    List<String>? memberIds,
-    int? transactionType,
-  }) async {
-    final queryParams = <String, dynamic>{
-      'type': type,
-      'comparisonType': comparisonType,
-      'period1': period1,
-      'period2': period2,
-    };
-    if (memberIds != null && memberIds.isNotEmpty) {
-      queryParams['memberIds'] = memberIds;
-    }
-    if (transactionType != null) {
-      queryParams['transactionType'] = transactionType;
-    }
-    return await _api.get('/v1/statistics/compare', queryParameters: queryParams);
-  }
 }
 

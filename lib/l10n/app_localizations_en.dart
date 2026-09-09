@@ -1183,9 +1183,4 @@ class AppLocalizationsEn extends AppLocalizations {
   String taskInProgress(Object task) {
     return '$task in progress';
   }
-
-  @override
-  String pageUnderDevelopment(Object title) {
-    return '$title page\nComing soon...';
-  }
 }

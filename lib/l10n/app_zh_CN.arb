@@ -398,6 +398,5 @@
   "uploadImageFailed": "上传图片失败: {error}",
   "taskUploadParse": "上传解析",
   "taskImport": "导入",
-  "taskInProgress": "{task}中",
-  "pageUnderDevelopment": "{title} 页面\n正在开发中..."
+  "taskInProgress": "{task}中"
 }

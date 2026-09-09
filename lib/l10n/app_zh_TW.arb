@@ -399,6 +399,5 @@
   "uploadImageFailed": "上傳圖片失敗: {error}",
   "taskUploadParse": "上傳解析",
   "taskImport": "導入",
-  "taskInProgress": "{task}中",
-  "pageUnderDevelopment": "{title} 頁面\n正在開發中..."
+  "taskInProgress": "{task}中"
 }

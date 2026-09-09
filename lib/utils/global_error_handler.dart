@@ -48,14 +48,6 @@ class GlobalErrorHandler {
       debugPrint('==================');
     }
 
-    // 在生产模式下，可以考虑将错误信息上报到错误监控平台
-    // 例如：Sentry、Firebase Crashlytics等
-    if (!kDebugMode) {
-      // TODO: 上报错误到监控平台
-      // final errorMessage = ErrorHelper.extractErrorMessage(error);
-      // _reportError(error, stack, errorMessage);
-    }
-
     // 注意：全局异常处理器通常没有BuildContext，无法直接显示UI
     // 真正的错误提示应该在业务代码的catch块中使用ErrorHelper和CustomSnackBar
     // 全局异常处理的主要目的是防止应用崩溃，记录错误信息

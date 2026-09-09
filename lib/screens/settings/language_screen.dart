@@ -164,7 +164,6 @@ class _LanguageScreenState extends State<LanguageScreen> {
               ),
               child: Column(
                 children: languages.map((option) {
-                  final isSelected = _selectedLocale?.toString() == option.locale?.toString();
                   return Column(
                     children: [
                       _buildLanguageOption(

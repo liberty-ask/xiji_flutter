@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../screens/auth/splash_screen.dart';
@@ -32,34 +31,6 @@ import '../providers/home_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/category_provider.dart';
 import '../models/user.dart';
-import '../l10n/app_localizations.dart';
-
-// 临时占位页面
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const PlaceholderScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.construction, size: 64, color: Colors.white54),
-            const SizedBox(height: 16),
-            Text(
-              AppLocalizations.of(context)!.pageUnderDevelopment(title),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class AppRouter {
   static GoRouter createRouter(AuthProvider authProvider) {

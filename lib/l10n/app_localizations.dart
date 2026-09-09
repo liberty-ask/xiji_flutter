@@ -2331,12 +2331,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{task} in progress'**
   String taskInProgress(Object task);
-
-  /// No description provided for @pageUnderDevelopment.
-  ///
-  /// In en, this message translates to:
-  /// **'{title} page\nComing soon...'**
-  String pageUnderDevelopment(Object title);
 }
 
 class _AppLocalizationsDelegate

@@ -1,4 +1,3 @@
-// import 'package:home_widget/home_widget.dart';  // 暂时注释，存在兼容性问题
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -37,12 +36,6 @@ class HomeWidgetService {
         debugPrint('Home Widget 服务初始化失败: $e');
       }
     }
-  }
-
-  /// 检查 Widget 是否可用
-  static Future<bool> isWidgetAvailable() async {
-    // Widget 功能由原生端实现，这里总是返回 true
-    return true;
   }
 }
 

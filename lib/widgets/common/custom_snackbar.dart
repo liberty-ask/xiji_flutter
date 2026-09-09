@@ -39,43 +39,7 @@ class CustomSnackBar {
     );
   }
 
-  // 信息提示
-  static void showInfo(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: _buildContent(context, Icons.info, message, Colors.white),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        padding: EdgeInsets.zero,
-        margin: const EdgeInsets.all(16),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        duration: const Duration(seconds: AppConstants.snackBarSuccessDurationSeconds),
-      ),
-    );
-  }
-
-  // 警告提示
-  static void showWarning(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: _buildContent(context, Icons.warning_amber_rounded, message, Colors.white),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        padding: EdgeInsets.zero,
-        margin: const EdgeInsets.all(16),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        duration: const Duration(seconds: AppConstants.snackBarSuccessDurationSeconds),
-      ),
-    );
-  }
-
-  // 构建成功/信息/警告内容
+  // 构建成功提示内容
   static Widget _buildContent(BuildContext context, IconData icon, String message, Color textColor) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

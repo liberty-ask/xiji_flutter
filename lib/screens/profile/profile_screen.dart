@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
-import '../../widgets/common/font_size_inherited.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
@@ -72,8 +71,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.user;
-    // 获取字号缩放因子
-    final fontSizeScale = FontSizeInherited.of(context).fontSizeScale;
 
     return Scaffold(
       body: SafeArea(
@@ -347,9 +344,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     // 获取主题的亮度
     final brightness = Theme.of(context).brightness;
-    // 获取主题的文本颜色
-    final textColor = Theme.of(context).colorScheme.onSurface;
-    // 获取边框颜色
     final borderColor = brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.1) : Colors.grey[200]!;
     // 获取右侧箭头颜色
     final arrowColor = brightness == Brightness.dark ? Colors.white54 : Colors.grey[400]!;

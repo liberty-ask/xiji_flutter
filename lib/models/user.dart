@@ -43,5 +43,4 @@ class UserRole {
   static const int member = 0;
 
   static bool isAdmin(int? role) => role == admin;
-  static bool isMember(int? role) => role == member;
 }

@@ -14,21 +14,6 @@ class BillImportResult {
     required this.transactionIds,
     required this.errors,
   });
-
-  factory BillImportResult.fromJson(Map<String, dynamic> json) => BillImportResult(
-        totalCount: (json['totalCount'] as num?)?.toInt() ?? 0,
-        successCount: (json['successCount'] as num?)?.toInt() ?? 0,
-        skipCount: (json['skipCount'] as num?)?.toInt() ?? 0,
-        failCount: (json['failCount'] as num?)?.toInt() ?? 0,
-        transactionIds: (json['transactionIds'] as List<dynamic>?)
-                ?.map((e) => (e as num).toInt())
-                .toList() ??
-            [],
-        errors: (json['errors'] as List<dynamic>?)
-                ?.map((e) => BillImportError.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [],
-      );
 }
 
 class BillImportError {
@@ -41,12 +26,4 @@ class BillImportError {
     required this.reason,
     this.rawData,
   });
-
-  factory BillImportError.fromJson(Map<String, dynamic> json) => BillImportError(
-        row: (json['row'] as num?)?.toInt(),
-        reason: json['reason'] as String? ?? '',
-        rawData: json['rawData'] as String?,
-      );
 }
-
-

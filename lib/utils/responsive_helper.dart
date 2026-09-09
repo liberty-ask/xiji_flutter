@@ -39,16 +39,6 @@ class ResponsiveHelper {
     return getMediaQuery(context).size.width >= largeScreenWidth;
   }
 
-  /// 获取屏幕高度
-  static double screenHeight(BuildContext context) {
-    return getMediaQuery(context).size.height;
-  }
-
-  /// 获取屏幕宽度
-  static double screenWidth(BuildContext context) {
-    return getMediaQuery(context).size.width;
-  }
-
   /// 响应式间距 - 水平方向
   static double horizontalPadding(BuildContext context) {
     if (isTabletOrDesktop(context)) {
@@ -75,16 +65,6 @@ class ResponsiveHelper {
       return 20.0;
     }
     return 18.0;
-  }
-
-  /// 响应式字体大小 - 副标题
-  static double subtitleFontSize(BuildContext context) {
-    if (isSmallScreen(context)) {
-      return 11.0;
-    } else if (isLargeScreen(context)) {
-      return 14.0;
-    }
-    return 12.0;
   }
 
   /// 响应式字体大小 - 正文
@@ -190,19 +170,6 @@ class ResponsiveHelper {
     return TextStyle(
       fontSize: titleFontSize(context),
       fontWeight: fontWeight ?? FontWeight.bold,
-      color: color,
-    );
-  }
-
-  /// 响应式副标题样式
-  static TextStyle responsiveSubtitleStyle(
-    BuildContext context, {
-    FontWeight? fontWeight,
-    Color? color,
-  }) {
-    return TextStyle(
-      fontSize: subtitleFontSize(context),
-      fontWeight: fontWeight ?? FontWeight.normal,
       color: color,
     );
   }

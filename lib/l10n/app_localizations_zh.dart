@@ -45,13 +45,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get theme => '主题';
 
   @override
-  String get fontSize => '字号';
+  String get fontSize => '字体大小';
 
   @override
   String get familyInvite => '家庭邀请';
 
   @override
-  String get audit => '加入审核';
+  String get audit => '审核';
 
   @override
   String get editProfile => '编辑资料';
@@ -63,7 +63,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importBills => '导入账单';
 
   @override
-  String get categoryManage => '类别管理';
+  String get categoryManage => '分类管理';
 
   @override
   String get followSystem => '跟随系统';
@@ -78,7 +78,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get english => 'English';
 
   @override
-  String get confirm => '确认';
+  String get confirm => '确定';
 
   @override
   String get cancel => '取消';
@@ -93,7 +93,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get add => '添加';
 
   @override
-  String get approve => '批准';
+  String get approve => '通过';
 
   @override
   String get reject => '拒绝';
@@ -114,1036 +114,1007 @@ class AppLocalizationsZh extends AppLocalizations {
   String get info => '提示';
 
   @override
-  String get successfullySaved => '设置已保存';
+  String get successfullySaved => '已保存';
 
   @override
-  String get languageDescription => '选择应用的显示语言，设置会保存到本地，即使退出登录也会保留。';
+  String get languageDescription =>
+      'Select the display language for the app. Settings will be saved locally and retained even after logging out.';
 
   @override
-  String get recentActivities => 'Recent Activities';
+  String get recentActivities => '近期动态';
 
   @override
-  String get all => 'All';
+  String get all => '全部';
 
   @override
-  String get unknown => 'Unknown';
+  String get unknown => '未知';
 
   @override
-  String get week => 'Week';
+  String get week => '周';
 
   @override
-  String get month => 'Month';
+  String get month => '月';
 
   @override
-  String get year => 'Year';
+  String get year => '年';
 
   @override
-  String get totalIncome => 'Total Income';
+  String get totalIncome => '总收入';
 
   @override
-  String get totalExpense => 'Total Expense';
+  String get totalExpense => '总支出';
 
   @override
-  String get netIncome => 'Net Income';
+  String get netIncome => '结余';
 
   @override
-  String get category => 'Category';
+  String get category => '分类';
 
   @override
-  String get trend => 'Trend';
+  String get trend => '趋势';
 
   @override
-  String get member => 'Member';
+  String get member => '成员';
 
   @override
-  String get date => 'Date';
+  String get date => '日期';
 
   @override
-  String get noData => 'No Data';
+  String get noData => '暂无数据';
 
   @override
-  String get expenseDetails => 'Expense Details';
+  String get expenseDetails => '支出明细';
 
   @override
-  String get incomeDetails => 'Income Details';
+  String get incomeDetails => '收入明细';
 
   @override
-  String get expense => 'Expense';
+  String get expense => '支出';
 
   @override
-  String get income => 'Income';
+  String get income => '收入';
 
   @override
-  String get themeSaved => 'Theme Saved';
+  String get themeSaved => '主题已保存';
 
   @override
-  String get themePreview => 'Theme Preview';
+  String get themePreview => '主题预览';
 
   @override
-  String get themeMode => 'Theme Mode';
+  String get themeMode => '主题模式';
 
   @override
-  String get lightMode => 'Light Mode';
+  String get lightMode => '浅色模式';
 
   @override
-  String get darkMode => 'Dark Mode';
+  String get darkMode => '深色模式';
 
   @override
-  String get selectTheme => 'Select Theme';
+  String get selectTheme => '选择主题';
 
   @override
-  String get availableBalance => 'Available Balance';
+  String get availableBalance => '可用余额';
 
   @override
-  String get monthlyIncome => 'Monthly Income';
+  String get monthlyIncome => '本月收入';
 
   @override
-  String get monthlyExpense => 'Monthly Expense';
+  String get monthlyExpense => '本月支出';
 
   @override
-  String get voiceTransaction => 'Voice Transaction';
+  String get voiceTransaction => '语音记账';
 
   @override
-  String get manualTransaction => 'Manual Transaction';
+  String get manualTransaction => '手动记账';
 
   @override
-  String get budgetProgress => 'Budget Progress';
+  String get budgetProgress => '预算进度';
 
   @override
-  String get todayExpense => 'Today\'s Expense';
+  String get todayExpense => '今日支出';
 
   @override
-  String get admin => 'Admin';
+  String get admin => '管理员';
 
   @override
-  String get noTrendData => 'No trend data available';
+  String get noTrendData => '暂无趋势数据';
 
   @override
-  String get averageIncome => 'Average Income';
+  String get averageIncome => '平均收入';
 
   @override
-  String get averageExpense => 'Average Expense';
+  String get averageExpense => '平均支出';
 
   @override
-  String get noMemberData => 'No member data available';
+  String get noMemberData => '暂无成员数据';
 
   @override
-  String get noDateData => 'No date data available';
+  String get noDateData => '暂无日期数据';
 
   @override
-  String get sunday => 'Sun';
+  String get sunday => '日';
 
   @override
-  String get monday => 'Mon';
+  String get monday => '一';
 
   @override
-  String get tuesday => 'Tue';
+  String get tuesday => '二';
 
   @override
-  String get wednesday => 'Wed';
+  String get wednesday => '三';
 
   @override
-  String get thursday => 'Thu';
+  String get thursday => '四';
 
   @override
-  String get friday => 'Fri';
+  String get friday => '五';
 
   @override
-  String get saturday => 'Sat';
+  String get saturday => '六';
 
   @override
-  String get transactions => 'transactions';
+  String get transactions => '笔交易';
 
   @override
-  String get totalExpenseLabel => 'Total Expense';
+  String get totalExpenseLabel => '总支出';
 
   @override
-  String get totalIncomeLabel => 'Total Income';
+  String get totalIncomeLabel => '总收入';
 
   @override
-  String get selectDate => 'Select Date';
+  String get selectDate => '选择日期';
 
   @override
-  String get today => 'Today';
+  String get today => '今天';
 
   @override
-  String get yearLabel => 'Year';
+  String get yearLabel => '年';
 
   @override
-  String get monthLabel => 'Month';
+  String get monthLabel => '月';
 
   @override
-  String get dayLabel => 'Day';
+  String get dayLabel => '日';
 
   @override
-  String get confirmButton => 'Confirm';
+  String get confirmButton => '确定';
 
   @override
-  String get cancelButton => 'Cancel';
+  String get cancelButton => '取消';
 
   @override
-  String get net => 'Net';
+  String get net => '净';
 
   @override
-  String get incomeAmount => 'Income';
+  String get incomeAmount => '收入';
 
   @override
-  String get expenseAmount => 'Expense';
+  String get expenseAmount => '支出';
 
   @override
-  String get transactionDetail => 'Transaction Detail';
+  String get transactionDetail => '交易明细';
 
   @override
-  String get type => 'Type';
+  String get type => '类型';
 
   @override
-  String get name => 'Name';
+  String get name => '名称';
 
   @override
-  String get amount => 'Amount';
+  String get amount => '金额';
 
   @override
-  String get time => 'Time';
+  String get time => '时间';
 
   @override
-  String get counterparty => 'Counterparty';
+  String get counterparty => '交易对方';
 
   @override
-  String get note => 'Note';
+  String get note => '备注';
 
   @override
-  String get close => 'Close';
+  String get close => '关闭';
 
   @override
-  String get monthlySurplus => 'Monthly Surplus';
+  String get monthlySurplus => '月度结余';
 
   @override
-  String get selectDateToViewTransactions =>
-      'Please select a date to view transactions';
+  String get selectDateToViewTransactions => '请选择日期查看交易';
 
   @override
-  String get noTransactionRecords => 'No transaction records';
+  String get noTransactionRecords => '暂无交易记录';
 
   @override
-  String get noNicknameSet => 'No nickname set';
+  String get noNicknameSet => '未设置昵称';
 
   @override
-  String get financialManagement => 'FINANCIAL MANAGEMENT';
+  String get financialManagement => '财务管理';
 
   @override
-  String get billImport => 'Bill Import';
+  String get billImport => '账单导入';
 
   @override
-  String get billImportSubtitle => 'Supports WeChat/Alipay bill CSV';
+  String get billImportSubtitle => '支持微信/支付宝账单CSV';
 
   @override
-  String get monthlyBudget => 'Monthly Budget';
+  String get monthlyBudget => '月度预算';
 
   @override
-  String get monthlyBudgetSubtitle => 'Set financial goals';
+  String get monthlyBudgetSubtitle => '设定理财目标';
 
   @override
-  String get categoryManagement => 'Category Management';
+  String get categoryManagement => '类别管理';
 
   @override
-  String get categoryManagementSubtitle =>
-      'Manage income and expense categories';
+  String get categoryManagementSubtitle => '管理收支分类';
 
   @override
-  String get familySettings => 'FAMILY SETTINGS';
+  String get familySettings => '家庭设置';
 
   @override
-  String get memberManagement => 'Member Management';
+  String get memberManagement => '成员管理';
 
   @override
-  String get memberManagementSubtitle => 'Permissions and nickname management';
+  String get memberManagementSubtitle => '权限与昵称管理';
 
   @override
-  String get joinAudit => 'Join Audit';
+  String get joinAudit => '加入审核';
 
   @override
-  String get appearanceSettings => 'APPEARANCE SETTINGS';
+  String get appearanceSettings => '外观设置';
 
   @override
-  String get themeSettings => 'Theme Settings';
+  String get themeSettings => '主题设置';
 
   @override
-  String get themeSettingsSubtitle => 'Choose theme color';
+  String get themeSettingsSubtitle => '选择主题颜色';
 
   @override
-  String get themeColor => 'Theme Color';
+  String get themeColor => '主题色';
 
   @override
-  String get themeColorSubtitle => 'Select app theme color';
+  String get themeColorSubtitle => '选择应用主题颜色';
 
   @override
-  String get themeGreen => 'Fresh Green';
+  String get themeGreen => '清新绿';
 
   @override
-  String get themeBlue => 'Sky Blue';
+  String get themeBlue => '天空蓝';
 
   @override
-  String get themePurple => 'Elegant Purple';
+  String get themePurple => '优雅紫';
 
   @override
-  String get themeOrange => 'Warm Orange';
+  String get themeOrange => '温暖橙';
 
   @override
-  String get themePink => 'Romantic Pink';
+  String get themePink => '浪漫粉';
 
   @override
-  String get themeCyan => 'Ocean Cyan';
+  String get themeCyan => '海洋青';
 
   @override
-  String get languageSettings => 'Language Settings';
+  String get languageSettings => '语言设置';
 
   @override
-  String get languageSettingsSubtitle => 'Select app language';
+  String get languageSettingsSubtitle => '选择应用语言';
 
   @override
-  String get fontSizeSettings => 'Font Size Settings';
+  String get fontSizeSettings => '字体设置';
 
   @override
-  String get fontSizeSettingsSubtitle => 'Adjust text size';
+  String get fontSizeSettingsSubtitle => '调整文字大小';
 
   @override
-  String get securityCenter => 'SECURITY CENTER';
+  String get securityCenter => '安全中心';
 
   @override
-  String get changeLoginPassword => 'Change Login Password';
+  String get changeLoginPassword => '修改登录密码';
 
   @override
-  String get exitCurrentFamily => 'Exit Current Family';
+  String get exitCurrentFamily => '退出当前家庭';
 
   @override
-  String get confirmLogout => 'Confirm Logout';
+  String get confirmLogout => '确认退出';
 
   @override
-  String get logoutConfirmMessage => 'Are you sure you want to logout?';
+  String get logoutConfirmMessage => '确定要退出登录吗？';
 
   @override
-  String get logout => 'Logout';
+  String get logout => '退出登录';
 
   @override
-  String get logoutButton => 'Logout';
+  String get logoutButton => '退出';
 
   @override
-  String get selectDateRange => 'Select Date Range';
+  String get selectDateRange => '选择日期范围';
 
   @override
-  String get startDate => 'Start Date';
+  String get startDate => '开始日期';
 
   @override
-  String get endDate => 'End Date';
+  String get endDate => '结束日期';
 
   @override
-  String get clearDate => 'Clear Date';
+  String get clearDate => '清空日期';
 
   @override
-  String get searchKeyword => 'Search keywords...';
+  String get searchKeyword => '搜索关键词...';
 
   @override
-  String get edit => 'Edit';
+  String get edit => '编辑';
 
   @override
-  String get user => 'User';
+  String get user => '用户';
 
   @override
-  String get allTime => 'All time';
+  String get allTime => '全部时间';
 
   @override
-  String get confirmDelete => 'Confirm Delete';
+  String get confirmDelete => '确认删除';
 
   @override
-  String get confirmDeleteMessage =>
-      'Are you sure you want to delete this transaction record? This operation cannot be undone.';
+  String get confirmDeleteMessage => '确定要删除这条交易记录吗？此操作不可恢复。';
 
   @override
-  String get deleteSuccess => 'Delete successful';
+  String get deleteSuccess => '删除成功';
 
   @override
-  String get deleteFailed => 'Delete failed';
+  String get deleteFailed => '删除失败';
 
   @override
-  String get editTransaction => 'Edit Transaction';
+  String get editTransaction => '编辑交易';
 
   @override
-  String get pleaseEnterAmount => 'Please enter amount';
+  String get pleaseEnterAmount => '请输入金额';
 
   @override
-  String get pleaseEnterValidAmount => 'Please enter a valid amount';
+  String get pleaseEnterValidAmount => '请输入有效的金额';
 
   @override
-  String get amountMustBeGreaterThanZero => 'Amount must be greater than 0';
+  String get amountMustBeGreaterThanZero => '金额必须大于0';
 
   @override
-  String get noteOptional => 'Note (optional)';
+  String get noteOptional => '备注（可选）';
 
   @override
-  String get pleaseSelectCategory => 'Please select a category';
+  String get pleaseSelectCategory => '请选择分类';
 
   @override
-  String get editSuccess => 'Edit successful';
+  String get editSuccess => '修改成功';
 
   @override
-  String get editFailed => 'Edit failed';
+  String get editFailed => '修改失败';
 
   @override
-  String get to => 'to';
+  String get to => '至';
 
   @override
-  String get pressAndHoldToSpeak => 'Press and hold to speak';
+  String get pressAndHoldToSpeak => '按住说话';
 
   @override
-  String get releaseToStop => 'Release to stop';
+  String get releaseToStop => '松开停止';
 
   @override
-  String get processing => 'Processing';
+  String get processing => '处理中';
 
   @override
-  String get editRecognizedText => 'Edit Recognized Text';
+  String get editRecognizedText => '编辑识别结果';
 
   @override
-  String get pleaseEnterOrEditText => 'Please enter or edit recognized text';
+  String get pleaseEnterOrEditText => '请输入或编辑识别的文字';
 
   @override
-  String get send => 'Send';
+  String get send => '发送';
 
   @override
-  String get voiceRecognitionFailed => 'Voice recognition failed';
+  String get voiceRecognitionFailed => '语音识别失败';
 
   @override
-  String get networkConnectionError =>
-      'Network connection error, please check network and retry';
+  String get networkConnectionError => '网络连接异常，请检查网络后重试';
 
   @override
   String get recognitionTextEmpty =>
       'Recognition text is empty, please re-enter';
 
   @override
-  String get recordingCanceled => 'Recording canceled';
+  String get recordingCanceled => '录音已取消';
 
   @override
-  String get enterEditMode => 'Enter edit mode';
+  String get enterEditMode => '进入编辑模式';
 
   @override
-  String get voiceRecognitionServiceUnavailable =>
-      'Voice Recognition Service Unavailable';
+  String get voiceRecognitionServiceUnavailable => '语音识别服务不可用';
 
   @override
-  String get pleaseCheckTheFollowing => 'Please check the following:';
+  String get pleaseCheckTheFollowing => '请检查以下事项：';
 
   @override
-  String get microphonePermission => 'Whether microphone permission is granted';
+  String get microphonePermission => '是否授予了麦克风权限';
 
   @override
-  String get speechRecognitionService =>
-      'Whether speech recognition service is installed';
+  String get speechRecognitionService => '系统是否安装了语音识别服务';
 
   @override
-  String get tryRestartingApp => 'Try restarting the app';
+  String get tryRestartingApp => '尝试重启应用';
 
   @override
-  String get checkSystemSettings =>
-      'Check speech recognition service in system settings';
+  String get checkSystemSettings => '检查系统设置中的语音识别服务';
 
   @override
-  String get gotIt => 'Got it';
+  String get gotIt => '知道了';
 
   @override
-  String get selectCategory => 'Select Category';
+  String get selectCategory => '选择分类';
 
   @override
-  String get confirmAdd => 'Confirm Add';
+  String get confirmAdd => '确认添加';
 
   @override
-  String get addSuccess => 'Add successful';
+  String get addSuccess => '添加成功';
 
   @override
-  String get addFailed => 'Add failed';
+  String get addFailed => '添加失败';
 
   @override
-  String get needMicrophonePermission =>
-      'Microphone permission is required to use voice transaction';
+  String get needMicrophonePermission => '需要麦克风权限才能使用语音记账';
 
   @override
-  String get browserDoesNotSupportSpeechRecognition =>
-      'Browser does not support speech recognition or microphone permission not granted';
+  String get browserDoesNotSupportSpeechRecognition => '浏览器不支持语音识别或未授予麦克风权限';
 
   @override
   String speechRecognitionServiceInitializationFailed(Object error) {
-    return 'Speech recognition service initialization failed\nError: $error\nPlease check system settings or restart the app';
+    return '语音识别服务初始化失败\n错误: $error\n请检查系统设置或重启应用';
   }
 
   @override
-  String get speechRecognitionServiceInUse =>
-      'Speech recognition service is in use, please try again later';
+  String get speechRecognitionServiceInUse => '语音识别服务正在使用中，请稍后再试';
 
   @override
   String get speechRecognitionFailed => 'Speech recognition failed';
 
   @override
-  String get noVoiceContentRecognized =>
-      'No voice content recognized, please try again';
+  String get noVoiceContentRecognized => '未识别到语音内容，请重试';
 
   @override
-  String get transactionSuccess => 'Transaction successful';
+  String get transactionSuccess => '记账成功';
 
   @override
-  String get transactionFailed => 'Transaction failed, please try again';
+  String get transactionFailed => '记账失败，请重试';
 
   @override
   String get pressAndHoldToSpeakSlideToCancel =>
-      'Press and hold the button to speak, slide to cancel button to stop recording, slide to edit text button to edit';
+      '按住按钮说话，滑动到取消按钮停止录音，滑动到编辑文字按钮进行编辑';
 
   @override
-  String get diagnosticInformation => 'Diagnostic Information';
+  String get diagnosticInformation => '诊断信息';
 
   @override
-  String get textCannotBeEmpty => 'Text cannot be empty, please enter content';
+  String get textCannotBeEmpty => '文本不能为空，请输入内容';
 
   @override
-  String get xiaomiHuaweiCheckGoogleApp =>
-      '   • Xiaomi/Huawei, etc.: Check if Google app is installed';
+  String get xiaomiHuaweiCheckGoogleApp => '   • 小米/华为等：检查是否安装了\"Google\"应用';
 
   @override
-  String get orInstallGoogleVoiceService =>
-      '   • Or install Google Voice Service';
+  String get orInstallGoogleVoiceService => '   • 或安装\"Google语音服务\"';
 
   @override
   String loadCategoryFailed(Object error) {
-    return 'Load category failed: $error';
+    return '加载分类失败: $error';
   }
 
   @override
-  String get phoneOrUsername => 'Phone/Username';
+  String get phoneOrUsername => '手机号/用户名';
 
   @override
-  String get password => 'Password';
+  String get password => '密码';
 
   @override
-  String get pleaseEnterPhoneOrUsername => 'Please enter phone or username';
+  String get pleaseEnterPhoneOrUsername => '请输入手机号或用户名';
 
   @override
-  String get pleaseEnterPassword => 'Please enter password';
+  String get pleaseEnterPassword => '请输入密码';
 
   @override
-  String get loginFailed => 'Login failed';
+  String get loginFailed => '登录失败';
 
   @override
-  String get forgotPasswordQuestion => 'Forgot password?';
+  String get forgotPasswordQuestion => '忘记密码？';
 
   @override
-  String get noAccountRegister => 'No account? Register';
+  String get noAccountRegister => '还没有账号？去注册';
 
   @override
-  String get phone => 'Phone';
+  String get phone => '手机号';
 
   @override
-  String get verificationCode => 'Verification Code';
+  String get verificationCode => '验证码';
 
   @override
-  String get nickname => 'Nickname';
+  String get nickname => '昵称';
 
   @override
-  String get pleaseEnterPhone => 'Please enter phone';
+  String get pleaseEnterPhone => '请输入手机号';
 
   @override
-  String get pleaseEnterCorrectPhone => 'Please enter correct phone';
+  String get pleaseEnterCorrectPhone => '请输入正确的手机号';
 
   @override
-  String get pleaseEnterVerificationCode => 'Please enter verification code';
+  String get pleaseEnterVerificationCode => '请输入验证码';
 
   @override
-  String get pleaseEnterNickname => 'Please enter nickname';
+  String get pleaseEnterNickname => '请输入昵称';
 
   @override
-  String get passwordAtLeast6Chars => 'Password must be at least 6 characters';
+  String get passwordAtLeast6Chars => '密码长度至少6位';
 
   @override
-  String get registerFailed => 'Register failed';
+  String get registerFailed => '注册失败';
 
   @override
-  String get haveAccountLogin => 'Have account? Login';
+  String get haveAccountLogin => '已有账号？去登录';
 
   @override
-  String get getVerificationCode => 'Get Code';
+  String get getVerificationCode => '获取验证码';
 
   @override
-  String get newPassword => 'New Password';
+  String get newPassword => '新密码';
 
   @override
-  String get pleaseEnterNewPassword => 'Please enter new password';
+  String get pleaseEnterNewPassword => '请输入新密码';
 
   @override
-  String get resetPassword => 'Reset Password';
+  String get resetPassword => '重置密码';
 
   @override
-  String get verificationCodeSentSuccessfully =>
-      'Verification code sent successfully';
+  String get verificationCodeSentSuccessfully => '验证码发送成功';
 
   @override
-  String get passwordResetSuccessfully => 'Password reset successfully';
+  String get passwordResetSuccessfully => '密码重置成功';
 
   @override
-  String get resetFailed => 'Reset failed';
+  String get resetFailed => '重置失败';
 
   @override
-  String get backToLogin => 'Back to Login';
+  String get backToLogin => '返回登录';
 
   @override
-  String get sendVerificationCode => 'Send Code';
+  String get sendVerificationCode => '发送验证码';
 
   @override
-  String get currentPassword => 'Current Password';
+  String get currentPassword => '当前密码';
 
   @override
-  String get confirmNewPassword => 'Confirm New Password';
+  String get confirmNewPassword => '确认新密码';
 
   @override
-  String get pleaseEnterCurrentPassword => 'Please enter current password';
+  String get pleaseEnterCurrentPassword => '请输入当前密码';
 
   @override
-  String get pleaseConfirmNewPassword => 'Please confirm new password';
+  String get pleaseConfirmNewPassword => '请确认新密码';
 
   @override
-  String get passwordsDoNotMatch => 'Passwords do not match';
+  String get passwordsDoNotMatch => '两次输入的密码不一致';
 
   @override
-  String get newPasswordCannotBeSame =>
-      'New password cannot be same as current password';
+  String get newPasswordCannotBeSame => '新密码不能与当前密码相同';
 
   @override
-  String get confirmChange => 'Confirm Change';
+  String get confirmChange => '确认修改';
 
   @override
-  String get changeSuccessfully => 'Changed successfully';
+  String get changeSuccessfully => '修改成功';
 
   @override
-  String get changeFailed => 'Change failed';
+  String get changeFailed => '修改失败';
 
   @override
-  String get selectImage => 'Select Image';
+  String get selectImage => '选择图片';
 
   @override
-  String get avatarPreview => 'Avatar Preview';
+  String get avatarPreview => '头像预览';
 
   @override
-  String get max20Chars => 'Max 20 characters';
+  String get max20Chars => '最多20个字符';
 
   @override
-  String get enterEmailOptional => 'Enter email address (optional)';
+  String get enterEmailOptional => '输入邮箱地址（可选）';
 
   @override
-  String get pleaseEnterValidEmail => 'Please enter valid email address';
+  String get pleaseEnterValidEmail => '请输入有效的邮箱地址';
 
   @override
-  String get emailOptionalInfo =>
-      'Email address is used for receiving notifications and important information (optional)';
+  String get emailOptionalInfo => '邮箱地址用于接收通知和重要信息（可选）';
 
   @override
-  String get saving => 'Saving...';
+  String get saving => '保存中...';
 
   @override
-  String get saveChanges => 'Save Changes';
+  String get saveChanges => '保存修改';
 
   @override
-  String get tip => 'Tip';
+  String get tip => '提示';
 
   @override
   String get profileUpdateInfo =>
-      'After updating your profile, all family members can see your updates. For best display effect, use clear square images for your avatar.';
+      '修改个人资料后，所有家庭成员都能看到您的更新。头像建议使用清晰的正方形图片，以获得最佳显示效果。';
 
   @override
-  String get imageSizeCannotExceed5MB => 'Image size cannot exceed 5MB';
+  String get imageSizeCannotExceed5MB => '图片大小不能超过5MB';
 
   @override
   String processingImageFailed(Object error) {
-    return 'Processing image file failed: $error';
+    return '处理图片文件失败: $error';
   }
 
   @override
-  String get selectImageFailed => 'Failed to select image';
+  String get selectImageFailed => '选择图片失败';
 
   @override
-  String get needGalleryPermission =>
-      'Gallery access permission is required, please enable it in settings';
+  String get needGalleryPermission => '需要相册访问权限，请在设置中开启';
 
   @override
-  String get saveSuccessfully => 'Saved successfully';
+  String get saveSuccessfully => '保存成功';
 
   @override
-  String get approved => 'Approved';
+  String get approved => '已通过';
 
   @override
-  String get rejected => 'Rejected';
+  String get rejected => '已拒绝';
 
   @override
-  String get operationFailed => 'Operation failed';
+  String get operationFailed => '操作失败';
 
   @override
-  String get noPendingApplications => 'No pending applications';
+  String get noPendingApplications => '暂无待审核申请';
 
   @override
-  String get exitFamilyWarning => 'Exit Family Warning';
+  String get exitFamilyWarning => '退出家庭警告';
 
   @override
-  String get exitFamilySuccess => 'Exit family successfully';
+  String get exitFamilySuccess => '退出家庭成功';
 
   @override
-  String get exitFamilyConsequences => 'Exit consequences';
+  String get exitFamilyConsequences => '退出后果';
 
   @override
-  String get cannotViewFamilyData => 'Cannot view family data';
+  String get cannotViewFamilyData => '无法查看家庭数据';
 
   @override
-  String get cannotViewMemberInfo => 'Cannot view member information';
+  String get cannotViewMemberInfo => '无法查看成员信息';
 
   @override
-  String get cannotAddTransactions => 'Cannot add transactions';
+  String get cannotAddTransactions => '无法添加交易记录';
 
   @override
-  String get needReapplyToJoin => 'Need to reapply to join';
+  String get needReapplyToJoin => '需要重新申请加入';
 
   @override
-  String get scan => 'Scan';
+  String get scan => '扫码';
 
   @override
-  String get scanQrCodeToJoin => 'Scan QR code to join';
+  String get scanQrCodeToJoin => '扫码加入';
 
   @override
-  String get family => 'Family';
+  String get family => '家庭';
 
   @override
-  String get clickScanButton => 'Click scan button';
+  String get clickScanButton => '点击扫码按钮';
 
   @override
-  String get scanFamilyQrCode => 'Scan family QR code';
+  String get scanFamilyQrCode => '扫描家庭二维码';
 
   @override
-  String get enterRemarkAndSubmit => 'Enter remark and submit';
+  String get enterRemarkAndSubmit => '输入备注并提交';
 
   @override
-  String get waitAdminApproval => 'Wait for admin approval';
+  String get waitAdminApproval => '等待管理员审核';
 
   @override
-  String get retry => 'Retry';
+  String get retry => '重试';
 
   @override
-  String get back => 'Back';
+  String get back => '返回';
 
   @override
-  String get platform => 'Platform';
+  String get platform => '平台';
 
   @override
-  String get total => 'Total';
+  String get total => '共';
 
   @override
-  String get totalAmount => 'Total amount';
+  String get totalAmount => '总金额';
 
   @override
-  String get row => 'Row';
+  String get row => '行';
 
   @override
-  String get small => 'Small';
+  String get small => '小';
 
   @override
-  String get standard => 'Standard';
+  String get standard => '标准';
 
   @override
-  String get large => 'Large';
+  String get large => '大';
 
   @override
-  String get fontSizeTiny => 'Very Small';
+  String get fontSizeTiny => '极小';
 
   @override
-  String get fontSizeSmall => 'Small';
+  String get fontSizeSmall => '小';
 
   @override
-  String get fontSizeStandard => 'Standard';
+  String get fontSizeStandard => '标准';
 
   @override
-  String get fontSizeLarge => 'Large';
+  String get fontSizeLarge => '大';
 
   @override
-  String get fontSizeExtraLarge => 'Extra Large';
+  String get fontSizeExtraLarge => '较大';
 
   @override
-  String get fontSizeHuge => 'Huge';
+  String get fontSizeHuge => '极大';
 
   @override
-  String get budget => 'Budget';
+  String get budget => '预算';
 
   @override
-  String get newLabel => 'New';
+  String get newLabel => '新';
 
   @override
-  String get cannotGetFileData => 'Cannot get file data, please retry';
+  String get cannotGetFileData => '无法获取文件数据，请重试';
 
   @override
-  String get fileSelectionFailed => 'File selection failed';
+  String get fileSelectionFailed => '选择文件失败';
 
   @override
-  String get fileSelectionFailedPleaseRetry =>
-      'File selection failed, please retry';
+  String get fileSelectionFailedPleaseRetry => '文件选择失败，请重试';
 
   @override
-  String get fileSelectionFailedPleaseReselect =>
-      'File selection failed, please try reselecting file';
+  String get fileSelectionFailedPleaseReselect => '文件选择失败，请尝试重新选择文件';
 
   @override
-  String get fileSelectionNotSupported =>
-      'File selection feature is not supported, please use other methods to upload';
+  String get fileSelectionNotSupported => '文件选择功能暂不支持，请使用其他方式上传';
 
   @override
-  String get needFileAccessPermission =>
-      'File access permission is required, please enable it in settings';
+  String get needFileAccessPermission => '需要文件访问权限，请在设置中开启';
 
   @override
-  String get filePathUnavailable => 'File path unavailable';
+  String get filePathUnavailable => '文件路径不可用';
 
   @override
-  String get fileDataUnavailable => 'File data unavailable';
+  String get fileDataUnavailable => '文件数据不可用';
 
   @override
-  String get billUploadIdCannotBeEmpty =>
-      'Bill upload record ID cannot be empty';
+  String get billUploadIdCannotBeEmpty => '账单上传记录ID不能为空';
 
   @override
-  String get processingTimeout => 'Processing timeout';
+  String get processingTimeout => '处理超时';
 
   @override
-  String get processingTimeoutPleaseRetry =>
-      'Processing timeout, please try again later';
+  String get processingTimeoutPleaseRetry => '处理超时，请稍后重试';
 
   @override
-  String get processingFailed => 'Processing failed';
+  String get processingFailed => '处理失败';
 
   @override
-  String get queryTaskStatusFailed => 'Failed to query task status';
+  String get queryTaskStatusFailed => '查询任务状态失败';
 
   @override
-  String get getPreviewDataFailed => 'Failed to get preview data';
+  String get getPreviewDataFailed => '获取预览数据失败';
 
   @override
-  String get importCompleted => 'Import completed!';
+  String get importCompleted => '导入完成！';
 
   @override
-  String get getImportResultFailed => 'Failed to get import result';
+  String get getImportResultFailed => '获取导入结果失败';
 
   @override
-  String get initializingTask => 'Initializing task...';
+  String get initializingTask => '正在初始化任务...';
 
   @override
-  String get parsingBillFile => 'Parsing bill file...';
+  String get parsingBillFile => '正在解析账单文件...';
 
   @override
-  String get previewData => 'Preview data';
+  String get previewData => '预览数据';
 
   @override
-  String get confirmImport => 'Confirm Import';
+  String get confirmImport => '确认导入';
 
   @override
-  String get importingTransactions => 'Importing transactions...';
+  String get importingTransactions => '正在导入交易记录...';
 
   @override
-  String get importFailed => 'Import failed';
+  String get importFailed => '导入失败';
 
   @override
-  String get unknownError => 'Unknown error';
+  String get unknownError => '未知错误';
 
   @override
-  String get importResult => 'Import Result';
+  String get importResult => '导入结果';
 
   @override
-  String get totalRecords => 'Total records';
+  String get totalRecords => '总记录数';
 
   @override
-  String get successfullyImported => 'Successfully imported';
+  String get successfullyImported => '成功导入';
 
   @override
-  String get skippedDuplicate => 'Skipped (duplicate)';
+  String get skippedDuplicate => '跳过（重复）';
 
   @override
-  String get importFailedReason => 'Import failure reasons';
+  String get importFailedReason => '导入失败原因';
 
   @override
-  String get rawData => 'Raw data';
+  String get rawData => '原始数据';
 
   @override
   String showingFirst10(Object count) {
-    return 'Showing first 10, total $count failure records';
+    return '显示前10条，共$count条失败记录';
   }
 
   @override
-  String get inProgress => 'in progress';
+  String get inProgress => '中';
 
   @override
-  String get processed => 'Processed';
+  String get processed => '已处理';
 
   @override
-  String get fail => 'Fail';
+  String get fail => '失败';
 
   @override
-  String get supportedFormats => 'Supported formats:';
+  String get supportedFormats => '支持格式：';
 
   @override
-  String get items => 'items';
+  String get items => '条';
 
   @override
-  String get viewTransactions => 'View transactions';
+  String get viewTransactions => '查看交易记录';
 
   @override
-  String get continueImport => 'Continue import';
+  String get continueImport => '继续导入';
 
   @override
-  String get addCategory => 'Add Category';
+  String get addCategory => '添加类别';
 
   @override
   String confirmDeleteCategoryMessage(Object name) {
-    return 'Are you sure you want to delete category \"$name\"? This operation cannot be undone.';
+    return '确定要删除类别\"$name\"吗？此操作不可恢复。';
   }
 
   @override
-  String get addCategoryDialog => 'Add Category';
+  String get addCategoryDialog => '添加类别';
 
   @override
-  String get categoryName => 'Category Name';
+  String get categoryName => '类别名称';
 
   @override
-  String get pleaseEnterCategoryName => 'Please enter category name';
+  String get pleaseEnterCategoryName => '请输入类别名称';
 
   @override
-  String get selectIcon => 'Select Icon';
+  String get selectIcon => '选择图标';
 
   @override
-  String get editCategory => 'Edit Category';
+  String get editCategory => '编辑类别';
 
   @override
-  String get updateSuccess => 'Update successful';
+  String get updateSuccess => '更新成功';
 
   @override
-  String get updateFailed => 'Update failed';
+  String get updateFailed => '更新失败';
 
   @override
-  String get noCategories => 'No categories';
+  String get noCategories => '暂无类别';
 
   @override
-  String get tooltipAddCategory => 'Add category';
+  String get tooltipAddCategory => '添加类别';
 
   @override
-  String get tooltipEdit => 'Edit';
+  String get tooltipEdit => '编辑';
 
   @override
-  String get tooltipDelete => 'Delete';
+  String get tooltipDelete => '删除';
 
   @override
-  String get applyToJoinFamily => 'Apply to Join Family';
+  String get applyToJoinFamily => '申请加入家庭';
 
   @override
-  String get invalidFamilyInviteCode => 'Invalid family invitation code';
+  String get invalidFamilyInviteCode => '无效的家庭邀请码';
 
   @override
-  String get pleaseEnterApplicationNote => 'Please enter application note';
+  String get pleaseEnterApplicationNote => '请输入申请备注';
 
   @override
-  String get applicationNote => 'Application Note';
+  String get applicationNote => '申请备注';
 
   @override
-  String get pleaseEnterReasonForJoining =>
-      'Please enter reason for joining family (required)';
+  String get pleaseEnterReasonForJoining => '请输入申请加入家庭的理由（必填）';
 
   @override
-  String get submitApplication => 'Submit Application';
+  String get submitApplication => '提交申请';
 
   @override
-  String get applicationSubmittedWaitingApproval =>
-      'Application submitted, waiting for approval';
+  String get applicationSubmittedWaitingApproval => '申请已提交，等待审核';
 
   @override
-  String get familyIdCannotBeEmpty => 'Family ID cannot be empty';
+  String get familyIdCannotBeEmpty => '家庭ID不能为空';
 
   @override
-  String get submitFailed => 'Submission failed';
+  String get submitFailed => '提交失败';
 
   @override
-  String get scanQrCode => 'Scan QR Code';
+  String get scanQrCode => '扫一扫';
 
   @override
-  String get alignQrCodeInFrame =>
-      'Align QR code within the frame for automatic scanning';
+  String get alignQrCodeInFrame => '将二维码放入框内，即可自动扫描';
 
   @override
-  String get ensureQrCodeClear =>
-      'Please ensure the QR code is clear and complete';
+  String get ensureQrCodeClear => '请确保二维码清晰完整';
 
   @override
-  String get requestTimeout =>
-      'Request timeout, please check network connection';
+  String get requestTimeout => '请求超时，请检查网络连接';
 
   @override
-  String get networkConnectionFailed =>
-      'Network connection failed, please check network settings';
+  String get networkConnectionFailed => '网络连接失败，请检查网络设置';
 
   @override
-  String get requestFailed => 'Request failed';
+  String get requestFailed => '请求失败';
 
   @override
-  String get unauthorized => 'Unauthorized, please login again';
+  String get unauthorized => '未授权，请重新登录';
 
   @override
-  String get permissionDenied => 'Permission denied';
+  String get permissionDenied => '权限不足';
 
   @override
-  String get resourceNotFound => 'Requested resource not found';
+  String get resourceNotFound => '请求的资源不存在';
 
   @override
-  String get serverError => 'Server error, please try again later';
+  String get serverError => '服务器错误，请稍后重试';
 
   @override
-  String get requestCanceled => 'Request canceled';
+  String get requestCanceled => '请求已取消';
 
   @override
-  String get certificateError => 'Certificate verification failed';
+  String get certificateError => '证书验证失败';
 
   @override
-  String get unsupportedFileType => 'Unsupported file type';
+  String get unsupportedFileType => '不支持的文件类型';
 
   @override
-  String get uploadFailed => 'Upload failed';
+  String get uploadFailed => '上传失败';
 
   @override
-  String get uploadFailedFormatError => 'Upload failed: Invalid return format';
+  String get uploadFailedFormatError => '上传失败：返回格式错误';
 
   @override
   String get themePreviewDescription =>
-      'After selecting a theme, you can preview the effect in real-time and save it after confirmation. Theme settings are saved locally and will be retained even after logging out.';
+      '选择主题后可以实时预览效果，确认后保存。主题设置会保存到本地，即使退出登录也会保留。';
 
   @override
   String previewingTheme(Object themeName) {
-    return 'Previewing: $themeName';
+    return '正在预览：$themeName';
   }
 
   @override
-  String get previewingThemeDescription =>
-      'Click the button below to confirm saving, or return to cancel';
+  String get previewingThemeDescription => '点击下方按钮确认保存，或返回取消';
 
   @override
-  String get confirmAndSave => 'Confirm and Save';
+  String get confirmAndSave => '确认并保存';
 
   @override
   String comparedToLastWeek(Object change) {
-    return 'Vs last week $change';
+    return '较上周 $change';
   }
 
   @override
   String comparedToLastMonth(Object change) {
-    return 'Vs last month $change';
+    return '较上月 $change';
   }
 
   @override
   String comparedToLastYear(Object change) {
-    return 'Vs last year $change';
+    return '较上年 $change';
   }
 
   @override
@@ -1151,41 +1122,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String transactionCount(Object count) {
-    return '$count transactions';
+    return '$count笔交易';
   }
 
   @override
-  String get pending => 'Pending';
+  String get pending => '待处理';
 
   @override
-  String get failed => 'Failed';
+  String get failed => '失败';
 
   @override
-  String get uploading => 'Uploading...';
+  String get uploading => '上传中...';
 
   @override
-  String get selectImageFailedPleaseRetry =>
-      'Failed to select image, please retry';
+  String get selectImageFailedPleaseRetry => '选择图片失败，请重试';
 
   @override
   String uploadImageFailed(Object error) {
-    return 'Failed to upload image: $error';
+    return '上传图片失败: $error';
   }
 
   @override
-  String get taskUploadParse => 'Upload & Parse';
+  String get taskUploadParse => '上传解析';
 
   @override
-  String get taskImport => 'Import';
+  String get taskImport => '导入';
 
   @override
   String taskInProgress(Object task) {
-    return '$task in progress';
-  }
-
-  @override
-  String pageUnderDevelopment(Object title) {
-    return '$title page\nComing soon...';
+    return '$task中';
   }
 }
 
@@ -2325,11 +2290,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String taskInProgress(Object task) {
     return '$task中';
-  }
-
-  @override
-  String pageUnderDevelopment(Object title) {
-    return '$title 页面\n正在开发中...';
   }
 }
 
@@ -3472,10 +3432,5 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String taskInProgress(Object task) {
     return '$task中';
-  }
-
-  @override
-  String pageUnderDevelopment(Object title) {
-    return '$title 頁面\n正在開發中...';
   }
 }

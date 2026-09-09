@@ -410,6 +410,5 @@
   "uploadImageFailed": "Failed to upload image: {error}",
   "taskUploadParse": "Upload & Parse",
   "taskImport": "Import",
-  "taskInProgress": "{task} in progress",
-  "pageUnderDevelopment": "{title} page\nComing soon..."
+  "taskInProgress": "{task} in progress"
 }

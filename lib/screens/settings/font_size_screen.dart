@@ -97,7 +97,6 @@ class _FontSizeScreenState extends State<FontSizeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final fontSizeProvider = Provider.of<FontSizeProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final currentTheme = themeProvider.currentTheme;
 

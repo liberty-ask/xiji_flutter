@@ -4,15 +4,6 @@ import '../models/theme_extensions.dart';
 /// 主题颜色辅助类
 /// 用于从BuildContext获取主题颜色
 class ThemeHelper {
-  static ColorScheme getColorScheme(BuildContext context) {
-    return Theme.of(context).colorScheme;
-  }
-
-  static AppThemeColors getAppColors(BuildContext context) {
-    return Theme.of(context).appColors;
-  }
-
-  // 便捷方法：获取主要颜色
   static Color primary(BuildContext context) {
     return Theme.of(context).colorScheme.primary;
   }

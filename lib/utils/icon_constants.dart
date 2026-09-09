@@ -174,20 +174,4 @@ class IconConstants {
     };
     return iconMap[iconName] ?? Icons.category;
   }
-
-  // 图标分类数据，用于UI显示
-  static const Map<String, List<IconDataItem>> iconCategories = {
-    '购物': shoppingIcons,
-    '餐饮': foodIcons,
-    '交通': transportIcons,
-    '生活服务': lifeServiceIcons,
-    '娱乐': entertainmentIcons,
-    '医疗健康': medicalIcons,
-    '教育': educationIcons,
-    '金融': financeIcons,
-    '工作': workIcons,
-    '通讯设备': communicationIcons,
-    '服装配饰': clothingIcons,
-    '其他': otherIcons,
-  };
 }
