@@ -39,21 +39,6 @@
             android:name="flutterEmbedding"
             android:value="2" />
         
-        <!-- 语音记账 Widget -->
-        <receiver
-            android:name=".VoiceTransactionWidgetProvider"
-            android:exported="true"
-            android:label="@string/voice_transaction_widget_title"
-            android:icon="@mipmap/ic_launcher">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.xiji.VOICE_TRANSACTION_ACTION" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/voice_transaction_widget_info" />
-        </receiver>
-        
         <!-- 财务汇总 Widget -->
         <receiver
             android:name=".FinanceSummaryWidgetProvider"
@@ -62,7 +47,6 @@
             android:icon="@mipmap/ic_launcher">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.xiji.FINANCE_SUMMARY_VOICE_ACTION" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

@@ -27,13 +27,30 @@ class HomeWidgetService {
           }
         }
       });
-      
+
       if (kDebugMode) {
         debugPrint('Home Widget 服务初始化成功（使用原生实现）');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Home Widget 服务初始化失败: $e');
+      }
+    }
+  }
+
+  /// 更新财务汇总小部件：收支数据经 MethodChannel 直传原生存储并刷新
+  static Future<void> updateFinanceWidget({
+    required double income,
+    required double expense,
+  }) async {
+    try {
+      await _channel.invokeMethod('updateFinanceWidget', {
+        'income': income,
+        'expense': expense,
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('刷新财务汇总小部件失败: $e');
       }
     }
   }

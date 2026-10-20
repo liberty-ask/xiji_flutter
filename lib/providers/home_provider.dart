@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../services/api/transaction_service.dart';
-import '../utils/widget_data_utils.dart';
+import '../services/widget/home_widget_service.dart';
 
 class HomeProvider with ChangeNotifier {
   final TransactionService _transactionService = TransactionService();
@@ -22,11 +22,11 @@ class HomeProvider with ChangeNotifier {
       _homeData = await _transactionService.getHomeData();
       _error = null;
       
-      // 将收支数据保存到SharedPreferences，供小部件使用
+      // 将收支数据直传原生并刷新财务汇总小部件
       if (_homeData != null) {
         final income = (_homeData!['income'] as num?)?.toDouble() ?? 0.0;
         final expense = (_homeData!['expense'] as num?)?.toDouble() ?? 0.0;
-        await WidgetDataUtils.saveMonthlyFinancialData(
+        await HomeWidgetService.updateFinanceWidget(
           income: income,
           expense: expense,
         );

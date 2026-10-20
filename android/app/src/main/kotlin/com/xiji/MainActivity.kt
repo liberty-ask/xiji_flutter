@@ -1,5 +1,6 @@
 package com.xiji
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -17,6 +18,20 @@ class MainActivity : FlutterActivity() {
                 "getInitialRoute" -> {
                     val route = intent.getStringExtra("route")
                     result.success(route)
+                }
+                "updateFinanceWidget" -> {
+                    // 接收收支数据，写入原生SharedPreferences后刷新财务汇总小部件
+                    // (不使用Flutter shared_preferences，其2.4+后端为DataStore，原生Widget无法读取)
+                    val args = call.arguments as? Map<*, *>
+                    val income = (args?.get("income") as? Number)?.toFloat() ?: 0.0f
+                    val expense = (args?.get("expense") as? Number)?.toFloat() ?: 0.0f
+                    applicationContext.getSharedPreferences("FinanceWidget", Context.MODE_PRIVATE)
+                        .edit()
+                        .putFloat("income", income)
+                        .putFloat("expense", expense)
+                        .apply()
+                    FinanceSummaryWidgetProvider.updateAllWidgets(applicationContext)
+                    result.success(true)
                 }
                 else -> {
                     result.notImplemented()
