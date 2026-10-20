@@ -430,6 +430,12 @@ abstract class AppLocalizations {
   /// **'Income'**
   String get income;
 
+  /// No description provided for @noCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded'**
+  String get noCount;
+
   /// No description provided for @themeSaved.
   ///
   /// In en, this message translates to:

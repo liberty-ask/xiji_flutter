@@ -175,6 +175,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get income => 'Income';
 
   @override
+  String get noCount => 'Excluded';
+
+  @override
   String get themeSaved => 'Theme Saved';
 
   @override

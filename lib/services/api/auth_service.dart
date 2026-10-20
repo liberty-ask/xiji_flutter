@@ -76,4 +76,20 @@ class AuthService {
       'newPassword': newPassword,
     });
   }
+
+  // 刷新token（携带本地refresh token换取新双token）
+  Future<Map<String, dynamic>> refresh() async {
+    final refreshToken = await _api.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      throw Exception('缺少刷新凭证，请重新登录');
+    }
+    return await _api.post('/v1/auth/refresh', data: {
+      'refreshToken': refreshToken,
+    });
+  }
+
+  // 登出（服务端撤销全部refresh token）
+  Future<void> logout() async {
+    await _api.post('/v1/auth/logout');
+  }
 }

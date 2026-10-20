@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../services/api/transaction_service.dart';
+import '../../utils/icon_constants.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
@@ -603,9 +604,16 @@ class _DetailScreenState extends State<DetailScreen> {
     if (_selectedType == null) {
       return AppLocalizations.of(context)!.all;
     }
-    return _selectedType == TransactionType.income ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense;
+    switch (_selectedType!) {
+      case TransactionType.income:
+        return AppLocalizations.of(context)!.income;
+      case TransactionType.expense:
+        return AppLocalizations.of(context)!.expense;
+      case TransactionType.neutral:
+        return AppLocalizations.of(context)!.noCount;
+    }
   }
-  
+
   void _showTypeFilter() {
     showModalBottomSheet(
       context: context,
@@ -620,6 +628,8 @@ class _DetailScreenState extends State<DetailScreen> {
             _buildTypeFilterOption(TransactionType.income, AppLocalizations.of(context)!.income),
             const SizedBox(height: 12),
             _buildTypeFilterOption(TransactionType.expense, AppLocalizations.of(context)!.expense),
+            const SizedBox(height: 12),
+            _buildTypeFilterOption(TransactionType.neutral, AppLocalizations.of(context)!.noCount),
             SizedBox(height: MediaQuery.of(context).padding.bottom),
           ],
         ),
@@ -1039,6 +1049,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Widget _buildTransactionItem(Transaction transaction) {
     final isIncome = transaction.type == TransactionType.income;
+    final isNeutral = transaction.type == TransactionType.neutral;
     
     // 限制description显示长度
     String? displayNote;
@@ -1075,7 +1086,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     : Colors.white.withValues(alpha: 0.05),
               ),
               child: Icon(
-                Icons.category,
+                IconConstants.getIconFromString(transaction.icon ?? ''),
                 color: isIncome ? ThemeHelper.primary(context) : Colors.white70,
                 size: 24,
               ),
@@ -1126,11 +1137,13 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             Expanded(
               child: ScaledText(
-                '${isIncome ? '+' : '-'}${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
+                '${isNeutral ? '' : (isIncome ? '+' : '-')}${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isIncome ? ThemeHelper.primary(context) : Colors.white,
+                  color: isNeutral
+                      ? Colors.white60
+                      : (isIncome ? ThemeHelper.primary(context) : Colors.white),
                 ),
                 textAlign: TextAlign.right,
                 maxLines: 1,
@@ -1182,6 +1195,7 @@ class _DetailScreenState extends State<DetailScreen> {
   
   void _showTransactionDetail(Transaction transaction) {
     final isIncome = transaction.type == TransactionType.income;
+    final isNeutral = transaction.type == TransactionType.neutral;
     
     // 查找用户信息
     String userName = AppLocalizations.of(context)!.unknown;
@@ -1200,8 +1214,10 @@ class _DetailScreenState extends State<DetailScreen> {
         title: Row(
           children: [
             Icon(
-              isIncome ? Icons.arrow_upward : Icons.arrow_downward,
-              color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context),
+              isNeutral ? Icons.remove : (isIncome ? Icons.arrow_upward : Icons.arrow_downward),
+              color: isNeutral
+                  ? Colors.white60
+                  : (isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context)),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1217,11 +1233,15 @@ class _DetailScreenState extends State<DetailScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailRow(AppLocalizations.of(context)!.type, isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense,
-                  color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context)),
+              _buildDetailRow(AppLocalizations.of(context)!.type,
+                  isNeutral ? AppLocalizations.of(context)!.noCount
+                      : (isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense),
+                  color: isNeutral
+                      ? Colors.white60
+                      : (isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context))),
               _buildDetailRow(AppLocalizations.of(context)!.category, transaction.category),
               _buildDetailRow(AppLocalizations.of(context)!.amount, '${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
-                  color: isIncome ? ThemeHelper.primary(context) : Colors.white),
+                  color: isNeutral ? Colors.white60 : (isIncome ? ThemeHelper.primary(context) : Colors.white)),
               _buildDetailRow(AppLocalizations.of(context)!.date, DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(transaction.date)),
               _buildDetailRow(AppLocalizations.of(context)!.user, userName),
               if (transaction.counterparty != null && transaction.counterparty!.isNotEmpty)
@@ -1337,10 +1357,10 @@ class _DetailScreenState extends State<DetailScreen> {
     models.Category? selectedCategory;
     DateTime selectedDate = transaction.date;
 
-    // 查找对应的分类
-    final categories = selectedType == TransactionType.expense
-        ? categoryProvider.expenseCategories
-        : categoryProvider.incomeCategories;
+    // 查找对应的分类（不计收支交易的分类挂在支出分类组下，与导入兜底口径一致）
+    final categories = selectedType == TransactionType.income
+        ? categoryProvider.incomeCategories
+        : categoryProvider.expenseCategories;
     
     for (var cat in categories) {
       if (cat.name == transaction.category) {

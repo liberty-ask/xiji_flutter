@@ -91,9 +91,13 @@ class AppRouter {
           }
         }
 
-        // 如果已登录，访问登录/注册页时重定向到首页
+        // 如果已登录，访问登录/注册页时重定向（优先回跳原目标页）
         if ((currentPath == '/login' || currentPath == '/register' || currentPath == '/welcome') &&
             authProvider.isAuthenticated) {
+          final redirect = state.uri.queryParameters['redirect'];
+          if (redirect != null && redirect.startsWith('/')) {
+            return redirect;
+          }
           return '/home';
         }
 

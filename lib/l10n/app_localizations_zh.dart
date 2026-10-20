@@ -175,6 +175,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get income => '收入';
 
   @override
+  String get noCount => '不计收支';
+
+  @override
   String get themeSaved => '主题已保存';
 
   @override
@@ -1321,6 +1324,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get income => '收入';
 
   @override
+  String get noCount => '不计收支';
+
+  @override
   String get themeSaved => '主题已保存';
 
   @override
@@ -2461,6 +2467,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get income => '收入';
+
+  @override
+  String get noCount => '不計收支';
 
   @override
   String get themeSaved => '主題已保存';

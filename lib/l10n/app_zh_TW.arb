@@ -55,6 +55,7 @@
   "incomeDetails": "收入明細",
   "expense": "支出",
   "income": "收入",
+  "noCount": "不計收支",
   "themeSaved": "主題已保存",
   "themePreview": "主題預覽",
   "themeMode": "主題模式",

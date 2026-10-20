@@ -10,6 +10,7 @@ import '../../widgets/common/error_widget.dart' as custom;
 import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/icon_constants.dart';
 import '../../services/api/family_service.dart';
 import '../../models/family.dart';
 import '../../models/family_member.dart';
@@ -110,18 +111,18 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           final data = provider.homeData!;
-          final balance = data['balance'] as String? ?? '0.00';
-          final income = data['income'] as String? ?? '0';
-          final expense = data['expense'] as String? ?? '0';
+          final balanceNum = (data['balance'] as num?)?.toDouble() ?? 0.0;
+          final todayExpenseNum = (data['todayExpense'] as num?)?.toDouble() ?? 0.0;
+          final yesterdayExpenseNum = (data['yesterdayExpense'] as num?)?.toDouble() ?? 0.0;
+          final balance = _formatAmount(balanceNum);
+          final income = _formatAmount((data['income'] as num?)?.toDouble() ?? 0.0);
+          final expense = _formatAmount((data['expense'] as num?)?.toDouble() ?? 0.0);
           final budget = data['budget'] as Map<String, dynamic>? ?? {};
-          final todayExpense = data['todayExpense'] as String? ?? '0';
-          final yesterdayExpense = data['yesterdayExpense'] as String? ?? '0';
+          final todayExpense = _formatAmount(todayExpenseNum);
           final activities = data['activities'] as List<dynamic>? ?? [];
           final currency = AppLocalizations.of(context)!.currencySymbol;
-          
+
           // 计算今日支出趋势
-          final todayExpenseNum = double.tryParse(todayExpense) ?? 0.0;
-          final yesterdayExpenseNum = double.tryParse(yesterdayExpense) ?? 0.0;
           final expenseDiff = todayExpenseNum - yesterdayExpenseNum;
 
           final balanceParts = balance.split('.');
@@ -800,7 +801,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       color: Colors.white.withValues(alpha: 0.05),
                                     ),
                                     child: Icon(
-                                      _getIconFromString(item['icon'] as String? ?? ''),
+                                      IconConstants.getIconFromString(item['icon'] as String? ?? ''),
                                       color: isIncome
                                           ? ThemeHelper.primary(context)
                                           : Colors.white38,
@@ -831,7 +832,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   ScaledText(
-                                    item['amount'] as String? ?? '',
+                                    '${isIncome ? '+' : '-'}${_formatAmount((item['amount'] as num?)?.toDouble() ?? 0.0)}',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -862,16 +863,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Calculate budget progress (supports both old and new API formats)
+  // Calculate budget progress
   double _calculateBudgetProgress(Map<String, dynamic> budget) {
-    // Try percentage first (new API format)
-    if (budget['percentage'] != null) {
-      final percentage = (budget['percentage'] as num).toDouble();
-      return (percentage / 100).clamp(0.0, 1.0);
-    }
-    // Fall back to used/total calculation (old API format)
     final used = (budget['used'] as num? ?? 0).toDouble();
-    final total = (budget['budget'] as num? ?? budget['total'] as num? ?? 1).toDouble();
+    final total = (budget['total'] as num? ?? 1).toDouble();
     if (total == 0) return 0.0;
     return (used / total).clamp(0.0, 1.0);
   }
@@ -879,18 +874,13 @@ class _HomeScreenState extends State<HomeScreen> {
   // Get budget progress color based on percentage
   Color _getBudgetProgressColor(Map<String, dynamic> budget) {
     double percentage = 0.0;
-    
-    // Calculate percentage
-    if (budget['percentage'] != null) {
-      percentage = (budget['percentage'] as num).toDouble();
-    } else {
-      final used = (budget['used'] as num? ?? 0).toDouble();
-      final total = (budget['budget'] as num? ?? budget['total'] as num? ?? 0).toDouble();
-      if (total > 0) {
-        percentage = (used / total) * 100;
-      }
+
+    final used = (budget['used'] as num? ?? 0).toDouble();
+    final total = (budget['total'] as num? ?? 0).toDouble();
+    if (total > 0) {
+      percentage = (used / total) * 100;
     }
-    
+
     // Return color based on percentage
     if (percentage > 100) {
       return ThemeHelper.expenseColor(context); // Red for over budget
@@ -901,18 +891,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  IconData _getIconFromString(String iconName) {
-    // 简单的图标映射，实际应该使用更完整的映射表
-    switch (iconName) {
-      case 'shopping_cart':
-        return Icons.shopping_cart;
-      case 'restaurant':
-        return Icons.restaurant;
-      case 'directions_car':
-        return Icons.directions_car;
-      default:
-        return Icons.category;
-    }
+  // 格式化金额：千分位 + 两位小数（后端返回数值，格式化由客户端负责）
+  String _formatAmount(num value) {
+    return NumberFormat('#,##0.00').format(value);
   }
 
   Widget _buildFamilyAvatarPlaceholder() {
@@ -942,19 +923,10 @@ class _HomeScreenState extends State<HomeScreen> {
     
     // 查找用户信息
     String userName = item['user'] as String? ?? AppLocalizations.of(context)!.unknown;
-    final userId = item['userId'] as String?;
-    if (userId != null && userId.isNotEmpty) {
-      final member = _members.firstWhere(
-        (m) => m.id == userId,
-        orElse: () => FamilyMember(id: '', name: userName, role: FamilyMemberRole.member),
-      );
-      userName = member.name;
-    }
-    
-    // 解析金额
-    final amountStr = item['amount'] as String? ?? '0';
-    final amount = double.tryParse(amountStr.replaceAll('¥', '').replaceAll(',', '')) ?? 0.0;
-    
+
+    // 解析金额（后端返回数值，正负号由isIncome决定）
+    final amount = (item['amount'] as num?)?.toDouble() ?? 0.0;
+
     // 解析日期
     DateTime transactionDate = DateTime.now();
     // 优先使用date字段（完整日期）

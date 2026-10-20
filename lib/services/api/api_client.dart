@@ -3,13 +3,24 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
+import 'dart:async';
 import '../../utils/constants.dart';
+
+/// 会话过期异常：refresh token被服务端确认无效（HTTP 401）
+class SessionExpiredException implements Exception {
+  @override
+  String toString() => 'SessionExpiredException';
+}
 
 class ApiClient {
   // 单例实例
   static ApiClient? _instance;
-  
+
   late Dio _dio;
+
+  // 刷新token与重放请求使用的裸Dio（不挂拦截器，避免与QueuedInterceptor队列互相等待）
+  late Dio _rawDio;
+
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
       encryptedSharedPreferences: true,
@@ -18,7 +29,13 @@ class ApiClient {
       accessibility: KeychainAccessibility.first_unlock_this_device,
     ),
   );
-  
+
+  // 会话过期全局回调（由AuthProvider注册，refresh确认无效时强制登出）
+  static void Function()? onSessionExpired;
+
+  // 刷新锁：并发401仅触发一次刷新（static保证跨实例单飞行）
+  static Completer<Map<String, String>>? _refreshCompleter;
+
   // 根据环境自动切换 baseUrl
   static String get baseUrl {
     if (kDebugMode) {
@@ -41,28 +58,112 @@ class ApiClient {
       },
     ));
 
-    // 请求拦截器：添加 Token
-    _dio.interceptors.add(InterceptorsWrapper(
+    _rawDio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: AppConstants.connectTimeoutSeconds),
+      receiveTimeout: const Duration(seconds: AppConstants.receiveTimeoutSeconds),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    ));
+
+    // 请求拦截器：添加 Token；错误拦截器：401无感刷新
+    _dio.interceptors.add(QueuedInterceptorsWrapper(
       onRequest: (options, handler) async {
-        final token = await _getToken();
+        final token = await getToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
         return handler.next(options);
       },
-      onError: (error, handler) {
+      onError: (error, handler) async {
+        // 仅业务请求的401触发无感刷新（排除refresh自身）
+        if (error.response?.statusCode == 401 &&
+            !error.requestOptions.path.contains('/auth/refresh')) {
+          try {
+            final tokens = await _refreshTokens();
+            // 刷新成功：用新access token重放原请求
+            final requestOptions = error.requestOptions;
+            requestOptions.headers['Authorization'] =
+                'Bearer ${tokens['accessToken']}';
+            final replay = await _rawDio.fetch(requestOptions);
+            return handler.resolve(replay);
+          } on SessionExpiredException {
+            // refresh被服务端确认无效：清凭证并通知全局登出
+            await removeToken();
+            onSessionExpired?.call();
+            return handler.next(error);
+          } catch (_) {
+            // 刷新网络错误：保留凭证与登录态，原请求按普通失败处理
+            return handler.next(error);
+          }
+        }
         return handler.next(error);
       },
     ));
   }
-  
+
   // 获取单例实例
   factory ApiClient() {
     _instance ??= ApiClient._internal();
     return _instance!;
   }
 
-  Future<String?> _getToken() async {
+  /// 使用refresh token换取新双token（静态锁保证并发下仅一次刷新请求）
+  Future<Map<String, String>> _refreshTokens() {
+    final existing = _refreshCompleter;
+    if (existing != null) {
+      return existing.future;
+    }
+    final completer = Completer<Map<String, String>>();
+    _refreshCompleter = completer;
+    unawaited(_doRefreshTokens(completer));
+    return completer.future;
+  }
+
+  Future<void> _doRefreshTokens(
+      Completer<Map<String, String>> completer) async {
+    try {
+        final refreshToken = await getRefreshToken();
+        if (refreshToken == null || refreshToken.isEmpty) {
+          // 无refresh token（旧版本会话），会话无法续期
+          throw SessionExpiredException();
+        }
+        final response = await _rawDio
+            .post('/v1/auth/refresh', data: {'refreshToken': refreshToken});
+        final dynamic body = response.data;
+        if (body is! Map<String, dynamic> || body['code'] != 200) {
+          throw SessionExpiredException();
+        }
+        final dynamic data = body['data'];
+        if (data is! Map<String, dynamic>) {
+          throw SessionExpiredException();
+        }
+        final accessToken = data['accessToken'] as String?;
+        final newRefreshToken = data['refreshToken'] as String?;
+        if (accessToken == null ||
+            accessToken.isEmpty ||
+            newRefreshToken == null ||
+            newRefreshToken.isEmpty) {
+          throw SessionExpiredException();
+        }
+        await setTokens(accessToken, newRefreshToken);
+        completer
+            .complete({'accessToken': accessToken, 'refreshToken': newRefreshToken});
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 401) {
+          completer.completeError(SessionExpiredException());
+        } else {
+          completer.completeError(e);
+        }
+      } catch (e) {
+        completer.completeError(e);
+      } finally {
+        _refreshCompleter = null;
+      }
+  }
+
+  Future<String?> getToken() async {
     return await _storage.read(key: AppConstants.tokenKey);
   }
 
@@ -277,11 +378,17 @@ class ApiClient {
   }
 
   // Token 管理方法
-  Future<void> setToken(String token) async {
-    await _storage.write(key: AppConstants.tokenKey, value: token);
+  Future<String?> getRefreshToken() async {
+    return await _storage.read(key: AppConstants.refreshTokenKey);
+  }
+
+  Future<void> setTokens(String accessToken, String refreshToken) async {
+    await _storage.write(key: AppConstants.tokenKey, value: accessToken);
+    await _storage.write(key: AppConstants.refreshTokenKey, value: refreshToken);
   }
 
   Future<void> removeToken() async {
     await _storage.delete(key: AppConstants.tokenKey);
+    await _storage.delete(key: AppConstants.refreshTokenKey);
   }
 }

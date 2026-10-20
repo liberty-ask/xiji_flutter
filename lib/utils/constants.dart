@@ -1,5 +1,6 @@
 class AppConstants {
   static const String tokenKey = 'token';
+  static const String refreshTokenKey = 'refreshToken';
   static const int defaultPageSize = 20;
   static const int connectTimeoutSeconds = 30;
   static const int receiveTimeoutSeconds = 30;

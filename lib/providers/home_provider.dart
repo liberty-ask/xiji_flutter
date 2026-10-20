@@ -24,8 +24,8 @@ class HomeProvider with ChangeNotifier {
       
       // 将收支数据保存到SharedPreferences，供小部件使用
       if (_homeData != null) {
-        final income = _homeData!['totalIncome'] as double? ?? 0.0;
-        final expense = _homeData!['totalExpense'] as double? ?? 0.0;
+        final income = (_homeData!['income'] as num?)?.toDouble() ?? 0.0;
+        final expense = (_homeData!['expense'] as num?)?.toDouble() ?? 0.0;
         await WidgetDataUtils.saveMonthlyFinancialData(
           income: income,
           expense: expense,

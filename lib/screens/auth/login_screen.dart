@@ -46,9 +46,15 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
 
-      // 只有在成功登录后才跳转
+      // 只有在成功登录后才跳转（优先回跳原目标页）
       if (mounted && authProvider.isAuthenticated) {
-        context.go('/home');
+        final redirect =
+            GoRouterState.of(context).uri.queryParameters['redirect'];
+        if (redirect != null && redirect.startsWith('/')) {
+          context.go(redirect);
+        } else {
+          context.go('/home');
+        }
       }
     } catch (e) {
       // 登录失败，显示错误提示，不跳转

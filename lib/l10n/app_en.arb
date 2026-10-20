@@ -55,6 +55,7 @@
   "incomeDetails": "Income Details",
   "expense": "Expense",
   "income": "Income",
+  "noCount": "Excluded",
   "themeSaved": "Theme Saved",
   "themePreview": "Theme Preview",
   "themeMode": "Theme Mode",
