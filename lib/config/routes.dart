@@ -22,6 +22,7 @@ import '../screens/family/apply_family_screen.dart';
 import '../screens/settings/theme_screen.dart';
 import '../screens/settings/language_screen.dart';
 import '../screens/settings/font_size_screen.dart';
+import '../screens/settings/backup_screen.dart';
 import '../screens/voice/voice_transaction_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/import/import_bills_screen.dart';
@@ -61,6 +62,7 @@ class AppRouter {
           '/font-size',
           '/edit-profile',
           '/change-password',
+          '/backup',
           '/invite',
           '/exit-family',
           '/import-bills',
@@ -174,6 +176,10 @@ class AppRouter {
         GoRoute(
           path: '/change-password',
           builder: (context, state) => const ChangePasswordScreen(),
+        ),
+        GoRoute(
+          path: '/backup',
+          builder: (context, state) => const BackupScreen(),
         ),
         GoRoute(
           path: '/budget',

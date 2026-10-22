@@ -358,6 +358,77 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupImportBadFile => '备份文件无法识别，请确认选择的是导出的 JSON 备份';
 
   @override
+  String get cloudBackup => '云备份';
+
+  @override
+  String get cloudBackupSubtitle => '端到端加密，数据仅自己可见';
+
+  @override
+  String get backupE2eDescription =>
+      '开启后，记账数据将以端到端加密方式备份到云端。服务器仅存储密文，任何人（包括运营者）都无法查看内容。';
+
+  @override
+  String get backupDataLocalOnly => '数据仅存本机';
+
+  @override
+  String get backupEnabled => '端到端加密备份已开启';
+
+  @override
+  String get backupSetPasswordTitle => '设置加密口令';
+
+  @override
+  String get backupSetPasswordDesc => '该口令用于加密备份数据，与登录密码无关。口令一旦遗忘，只能凭恢复码找回。';
+
+  @override
+  String get backupPasswordLabel => '加密口令';
+
+  @override
+  String get backupPasswordConfirmLabel => '确认口令';
+
+  @override
+  String get backupPasswordTooShort => '口令至少需要 8 位';
+
+  @override
+  String get backupPasswordWeak => '口令需同时包含字母和数字';
+
+  @override
+  String get backupPasswordMismatch => '两次输入的口令不一致';
+
+  @override
+  String get backupGeneratingKeys => '正在生成密钥…';
+
+  @override
+  String get backupSetupFailed => '加密口令设置失败，请重试';
+
+  @override
+  String get backupRecoveryCodeTitle => '恢复码';
+
+  @override
+  String get backupRecoveryCodeOnceWarning =>
+      '恢复码仅展示这一次，不会再次显示。忘记加密口令时，它是找回数据的唯一途径。请抄写到安全的地方妥善保存。';
+
+  @override
+  String get backupRecoveryCodeCopy => '复制';
+
+  @override
+  String get backupRecoveryCodeCopied => '恢复码已复制';
+
+  @override
+  String get backupRecoveryCodeSaved => '我已妥善保存';
+
+  @override
+  String get backupDisableTitle => '关闭云备份？';
+
+  @override
+  String get backupDisableMessage => '关闭后新数据不再备份到云端，本机数据不受影响；重新开启时无需再次设置口令。';
+
+  @override
+  String get backupEncryptedInfo => '备份已开启，联网后新数据将加密上传云端。即使服务器数据泄露，任何人都无法查看内容。';
+
+  @override
+  String get backupLocalOnlyWarning => '备份未开启，数据仅存本机：卸载应用或更换设备会导致数据丢失，建议开启云备份。';
+
+  @override
   String get monthlyBudget => '月度预算';
 
   @override
@@ -1548,6 +1619,77 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupImportBadFile => '备份文件无法识别，请确认选择的是导出的 JSON 备份';
 
   @override
+  String get cloudBackup => '云备份';
+
+  @override
+  String get cloudBackupSubtitle => '端到端加密，数据仅自己可见';
+
+  @override
+  String get backupE2eDescription =>
+      '开启后，记账数据将以端到端加密方式备份到云端。服务器仅存储密文，任何人（包括运营者）都无法查看内容。';
+
+  @override
+  String get backupDataLocalOnly => '数据仅存本机';
+
+  @override
+  String get backupEnabled => '端到端加密备份已开启';
+
+  @override
+  String get backupSetPasswordTitle => '设置加密口令';
+
+  @override
+  String get backupSetPasswordDesc => '该口令用于加密备份数据，与登录密码无关。口令一旦遗忘，只能凭恢复码找回。';
+
+  @override
+  String get backupPasswordLabel => '加密口令';
+
+  @override
+  String get backupPasswordConfirmLabel => '确认口令';
+
+  @override
+  String get backupPasswordTooShort => '口令至少需要 8 位';
+
+  @override
+  String get backupPasswordWeak => '口令需同时包含字母和数字';
+
+  @override
+  String get backupPasswordMismatch => '两次输入的口令不一致';
+
+  @override
+  String get backupGeneratingKeys => '正在生成密钥…';
+
+  @override
+  String get backupSetupFailed => '加密口令设置失败，请重试';
+
+  @override
+  String get backupRecoveryCodeTitle => '恢复码';
+
+  @override
+  String get backupRecoveryCodeOnceWarning =>
+      '恢复码仅展示这一次，不会再次显示。忘记加密口令时，它是找回数据的唯一途径。请抄写到安全的地方妥善保存。';
+
+  @override
+  String get backupRecoveryCodeCopy => '复制';
+
+  @override
+  String get backupRecoveryCodeCopied => '恢复码已复制';
+
+  @override
+  String get backupRecoveryCodeSaved => '我已妥善保存';
+
+  @override
+  String get backupDisableTitle => '关闭云备份？';
+
+  @override
+  String get backupDisableMessage => '关闭后新数据不再备份到云端，本机数据不受影响；重新开启时无需再次设置口令。';
+
+  @override
+  String get backupEncryptedInfo => '备份已开启，联网后新数据将加密上传云端。即使服务器数据泄露，任何人都无法查看内容。';
+
+  @override
+  String get backupLocalOnlyWarning => '备份未开启，数据仅存本机：卸载应用或更换设备会导致数据丢失，建议开启云备份。';
+
+  @override
   String get monthlyBudget => '月度预算';
 
   @override
@@ -2731,6 +2873,78 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get backupImportBadFile => '備份檔案無法識別，請確認選擇的是導出的 JSON 備份';
+
+  @override
+  String get cloudBackup => '雲端備份';
+
+  @override
+  String get cloudBackupSubtitle => '端對端加密，資料僅自己可見';
+
+  @override
+  String get backupE2eDescription =>
+      '開啟後，記帳資料將以端對端加密方式備份到雲端。伺服器僅儲存密文，任何人（包括營運者）都無法查看內容。';
+
+  @override
+  String get backupDataLocalOnly => '資料僅存本機';
+
+  @override
+  String get backupEnabled => '端對端加密備份已開啟';
+
+  @override
+  String get backupSetPasswordTitle => '設定加密口令';
+
+  @override
+  String get backupSetPasswordDesc => '該口令用於加密備份資料，與登入密碼無關。口令一旦遺忘，只能憑恢復碼找回。';
+
+  @override
+  String get backupPasswordLabel => '加密口令';
+
+  @override
+  String get backupPasswordConfirmLabel => '確認口令';
+
+  @override
+  String get backupPasswordTooShort => '口令至少需要 8 位';
+
+  @override
+  String get backupPasswordWeak => '口令需同時包含字母和數字';
+
+  @override
+  String get backupPasswordMismatch => '兩次輸入的口令不一致';
+
+  @override
+  String get backupGeneratingKeys => '正在產生金鑰…';
+
+  @override
+  String get backupSetupFailed => '加密口令設定失敗，請重試';
+
+  @override
+  String get backupRecoveryCodeTitle => '恢復碼';
+
+  @override
+  String get backupRecoveryCodeOnceWarning =>
+      '恢復碼僅展示這一次，不會再次顯示。忘記加密口令時，它是找回資料的唯一途徑。請抄寫到安全的地方妥善保存。';
+
+  @override
+  String get backupRecoveryCodeCopy => '複製';
+
+  @override
+  String get backupRecoveryCodeCopied => '恢復碼已複製';
+
+  @override
+  String get backupRecoveryCodeSaved => '我已妥善保存';
+
+  @override
+  String get backupDisableTitle => '關閉雲端備份？';
+
+  @override
+  String get backupDisableMessage => '關閉後新資料不再備份到雲端，本機資料不受影響；重新開啟時無需再次設定口令。';
+
+  @override
+  String get backupEncryptedInfo => '備份已開啟，連線後新資料將加密上傳雲端。即使伺服器資料外洩，任何人都無法查看內容。';
+
+  @override
+  String get backupLocalOnlyWarning =>
+      '備份未開啟，資料僅存本機：解除安裝應用或更換裝置會導致資料遺失，建議開啟雲端備份。';
 
   @override
   String get monthlyBudget => '月度預算';

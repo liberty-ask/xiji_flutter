@@ -791,6 +791,144 @@ abstract class AppLocalizations {
   /// **'Unrecognized backup file. Please select a JSON backup exported by the migration script'**
   String get backupImportBadFile;
 
+  /// No description provided for @cloudBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Backup'**
+  String get cloudBackup;
+
+  /// No description provided for @cloudBackupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encrypted; only you can see the data'**
+  String get cloudBackupSubtitle;
+
+  /// No description provided for @backupE2eDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, your records are backed up to the cloud with end-to-end encryption. The server stores only ciphertext — no one, not even the operator, can read your data.'**
+  String get backupE2eDescription;
+
+  /// No description provided for @backupDataLocalOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Data stays on this device only'**
+  String get backupDataLocalOnly;
+
+  /// No description provided for @backupEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encrypted backup is on'**
+  String get backupEnabled;
+
+  /// No description provided for @backupSetPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Encryption Password'**
+  String get backupSetPasswordTitle;
+
+  /// No description provided for @backupSetPasswordDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'This password protects your backed-up data and is unrelated to your login password. If you forget it, the recovery code is the only way to recover your data.'**
+  String get backupSetPasswordDesc;
+
+  /// No description provided for @backupPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption password'**
+  String get backupPasswordLabel;
+
+  /// No description provided for @backupPasswordConfirmLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get backupPasswordConfirmLabel;
+
+  /// No description provided for @backupPasswordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters'**
+  String get backupPasswordTooShort;
+
+  /// No description provided for @backupPasswordWeak.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must contain both letters and numbers'**
+  String get backupPasswordWeak;
+
+  /// No description provided for @backupPasswordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The two passwords do not match'**
+  String get backupPasswordMismatch;
+
+  /// No description provided for @backupGeneratingKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating keys…'**
+  String get backupGeneratingKeys;
+
+  /// No description provided for @backupSetupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to set the encryption password, please try again'**
+  String get backupSetupFailed;
+
+  /// No description provided for @backupRecoveryCodeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery Code'**
+  String get backupRecoveryCodeTitle;
+
+  /// No description provided for @backupRecoveryCodeOnceWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This recovery code is shown only once and will never be displayed again. If you forget the encryption password, it is the only way to recover your data. Write it down and keep it safe.'**
+  String get backupRecoveryCodeOnceWarning;
+
+  /// No description provided for @backupRecoveryCodeCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get backupRecoveryCodeCopy;
+
+  /// No description provided for @backupRecoveryCodeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery code copied'**
+  String get backupRecoveryCodeCopied;
+
+  /// No description provided for @backupRecoveryCodeSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve saved it'**
+  String get backupRecoveryCodeSaved;
+
+  /// No description provided for @backupDisableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off cloud backup?'**
+  String get backupDisableTitle;
+
+  /// No description provided for @backupDisableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'New data will no longer be backed up to the cloud. Data on this device is unaffected, and you won\'t need to set the password again to re-enable.'**
+  String get backupDisableMessage;
+
+  /// No description provided for @backupEncryptedInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup is on. New data will be encrypted and uploaded when online. Even if the server is compromised, no one can read your data.'**
+  String get backupEncryptedInfo;
+
+  /// No description provided for @backupLocalOnlyWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup is off. Data stays only on this device and will be lost if the app is uninstalled or the device is replaced. Enabling cloud backup is recommended.'**
+  String get backupLocalOnlyWarning;
+
   /// No description provided for @monthlyBudget.
   ///
   /// In en, this message translates to:

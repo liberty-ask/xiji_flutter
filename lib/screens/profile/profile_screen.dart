@@ -336,6 +336,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildSectionTitle(AppLocalizations.of(context)!.securityCenter),
                     const SizedBox(height: 12),
                     _buildMenuCard(
+                      icon: Icons.cloud_outlined,
+                      title: AppLocalizations.of(context)!.cloudBackup,
+                      subtitle: AppLocalizations.of(context)!.cloudBackupSubtitle,
+                      onTap: () => context.push('/backup'),
+                    ),
+                    _buildMenuCard(
                       icon: Icons.lock_reset,
                       title: AppLocalizations.of(context)!.changeLoginPassword,
                       onTap: () => context.push('/change-password'),

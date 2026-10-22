@@ -360,6 +360,84 @@ class AppLocalizationsEn extends AppLocalizations {
       'Unrecognized backup file. Please select a JSON backup exported by the migration script';
 
   @override
+  String get cloudBackup => 'Cloud Backup';
+
+  @override
+  String get cloudBackupSubtitle =>
+      'End-to-end encrypted; only you can see the data';
+
+  @override
+  String get backupE2eDescription =>
+      'When enabled, your records are backed up to the cloud with end-to-end encryption. The server stores only ciphertext — no one, not even the operator, can read your data.';
+
+  @override
+  String get backupDataLocalOnly => 'Data stays on this device only';
+
+  @override
+  String get backupEnabled => 'End-to-end encrypted backup is on';
+
+  @override
+  String get backupSetPasswordTitle => 'Set Encryption Password';
+
+  @override
+  String get backupSetPasswordDesc =>
+      'This password protects your backed-up data and is unrelated to your login password. If you forget it, the recovery code is the only way to recover your data.';
+
+  @override
+  String get backupPasswordLabel => 'Encryption password';
+
+  @override
+  String get backupPasswordConfirmLabel => 'Confirm password';
+
+  @override
+  String get backupPasswordTooShort => 'Password must be at least 8 characters';
+
+  @override
+  String get backupPasswordWeak =>
+      'Password must contain both letters and numbers';
+
+  @override
+  String get backupPasswordMismatch => 'The two passwords do not match';
+
+  @override
+  String get backupGeneratingKeys => 'Generating keys…';
+
+  @override
+  String get backupSetupFailed =>
+      'Failed to set the encryption password, please try again';
+
+  @override
+  String get backupRecoveryCodeTitle => 'Recovery Code';
+
+  @override
+  String get backupRecoveryCodeOnceWarning =>
+      'This recovery code is shown only once and will never be displayed again. If you forget the encryption password, it is the only way to recover your data. Write it down and keep it safe.';
+
+  @override
+  String get backupRecoveryCodeCopy => 'Copy';
+
+  @override
+  String get backupRecoveryCodeCopied => 'Recovery code copied';
+
+  @override
+  String get backupRecoveryCodeSaved => 'I\'ve saved it';
+
+  @override
+  String get backupDisableTitle => 'Turn off cloud backup?';
+
+  @override
+  String get backupDisableMessage =>
+      'New data will no longer be backed up to the cloud. Data on this device is unaffected, and you won\'t need to set the password again to re-enable.';
+
+  @override
+  String get backupEncryptedInfo =>
+      'Backup is on. New data will be encrypted and uploaded when online. Even if the server is compromised, no one can read your data.';
+
+  @override
+  String get backupLocalOnlyWarning =>
+      'Backup is off. Data stays only on this device and will be lost if the app is uninstalled or the device is replaced. Enabling cloud backup is recommended.';
+
+  @override
   String get monthlyBudget => 'Monthly Budget';
 
   @override

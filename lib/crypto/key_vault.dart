@@ -48,6 +48,20 @@ class Argon2Profile {
       );
 }
 
+/// setup 结果：恢复码明文仅在此返回一次（不落盘），由 UI 展示后即弃。
+@immutable
+class KeyVaultSetupResult {
+  const KeyVaultSetupResult({
+    required this.publicKey,
+    required this.recoveryCode,
+  });
+
+  final SimplePublicKey publicKey;
+
+  /// 规范化恢复码（24 位无分隔符），展示时用 [KeyVault.formatRecoveryCode]。
+  final String recoveryCode;
+}
+
 /// 解锁/解包失败（口令错误或包裹物损坏）。不区分两种情况，避免向攻击者
 /// 暴露「口令对了但数据坏了」这类信息。
 class KeyVaultUnlockException implements Exception {
@@ -74,6 +88,10 @@ class KeyVault {
   static const int _kVaultVersion = 1;
   static const int _kSaltLength = 16;
 
+  /// 恢复码字符表：排除易混淆的 I/O/0/1（120 bit 熵，足够恢复口令用）。
+  static const String _kRecoveryAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  static const int _kRecoveryCodeLength = 24;
+
   final VaultStore _store;
   final Argon2Profile _defaultProfile;
 
@@ -88,10 +106,11 @@ class KeyVault {
   /// 是否已完成口令设置（vault 文档存在）。
   Future<bool> isConfigured() async => await _store.read(storageKey) != null;
 
-  /// 首次设置口令：生成 X25519 密钥对，私钥用口令派生的 KEK 包裹落库。
-  /// 已配置时抛 StateError（重设口令走 changePassword 或恢复码流，防止
-  /// 误触覆盖既有密钥导致云端密文永久失解）。
-  Future<SimplePublicKey> setup(String password) async {
+  /// 首次设置口令：生成 X25519 密钥对，私钥分别用口令与恢复码各自派生的
+  /// KEK 包裹落库（两个包裹份同一把私钥；恢复码明文不落盘、仅本次返回，
+  /// 忘记口令时凭它重设口令）。已配置时抛 StateError（重设口令走
+  /// changePassword 或恢复码流，防止误触覆盖既有密钥导致云端密文永久失解）。
+  Future<KeyVaultSetupResult> setup(String password) async {
     if (await isConfigured()) {
       throw StateError('KeyVault already configured');
     }
@@ -106,16 +125,29 @@ class KeyVault {
     // AAD 绑定公钥：公钥与私钥包裹物互换拼装无法通过认证
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKey.bytes);
+
+    // 恢复码包裹份：恢复码作为等价口令各自 Argon2 派生 KEK
+    final recoveryCode = _generateRecoveryCode();
+    final recoverySalt = _randomBytes(_kSaltLength);
+    final recoveryKek = CryptoPrimitives.deriveKek(recoveryCode, recoverySalt,
+        memoryKib: _defaultProfile.memoryKib,
+        iterations: _defaultProfile.iterations);
+    final recoveryBox = await CryptoPrimitives.aeadEncrypt(
+        recoveryKek, privateKeyBytes,
+        aad: publicKey.bytes);
+
     final vault = <String, dynamic>{
       'version': _kVaultVersion,
       'publicKey': base64Encode(publicKey.bytes),
       'passwordWrap': _wrapJson(salt, _defaultProfile, box),
+      'recoveryWrap': _wrapJson(recoverySalt, _defaultProfile, recoveryBox),
     };
     await _store.write(storageKey, jsonEncode(vault));
 
     _unlockedKeyPair = keyPair;
     _unlockedPublicKey = publicKey;
-    return publicKey;
+    return KeyVaultSetupResult(
+        publicKey: publicKey, recoveryCode: recoveryCode);
   }
 
   /// 口令解锁：派生 KEK 解开私钥并缓存于内存。
@@ -207,5 +239,31 @@ class KeyVault {
     final rng = Random.secure();
     return Uint8List.fromList(
         List<int>.generate(length, (_) => rng.nextInt(256)));
+  }
+
+  /// 随机生成规范化恢复码（24 位无分隔符，派生 KEK 也用此形态）。
+  String _generateRecoveryCode() {
+    final rng = Random.secure();
+    return List.generate(
+      _kRecoveryCodeLength,
+      (_) => _kRecoveryAlphabet[rng.nextInt(_kRecoveryAlphabet.length)],
+    ).join();
+  }
+
+  /// 恢复码展示格式：每 4 位一组（XXXX-XXXX-XXXX-XXXX-XXXX-XXXX）。
+  static String formatRecoveryCode(String normalized) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < normalized.length; i++) {
+      if (i > 0 && i % 4 == 0) buffer.write('-');
+      buffer.write(normalized[i]);
+    }
+    return buffer.toString();
+  }
+
+  /// 用户输入归一：大小写不敏感、剔除分隔符与不在字符表中的字符
+  /// （含易混淆的 I/O/0/1，误输会在解包认证时失败而非静默变形）。
+  static String normalizeRecoveryCode(String input) {
+    final upper = input.toUpperCase();
+    return upper.replaceAll(RegExp('[^$_kRecoveryAlphabet]'), '');
   }
 }
