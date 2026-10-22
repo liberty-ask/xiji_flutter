@@ -184,14 +184,14 @@ class TransactionService {
   Future<Map<String, dynamic>> getHomeData([DateTime? now]) async {
     final current = now ?? DateTime.now();
     final familyId = await CurrentFamilyStore.get();
+    final user = await LocalUser.load();
     final overview = await _stats.monthlyOverview(familyId, current);
-    final budgetTotal =
-        await _stats.monthBudget(familyId, current.year, current.month);
+    final budgetTotal = await _stats.monthBudget(
+        familyId, user?.id ?? '', current.year, current.month);
 
     // 近期动态：最近 10 条，排除不计收支（type=2），口径对齐服务端
     final recent = await _transactions.recent(familyId, 10);
 
-    final user = await LocalUser.load();
     final userName = (user != null && user.nickname.isNotEmpty)
         ? user.nickname
         : '未知用户';

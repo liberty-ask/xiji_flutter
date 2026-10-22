@@ -66,6 +66,9 @@ class Budgets extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get familyId =>
       text().withDefault(const Constant(''))(); // 家庭归属（D11）
+  // 预算归属成员（D8 个人预算制）：各成员每月各自一条预算，
+  // 不同值是正常态而非冲突，LWW 仅仲裁同一成员多设备
+  TextColumn get userId => text()();
   IntColumn get year => integer()();
   IntColumn get month => integer()();
   IntColumn get amountCents => integer()();
@@ -80,7 +83,9 @@ class Budgets extends Table {
   Set<Column> get primaryKey => {id};
 
   @override
-  List<String> get customConstraints => ['UNIQUE(family_id, year, month)'];
+  List<String> get customConstraints => [
+        'UNIQUE(family_id, user_id, year, month)'
+      ];
 }
 
 /// 本地分类学习表：语音与账单导入双向喂养，同一匹配文本收敛为单条
@@ -106,10 +111,17 @@ class CategoryRules extends Table {
 
 @DriftDatabase(tables: [Transactions, Categories, Budgets, CategoryRules])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase(super.e);
+  /// v6 预算个人化迁移的存量行补种 ID 提供者（登录账号的 userId）。
+  /// 惰性调用（onUpgrade 执行时）；测试注入固定值，生产由 Db 提供
+  /// LocalUser。一次性语义，迁移完成即不再使用。
+  final Future<String> Function()? _migrationSeedUserIdProvider;
+
+  AppDatabase(super.e,
+      {Future<String> Function()? migrationSeedUserIdProvider})
+      : _migrationSeedUserIdProvider = migrationSeedUserIdProvider;
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   /// 系统内置分类种子：固定 UUID 常量，insertOrIgnore 幂等。
   /// sortOrder 按类型分别计数（支出 0-12、收入 0-6），保证同类型内顺序稳定
@@ -246,6 +258,38 @@ class AppDatabase extends _$AppDatabase {
           'SELECT id, family_id, year, month, '
           'CAST(ROUND(amount * 100) AS INTEGER), '
           'version, updated_at, deleted, sync_pending FROM budgets',
+        );
+        await customStatement('DROP TABLE budgets');
+        await customStatement('ALTER TABLE budgets_new RENAME TO budgets');
+      }
+      // v6：预算个人化（D8）——budgets 加 user_id 列（归属成员），
+      // 唯一约束 UNIQUE(family_id, year, month) → UNIQUE(family_id,
+      // user_id, year, month)；存量行补种本地登录用户 ID（唯一真实
+      // 用户场景下旧预算即本人设置）
+      if (from < 6) {
+        await customStatement(
+          'CREATE TABLE budgets_new('
+          'id TEXT NOT NULL, '
+          "family_id TEXT NOT NULL DEFAULT '', "
+          'user_id TEXT NOT NULL, '
+          'year INTEGER NOT NULL, '
+          'month INTEGER NOT NULL, '
+          'amount_cents INTEGER NOT NULL, '
+          'version INTEGER NOT NULL DEFAULT 1, '
+          'updated_at INTEGER NOT NULL, '
+          'deleted INTEGER NOT NULL DEFAULT 0, '
+          'sync_pending INTEGER NOT NULL DEFAULT 1, '
+          'PRIMARY KEY (id), '
+          'UNIQUE (family_id, user_id, year, month))',
+        );
+        final seedUserId = _migrationSeedUserIdProvider != null
+            ? await _migrationSeedUserIdProvider!()
+            : '';
+        await customStatement(
+          'INSERT INTO budgets_new '
+          "SELECT id, family_id, ?, year, month, amount_cents, "
+          'version, updated_at, deleted, sync_pending FROM budgets',
+          [seedUserId],
         );
         await customStatement('DROP TABLE budgets');
         await customStatement('ALTER TABLE budgets_new RENAME TO budgets');

@@ -1,18 +1,30 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/budget_repository.dart';
+import 'package:xiji_flutter/data/local/local_user.dart';
+import 'package:xiji_flutter/models/user.dart';
 import 'package:xiji_flutter/services/api/budget_service.dart';
 
 void main() {
   late AppDatabase db;
   late BudgetService service;
 
-  setUp(() {
-    // 门面内部经 CurrentFamilyStore 解析当前家庭（mock prefs 下为 ''）
-    SharedPreferences.setMockInitialValues({});
+  setUp(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    // 门面内部经 CurrentFamilyStore 解析当前家庭（mock prefs 下为 ''）；
+    // 预算归属经 LocalUser 解析当前用户，预置登录用户 A。
+    SharedPreferences.setMockInitialValues({
+      LocalUser.profileKey: jsonEncode(User(
+        id: 'user-A',
+        nickname: 'A',
+        phone: '1',
+      ).toJson()),
+    });
     db = AppDatabase(NativeDatabase.memory());
     service = BudgetService.withRepo(BudgetRepository(db));
   });
@@ -61,6 +73,7 @@ void main() {
     test('墓碑行被 setBudget 复活而非撞唯一约束', () async {
       // 手工造墓碑行（模拟同步/迁移产生的删除态）
       await db.into(db.budgets).insert(BudgetsCompanion.insert(
+            userId: 'user-A',
             year: 2026,
             month: 10,
             amountCents: 100000,
@@ -76,6 +89,35 @@ void main() {
 
       final data = await service.getBudget(year: 2026, month: 10);
       expect(data['budget'], 6000);
+    });
+  });
+
+  group('任务 7.1：预算个人化（D8 各成员每月各自一条）', () {
+    test('不同成员同月预算互不可见、互不覆盖', () async {
+      final repo = BudgetRepository(db);
+      const family = '';
+      const y = 2026, m = 10;
+
+      // A、B 各设各的：两行并存
+      await repo.upsertMonth(
+          familyId: family, userId: 'user-A', year: y, month: m, amountCents: 500000);
+      await repo.upsertMonth(
+          familyId: family, userId: 'user-B', year: y, month: m, amountCents: 200000);
+      final rows = await db.select(db.budgets).get();
+      expect(rows.length, 2);
+      expect(rows.map((r) => r.userId).toSet(), {'user-A', 'user-B'});
+
+      // 各读各的，值不串
+      expect((await repo.findByMonth(family, 'user-A', y, m))!.amountCents, 500000);
+      expect((await repo.findByMonth(family, 'user-B', y, m))!.amountCents, 200000);
+      expect(await repo.findByMonth(family, 'user-C', y, m), isNull);
+
+      // A 改预算不动 B 的
+      await repo.upsertMonth(
+          familyId: family, userId: 'user-A', year: y, month: m, amountCents: 800000);
+      expect((await repo.findByMonth(family, 'user-A', y, m))!.amountCents, 800000);
+      expect((await repo.findByMonth(family, 'user-B', y, m))!.amountCents, 200000);
+      expect((await db.select(db.budgets).get()).length, 2);
     });
   });
 }

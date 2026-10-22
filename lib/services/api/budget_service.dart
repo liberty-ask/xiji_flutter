@@ -3,14 +3,14 @@ import 'package:flutter/foundation.dart';
 import '../../data/local/budget_repository.dart';
 import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
+import '../../data/local/local_user.dart';
 import '../../utils/money.dart';
 
 /// 预算数据门面：本地优先架构下的唯一读写入口。
 ///
-/// 对外保持既有 Service 签名与返回结构（页面零改动），内部读写本地 budgets 表，
-/// 不发起任何网络请求。中间态：无 userId 与跨设备漫游（见 design.md D9），
-/// 由 7.0/7.5 收口。写入后首页预算进度（statistics_repository.monthBudget）
-/// 数据源分裂随之修复。
+/// 对外保持既有 Service 签名与返回结构（页面零改动），内部读写本地
+/// budgets 表，不发起任何网络请求。预算归属当前登录用户（D8 个人
+/// 预算制：各成员每月各自一条，家庭视图口径由 8.5 收口）。
 class BudgetService {
   // 单例实例
   static BudgetService? _instance;
@@ -30,29 +30,33 @@ class BudgetService {
   BudgetService.withRepo(this._budgets);
 
   /// 获取预算信息：返回 {'budget': amount}，未设置（或墓碑）返回 {'budget': null}。
-  /// 家庭维度：当前家庭的月预算
+  /// 个人口径：当前用户在当前家庭的月预算
   Future<Map<String, dynamic>> getBudget({
     int? year,
     int? month,
   }) async {
     final now = DateTime.now();
+    final user = await LocalUser.load();
     final row = await _budgets.findByMonth(
       await CurrentFamilyStore.get(),
+      user?.id ?? '',
       year ?? now.year,
       month ?? now.month,
     );
     return {'budget': row == null ? null : Money.centsToYuan(row.amountCents)};
   }
 
-  /// 设置预算：同月已存在（含墓碑）则覆盖更新，否则新插入。
-  /// 家庭维度：写入当前家庭
+  /// 设置预算：同成员同月已存在（含墓碑）则覆盖更新，否则新插入。
+  /// 个人口径：写入当前用户在当前家庭的预算
   Future<void> setBudget({
     required double total,
     required int year,
     required int month,
   }) async {
+    final user = await LocalUser.load();
     await _budgets.upsertMonth(
       familyId: await CurrentFamilyStore.get(),
+      userId: user?.id ?? '',
       year: year,
       month: month,
       amountCents: Money.yuanToCents(total),

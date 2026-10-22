@@ -75,11 +75,14 @@ class StatisticsRepository {
     return Money.centsToYuan(rows.single.readNullable<int>('total') ?? 0);
   }
 
-  /// 指定月份预算金额（无预算或墓碑返回 0）。家庭维度
-  Future<double> monthBudget(String familyId, int year, int month) async {
+  /// 指定月份预算金额（无预算或墓碑返回 0）。个人口径（D8）：
+  /// 当前用户在 [familyId] 家庭的预算
+  Future<double> monthBudget(
+      String familyId, String userId, int year, int month) async {
     final rows = await (_db.select(_db.budgets)
           ..where((b) =>
               b.familyId.equals(familyId) &
+              b.userId.equals(userId) &
               b.year.equals(year) &
               b.month.equals(month) &
               b.deleted.equals(false)))

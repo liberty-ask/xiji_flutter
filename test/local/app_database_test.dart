@@ -67,16 +67,23 @@ void main() {
       expect(tx.date, now);
     });
 
-    test('预算表 year+month 唯一约束', () async {
-      await db.into(db.budgets).insert(
-          BudgetsCompanion.insert(year: 2026, month: 10, amountCents: 300000));
+    test('预算表 family+user+year+month 唯一约束', () async {
+      await db.into(db.budgets).insert(BudgetsCompanion.insert(
+          userId: 'u1', year: 2026, month: 10, amountCents: 300000));
 
+      // 同家庭同用户同月：撞唯一约束
       await expectLater(
-        () => db.into(db.budgets).insert(
-            BudgetsCompanion.insert(year: 2026, month: 10, amountCents: 500000)),
+        () => db.into(db.budgets).insert(BudgetsCompanion.insert(
+            userId: 'u1', year: 2026, month: 10, amountCents: 500000)),
         throwsA(isA<Exception>()),
-        reason: '同年月重复设置预算应冲突',
+        reason: '同成员同月重复设置预算应冲突',
       );
+
+      // 同家庭不同成员同月：并存（D8 个人预算制）
+      await db.into(db.budgets).insert(BudgetsCompanion.insert(
+          userId: 'u2', year: 2026, month: 10, amountCents: 200000));
+      final rows = await db.select(db.budgets).get();
+      expect(rows.length, 2, reason: '不同成员同月各一条');
     });
 
     test('学习表 matchText 唯一约束', () async {

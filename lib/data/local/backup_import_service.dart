@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'app_database.dart' as local;
 import 'builtin_categories.dart';
 import 'current_family_store.dart';
+import 'local_user.dart';
 import 'fts_tokenizer.dart';
 import '../../utils/money.dart' show Money;
 
@@ -188,19 +189,22 @@ class BackupImportService {
       }
       result.transactionsInserted = txToInsert.length;
 
-      // ---- 预算：家庭级单条 -> 当前家庭当月 ----
+      // ---- 预算：家庭级单条 -> 当前用户在当前家庭当月（D8 归本人）----
       if (budgets.isNotEmpty) {
         final amount = (budgets.first['amount'] as num?)?.toDouble();
         if (amount != null) {
+          final user = await LocalUser.load();
           final existing = await (_db.select(_db.budgets)
                 ..where((b) =>
                     b.familyId.equals(familyId) &
+                    b.userId.equals(user?.id ?? '') &
                     b.year.equals(now.year) &
                     b.month.equals(now.month)))
               .getSingleOrNull();
           if (existing == null) {
             await _db.into(_db.budgets).insert(local.BudgetsCompanion.insert(
                   familyId: Value(familyId),
+                  userId: user?.id ?? '',
                   year: now.year,
                   month: now.month,
                   amountCents: Money.yuanToCents(amount),

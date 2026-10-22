@@ -1375,6 +1375,11 @@ class $BudgetsTable extends Budgets with TableInfo<$BudgetsTable, Budget> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant(''));
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _yearMeta = const VerificationMeta('year');
   @override
   late final GeneratedColumn<int> year = GeneratedColumn<int>(
@@ -1431,6 +1436,7 @@ class $BudgetsTable extends Budgets with TableInfo<$BudgetsTable, Budget> {
   List<GeneratedColumn> get $columns => [
         id,
         familyId,
+        userId,
         year,
         month,
         amountCents,
@@ -1455,6 +1461,12 @@ class $BudgetsTable extends Budgets with TableInfo<$BudgetsTable, Budget> {
     if (data.containsKey('family_id')) {
       context.handle(_familyIdMeta,
           familyId.isAcceptableOrUnknown(data['family_id']!, _familyIdMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
     }
     if (data.containsKey('year')) {
       context.handle(
@@ -1507,6 +1519,8 @@ class $BudgetsTable extends Budgets with TableInfo<$BudgetsTable, Budget> {
           .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
       familyId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}family_id'])!,
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}user_id'])!,
       year: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}year'])!,
       month: attachedDatabase.typeMapping
@@ -1533,6 +1547,7 @@ class $BudgetsTable extends Budgets with TableInfo<$BudgetsTable, Budget> {
 class Budget extends DataClass implements Insertable<Budget> {
   final String id;
   final String familyId;
+  final String userId;
   final int year;
   final int month;
   final int amountCents;
@@ -1543,6 +1558,7 @@ class Budget extends DataClass implements Insertable<Budget> {
   const Budget(
       {required this.id,
       required this.familyId,
+      required this.userId,
       required this.year,
       required this.month,
       required this.amountCents,
@@ -1555,6 +1571,7 @@ class Budget extends DataClass implements Insertable<Budget> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['family_id'] = Variable<String>(familyId);
+    map['user_id'] = Variable<String>(userId);
     map['year'] = Variable<int>(year);
     map['month'] = Variable<int>(month);
     map['amount_cents'] = Variable<int>(amountCents);
@@ -1569,6 +1586,7 @@ class Budget extends DataClass implements Insertable<Budget> {
     return BudgetsCompanion(
       id: Value(id),
       familyId: Value(familyId),
+      userId: Value(userId),
       year: Value(year),
       month: Value(month),
       amountCents: Value(amountCents),
@@ -1585,6 +1603,7 @@ class Budget extends DataClass implements Insertable<Budget> {
     return Budget(
       id: serializer.fromJson<String>(json['id']),
       familyId: serializer.fromJson<String>(json['familyId']),
+      userId: serializer.fromJson<String>(json['userId']),
       year: serializer.fromJson<int>(json['year']),
       month: serializer.fromJson<int>(json['month']),
       amountCents: serializer.fromJson<int>(json['amountCents']),
@@ -1600,6 +1619,7 @@ class Budget extends DataClass implements Insertable<Budget> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'familyId': serializer.toJson<String>(familyId),
+      'userId': serializer.toJson<String>(userId),
       'year': serializer.toJson<int>(year),
       'month': serializer.toJson<int>(month),
       'amountCents': serializer.toJson<int>(amountCents),
@@ -1613,6 +1633,7 @@ class Budget extends DataClass implements Insertable<Budget> {
   Budget copyWith(
           {String? id,
           String? familyId,
+          String? userId,
           int? year,
           int? month,
           int? amountCents,
@@ -1623,6 +1644,7 @@ class Budget extends DataClass implements Insertable<Budget> {
       Budget(
         id: id ?? this.id,
         familyId: familyId ?? this.familyId,
+        userId: userId ?? this.userId,
         year: year ?? this.year,
         month: month ?? this.month,
         amountCents: amountCents ?? this.amountCents,
@@ -1635,6 +1657,7 @@ class Budget extends DataClass implements Insertable<Budget> {
     return Budget(
       id: data.id.present ? data.id.value : this.id,
       familyId: data.familyId.present ? data.familyId.value : this.familyId,
+      userId: data.userId.present ? data.userId.value : this.userId,
       year: data.year.present ? data.year.value : this.year,
       month: data.month.present ? data.month.value : this.month,
       amountCents:
@@ -1652,6 +1675,7 @@ class Budget extends DataClass implements Insertable<Budget> {
     return (StringBuffer('Budget(')
           ..write('id: $id, ')
           ..write('familyId: $familyId, ')
+          ..write('userId: $userId, ')
           ..write('year: $year, ')
           ..write('month: $month, ')
           ..write('amountCents: $amountCents, ')
@@ -1664,14 +1688,15 @@ class Budget extends DataClass implements Insertable<Budget> {
   }
 
   @override
-  int get hashCode => Object.hash(id, familyId, year, month, amountCents,
-      version, updatedAt, deleted, syncPending);
+  int get hashCode => Object.hash(id, familyId, userId, year, month,
+      amountCents, version, updatedAt, deleted, syncPending);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Budget &&
           other.id == this.id &&
           other.familyId == this.familyId &&
+          other.userId == this.userId &&
           other.year == this.year &&
           other.month == this.month &&
           other.amountCents == this.amountCents &&
@@ -1684,6 +1709,7 @@ class Budget extends DataClass implements Insertable<Budget> {
 class BudgetsCompanion extends UpdateCompanion<Budget> {
   final Value<String> id;
   final Value<String> familyId;
+  final Value<String> userId;
   final Value<int> year;
   final Value<int> month;
   final Value<int> amountCents;
@@ -1695,6 +1721,7 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
   const BudgetsCompanion({
     this.id = const Value.absent(),
     this.familyId = const Value.absent(),
+    this.userId = const Value.absent(),
     this.year = const Value.absent(),
     this.month = const Value.absent(),
     this.amountCents = const Value.absent(),
@@ -1707,6 +1734,7 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
   BudgetsCompanion.insert({
     this.id = const Value.absent(),
     this.familyId = const Value.absent(),
+    required String userId,
     required int year,
     required int month,
     required int amountCents,
@@ -1715,12 +1743,14 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
     this.deleted = const Value.absent(),
     this.syncPending = const Value.absent(),
     this.rowid = const Value.absent(),
-  })  : year = Value(year),
+  })  : userId = Value(userId),
+        year = Value(year),
         month = Value(month),
         amountCents = Value(amountCents);
   static Insertable<Budget> custom({
     Expression<String>? id,
     Expression<String>? familyId,
+    Expression<String>? userId,
     Expression<int>? year,
     Expression<int>? month,
     Expression<int>? amountCents,
@@ -1733,6 +1763,7 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (familyId != null) 'family_id': familyId,
+      if (userId != null) 'user_id': userId,
       if (year != null) 'year': year,
       if (month != null) 'month': month,
       if (amountCents != null) 'amount_cents': amountCents,
@@ -1747,6 +1778,7 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
   BudgetsCompanion copyWith(
       {Value<String>? id,
       Value<String>? familyId,
+      Value<String>? userId,
       Value<int>? year,
       Value<int>? month,
       Value<int>? amountCents,
@@ -1758,6 +1790,7 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
     return BudgetsCompanion(
       id: id ?? this.id,
       familyId: familyId ?? this.familyId,
+      userId: userId ?? this.userId,
       year: year ?? this.year,
       month: month ?? this.month,
       amountCents: amountCents ?? this.amountCents,
@@ -1777,6 +1810,9 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
     }
     if (familyId.present) {
       map['family_id'] = Variable<String>(familyId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
     }
     if (year.present) {
       map['year'] = Variable<int>(year.value);
@@ -1810,6 +1846,7 @@ class BudgetsCompanion extends UpdateCompanion<Budget> {
     return (StringBuffer('BudgetsCompanion(')
           ..write('id: $id, ')
           ..write('familyId: $familyId, ')
+          ..write('userId: $userId, ')
           ..write('year: $year, ')
           ..write('month: $month, ')
           ..write('amountCents: $amountCents, ')
@@ -2922,6 +2959,7 @@ typedef $$CategoriesTableProcessedTableManager = ProcessedTableManager<
 typedef $$BudgetsTableCreateCompanionBuilder = BudgetsCompanion Function({
   Value<String> id,
   Value<String> familyId,
+  required String userId,
   required int year,
   required int month,
   required int amountCents,
@@ -2934,6 +2972,7 @@ typedef $$BudgetsTableCreateCompanionBuilder = BudgetsCompanion Function({
 typedef $$BudgetsTableUpdateCompanionBuilder = BudgetsCompanion Function({
   Value<String> id,
   Value<String> familyId,
+  Value<String> userId,
   Value<int> year,
   Value<int> month,
   Value<int> amountCents,
@@ -2958,6 +2997,9 @@ class $$BudgetsTableFilterComposer
 
   ColumnFilters<String> get familyId => $composableBuilder(
       column: $table.familyId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get year => $composableBuilder(
       column: $table.year, builder: (column) => ColumnFilters(column));
@@ -2996,6 +3038,9 @@ class $$BudgetsTableOrderingComposer
   ColumnOrderings<String> get familyId => $composableBuilder(
       column: $table.familyId, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get year => $composableBuilder(
       column: $table.year, builder: (column) => ColumnOrderings(column));
 
@@ -3032,6 +3077,9 @@ class $$BudgetsTableAnnotationComposer
 
   GeneratedColumn<String> get familyId =>
       $composableBuilder(column: $table.familyId, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
 
   GeneratedColumn<int> get year =>
       $composableBuilder(column: $table.year, builder: (column) => column);
@@ -3080,6 +3128,7 @@ class $$BudgetsTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<String> id = const Value.absent(),
             Value<String> familyId = const Value.absent(),
+            Value<String> userId = const Value.absent(),
             Value<int> year = const Value.absent(),
             Value<int> month = const Value.absent(),
             Value<int> amountCents = const Value.absent(),
@@ -3092,6 +3141,7 @@ class $$BudgetsTableTableManager extends RootTableManager<
               BudgetsCompanion(
             id: id,
             familyId: familyId,
+            userId: userId,
             year: year,
             month: month,
             amountCents: amountCents,
@@ -3104,6 +3154,7 @@ class $$BudgetsTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<String> id = const Value.absent(),
             Value<String> familyId = const Value.absent(),
+            required String userId,
             required int year,
             required int month,
             required int amountCents,
@@ -3116,6 +3167,7 @@ class $$BudgetsTableTableManager extends RootTableManager<
               BudgetsCompanion.insert(
             id: id,
             familyId: familyId,
+            userId: userId,
             year: year,
             month: month,
             amountCents: amountCents,

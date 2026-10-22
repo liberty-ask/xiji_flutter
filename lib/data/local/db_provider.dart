@@ -53,7 +53,9 @@ class Db {
 
   static AppDatabase get database {
     if (_db == null) {
-      _db = AppDatabase(_openConnection());
+      _db = AppDatabase(_openConnection(),
+          migrationSeedUserIdProvider: () async =>
+              _accountUserId ?? (await LocalUser.load())?.id ?? '');
       _transactions = TransactionRepository(_db!);
       _categories = CategoryRepository(_db!);
       _categoryRules = CategoryRuleRepository(_db!);

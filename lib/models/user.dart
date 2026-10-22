@@ -23,7 +23,7 @@ class User {
         phone: json['phone'] as String,
         email: json['email'] as String?,
         avatar: json['avatar'] as String?,
-        role: json['role'] as int,
+        role: json['role'] as int?,
         familyId: json['familyId'] as String?,
       );
 

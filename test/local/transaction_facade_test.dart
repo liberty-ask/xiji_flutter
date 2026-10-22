@@ -272,8 +272,9 @@ void main() {
           type: 1, category: '餐饮', amount: 50, date: '2026-10-15', note: '上月');
       await seedRaw(desc: '转账', type: 2, amount: 50, date: DateTime(2026, 11, 15));
 
-      // 当月预算
+      // 当月预算（当前登录用户 u1 的个人预算）
       await db.into(db.budgets).insert(BudgetsCompanion.insert(
+            userId: 'u1',
             year: 2026,
             month: 11,
             amountCents: 100000,
