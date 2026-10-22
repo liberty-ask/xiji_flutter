@@ -191,6 +191,8 @@
   "pressAndHoldToSpeakSlideToCancel": "按住按钮说话，滑动到取消按钮停止录音，滑动到编辑文字按钮进行编辑",
   "diagnosticInformation": "诊断信息",
   "textCannotBeEmpty": "文本不能为空，请输入内容",
+  "voiceRecordedAs": "已记：{type} ¥{amount} {category}",
+  "manualEntry": "手动记账",
   "xiaomiHuaweiCheckGoogleApp": "   • 小米/华为等：检查是否安装了\"Google\"应用",
   "orInstallGoogleVoiceService": "   • 或安装\"Google语音服务\"",
   "loadCategoryFailed": "加载分类失败: {error}",
@@ -399,5 +401,9 @@
   "uploadImageFailed": "上传图片失败: {error}",
   "taskUploadParse": "上传解析",
   "taskImport": "导入",
-  "taskInProgress": "{task}中"
+  "taskInProgress": "{task}中",
+  "billAssignHint": "点击分组上的分类，可为该商户全部交易批量指认",
+  "billDuplicateSkip": "已导入，将跳过",
+  "billParseFailed": "无法识别该账单文件",
+  "billGroupCount": "{count}笔"
 }

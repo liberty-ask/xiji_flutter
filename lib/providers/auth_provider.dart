@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/local/local_user.dart';
 import '../models/user.dart';
 import '../services/api/api_client.dart';
 import '../services/api/auth_service.dart';
@@ -38,19 +39,21 @@ class AuthProvider with ChangeNotifier {
   /// 强制登出：清双token与登录态（会话过期唯一路径，幂等）
   Future<void> _onSessionExpired() async {
     await _apiClient.removeToken();
+    await LocalUser.clear();
     _hasToken = false;
     _user = null;
     notifyListeners();
   }
 
-  /// 初始化：读取本地凭证，有token即置登录态，资料异步拉取
+  /// 初始化：读取本地凭证，有token即置登录态；先恢复本地缓存的资料，
+  /// 再异步拉取最新（资料拉取失败不影响登录态与离线功能）
   Future<void> initialize() async {
     if (_isInitialized) return;
     try {
       final token = await _apiClient.getToken();
       if (token != null && token.isNotEmpty) {
         _hasToken = true;
-        // 资料拉取失败不影响登录态（凭证生命周期由刷新链路管理）
+        _user = await LocalUser.load();
         unawaited(refreshUser().catchError((_) {}));
       }
     } catch (_) {
@@ -66,6 +69,9 @@ class AuthProvider with ChangeNotifier {
     try {
       final userData = await _familyService.getUserProfile();
       _user = User.fromJson(userData);
+      if (_user != null) {
+        await LocalUser.cache(_user!);
+      }
     } catch (e) {
       debugPrint('获取用户信息失败: $e');
       rethrow;
@@ -136,6 +142,7 @@ class AuthProvider with ChangeNotifier {
 
       if (registerResult['user'] != null) {
         _user = User.fromJson(registerResult['user']);
+        await LocalUser.cache(_user!);
       } else {
         _user = null;
       }

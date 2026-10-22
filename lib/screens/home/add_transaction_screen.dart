@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../data/local/db_provider.dart';
 import '../../providers/transaction_provider.dart';
 import '../../providers/category_provider.dart';
+import '../../services/api/transaction_service.dart';
 import '../../widgets/custom/category_selector.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../widgets/common/scaled_text.dart';
@@ -16,8 +18,36 @@ import '../../models/category.dart';
 import '../../models/transaction.dart' as transaction_model;
 import '../../l10n/app_localizations.dart';
 
+/// 记一笔表单的预填参数：
+/// - 语音记账解析无把握：带金额/类型/日期/备注预填，无 transactionId（新增）
+/// - 语音记账直接入库后的「修改」入口：带 transactionId 进入编辑模式
+class TransactionPrefill {
+  final String? transactionId; // 非空 = 编辑既有交易
+  final int? type; // 0-收入 1-支出
+  final double? amount;
+  final String? categoryName;
+  final DateTime? date;
+  final String? note;
+
+  /// 语音识别原文：提交后回写学习表（source=1 语音记账），
+  /// 下次说同一句话自动命中所选分类
+  final String? voiceMatchText;
+
+  const TransactionPrefill({
+    this.transactionId,
+    this.type,
+    this.amount,
+    this.categoryName,
+    this.date,
+    this.note,
+    this.voiceMatchText,
+  });
+}
+
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  const AddTransactionScreen({super.key, this.prefill});
+
+  final TransactionPrefill? prefill;
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -36,8 +66,41 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CategoryProvider>().loadCategories();
+    // 静态预填（金额/备注/类型/日期）不依赖分类列表，立即生效
+    final f = widget.prefill;
+    if (f != null) {
+      if (f.type != null) {
+        _transactionType = transaction_model.TransactionType.fromInt(f.type!);
+      }
+      if (f.amount != null) {
+        _amountController.text = f.amount! % 1 == 0
+            ? f.amount!.toStringAsFixed(0)
+            : f.amount!.toString();
+      }
+      if (f.note != null) {
+        _noteController.text = f.note!;
+      }
+      if (f.date != null) {
+        _selectedDate = f.date!;
+      }
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<CategoryProvider>().loadCategories();
+      // 分类预选依赖分类列表加载完成
+      if (!mounted || f?.categoryName == null) return;
+      final provider = context.read<CategoryProvider>();
+      final match = provider.expenseCategories
+          .cast<Category?>()
+          .followedBy(provider.incomeCategories.cast<Category?>())
+          .firstWhere(
+            (c) => c!.name == f!.categoryName,
+            orElse: () => null,
+          );
+      if (match != null) {
+        setState(() {
+          _selectedCategory = match;
+        });
+      }
     });
   }
 
@@ -77,24 +140,55 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       return;
     }
 
+    final editId = widget.prefill?.transactionId;
+    final l10n = AppLocalizations.of(context)!;
+
     try {
-      final transactionProvider = context.read<TransactionProvider>();
-      final result = await transactionProvider.addTransaction(
-        type: _transactionType.toInt(),
-        category: _selectedCategory!.name,
-        amount: double.parse(_amountController.text),
-        date: DateFormat('yyyy-MM-dd').format(_selectedDate),
-        note: _noteController.text.isNotEmpty ? _noteController.text : null,
-      );
+      if (editId != null) {
+        // 编辑模式（语音「修改」入口）：更新既有交易
+        await TransactionService().updateTransaction(
+          id: editId,
+          type: _transactionType.toInt(),
+          category: _selectedCategory!.name,
+          amount: double.parse(_amountController.text),
+          date: DateFormat('yyyy-MM-dd').format(_selectedDate),
+          note: _noteController.text.isNotEmpty ? _noteController.text : null,
+        );
+      } else {
+        final transactionProvider = context.read<TransactionProvider>();
+        await transactionProvider.addTransaction(
+          type: _transactionType.toInt(),
+          category: _selectedCategory!.name,
+          amount: double.parse(_amountController.text),
+          date: DateFormat('yyyy-MM-dd').format(_selectedDate),
+          note: _noteController.text.isNotEmpty ? _noteController.text : null,
+        );
+      }
+
+      // 语音入口带入的识别原文：把本次所选分类回写学习表，
+      // 下次说同一句话自动命中（source=1 语音记账）
+      final matchText = widget.prefill?.voiceMatchText;
+      if (matchText != null && matchText.isNotEmpty) {
+        await Db.categoryRules.assign(
+          matchText: matchText,
+          categoryId: _selectedCategory!.id,
+          source: 1,
+        );
+      }
 
       if (mounted) {
-        final resultMessage = result['message'] as String? ?? AppLocalizations.of(context)!.addSuccess;
-        CustomSnackBar.showSuccess(context, resultMessage);
+        CustomSnackBar.showSuccess(
+          context,
+          editId != null ? l10n.editSuccess : l10n.addSuccess,
+        );
         context.pop();
       }
     } catch (e) {
       if (mounted) {
-        final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.addFailed);
+        final errorMessage = ErrorHelper.extractErrorMessage(
+          e,
+          defaultMessage: editId != null ? l10n.editFailed : l10n.addFailed,
+        );
         CustomSnackBar.showError(context, errorMessage);
       }
     }
@@ -111,7 +205,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: ScaledText(AppLocalizations.of(context)!.addTransaction),
+        title: ScaledText(
+          widget.prefill?.transactionId != null
+              ? AppLocalizations.of(context)!.editTransaction
+              : AppLocalizations.of(context)!.addTransaction,
+        ),
       ),
       body: SafeArea(
         child: Form(
@@ -184,7 +282,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 // 分类选择
                 ScaledText(
                   AppLocalizations.of(context)!.selectCategory,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,

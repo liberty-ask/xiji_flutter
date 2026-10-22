@@ -43,7 +43,7 @@ class ApiClient {
       return 'http://127.0.0.1:8089/api';
     } else {
       // 正式环境
-      return 'https://finance.com/api';
+      return 'https://finance.myzhangben.com/api';
     }
   }
 

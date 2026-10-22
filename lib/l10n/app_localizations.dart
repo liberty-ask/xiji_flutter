@@ -1264,6 +1264,18 @@ abstract class AppLocalizations {
   /// **'Text cannot be empty, please enter content'**
   String get textCannotBeEmpty;
 
+  /// No description provided for @voiceRecordedAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded: {type} ¥{amount} {category}'**
+  String voiceRecordedAs(Object amount, Object category, Object type);
+
+  /// No description provided for @manualEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual entry'**
+  String get manualEntry;
+
   /// No description provided for @xiaomiHuaweiCheckGoogleApp.
   ///
   /// In en, this message translates to:
@@ -2337,6 +2349,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{task} in progress'**
   String taskInProgress(Object task);
+
+  /// No description provided for @billAssignHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the category on a group to assign it to all transactions of that counterparty'**
+  String get billAssignHint;
+
+  /// No description provided for @billDuplicateSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Already imported, will skip'**
+  String get billDuplicateSkip;
+
+  /// No description provided for @billParseFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot recognize this bill file'**
+  String get billParseFailed;
+
+  /// No description provided for @billGroupCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} transactions'**
+  String billGroupCount(Object count);
 }
 
 class _AppLocalizationsDelegate

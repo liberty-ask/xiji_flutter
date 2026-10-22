@@ -596,6 +596,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get textCannotBeEmpty => '文本不能为空，请输入内容';
 
   @override
+  String voiceRecordedAs(Object amount, Object category, Object type) {
+    return '已记：$type ¥$amount $category';
+  }
+
+  @override
+  String get manualEntry => '手动记账';
+
+  @override
   String get xiaomiHuaweiCheckGoogleApp => '   • 小米/华为等：检查是否安装了\"Google\"应用';
 
   @override
@@ -1154,6 +1162,21 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String taskInProgress(Object task) {
     return '$task中';
+  }
+
+  @override
+  String get billAssignHint =>
+      'Tap the category on a group to assign it to all transactions of that counterparty';
+
+  @override
+  String get billDuplicateSkip => 'Already imported, will skip';
+
+  @override
+  String get billParseFailed => 'Cannot recognize this bill file';
+
+  @override
+  String billGroupCount(Object count) {
+    return '$count transactions';
   }
 }
 
@@ -1738,6 +1761,14 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get textCannotBeEmpty => '文本不能为空，请输入内容';
 
   @override
+  String voiceRecordedAs(Object amount, Object category, Object type) {
+    return '已记：$type ¥$amount $category';
+  }
+
+  @override
+  String get manualEntry => '手动记账';
+
+  @override
   String get xiaomiHuaweiCheckGoogleApp => '   • 小米/华为等：检查是否安装了\"Google\"应用';
 
   @override
@@ -2296,6 +2327,20 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String taskInProgress(Object task) {
     return '$task中';
+  }
+
+  @override
+  String get billAssignHint => '点击分组上的分类，可为该商户全部交易批量指认';
+
+  @override
+  String get billDuplicateSkip => '已导入，将跳过';
+
+  @override
+  String get billParseFailed => '无法识别该账单文件';
+
+  @override
+  String billGroupCount(Object count) {
+    return '$count笔';
   }
 }
 
@@ -2883,6 +2928,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get textCannotBeEmpty => '文本不能為空，請輸入內容';
 
   @override
+  String voiceRecordedAs(Object amount, Object category, Object type) {
+    return '已記：$type ¥$amount $category';
+  }
+
+  @override
+  String get manualEntry => '手動記賬';
+
+  @override
   String get xiaomiHuaweiCheckGoogleApp => '   • 小米/華為等：檢查是否安裝了\"Google\"應用';
 
   @override
@@ -3441,5 +3494,19 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String taskInProgress(Object task) {
     return '$task中';
+  }
+
+  @override
+  String get billAssignHint => '點擊分組上的分類，可為該商家全部交易批量指認';
+
+  @override
+  String get billDuplicateSkip => '已匯入，將跳過';
+
+  @override
+  String get billParseFailed => '無法識別該帳單檔案';
+
+  @override
+  String billGroupCount(Object count) {
+    return '$count筆';
   }
 }
