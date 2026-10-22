@@ -199,6 +199,8 @@
   "pressAndHoldToSpeakSlideToCancel": "Press and hold the button to speak, slide to cancel button to stop recording, slide to edit text button to edit",
   "diagnosticInformation": "Diagnostic Information",
   "textCannotBeEmpty": "Text cannot be empty, please enter content",
+  "voiceRecordedAs": "Recorded: {type} ¥{amount} {category}",
+  "manualEntry": "Manual entry",
   "xiaomiHuaweiCheckGoogleApp": "   • Xiaomi/Huawei, etc.: Check if Google app is installed",
   "orInstallGoogleVoiceService": "   • Or install Google Voice Service",
   "addSuccess": "Add successful",
@@ -411,5 +413,9 @@
   "uploadImageFailed": "Failed to upload image: {error}",
   "taskUploadParse": "Upload & Parse",
   "taskImport": "Import",
-  "taskInProgress": "{task} in progress"
+  "taskInProgress": "{task} in progress",
+  "billAssignHint": "Tap the category on a group to assign it to all transactions of that counterparty",
+  "billDuplicateSkip": "Already imported, will skip",
+  "billParseFailed": "Cannot recognize this bill file",
+  "billGroupCount": "{count} transactions"
 }

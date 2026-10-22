@@ -142,7 +142,10 @@ class AppRouter {
               ChangeNotifierProvider(create: (_) => TransactionProvider()),
               ChangeNotifierProvider(create: (_) => CategoryProvider()),
             ],
-            child: const AddTransactionScreen(),
+            // 语音记账经 extra 传入预填参数（金额/类型/识别文本，或编辑模式的交易 ID）
+            child: AddTransactionScreen(
+              prefill: state.extra as TransactionPrefill?,
+            ),
           ),
         ),
         GoRoute(

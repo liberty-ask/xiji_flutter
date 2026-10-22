@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/date_picker_helper.dart';
+import '../../utils/icon_constants.dart';
 import '../../models/transaction.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -359,17 +360,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
-  // Material Icons名称转换
+  // Material Icons名称转换（统一走 IconConstants 映射器，禁止局部映射表）
   IconData? _getIconData(String iconName) {
-    final iconMap = <String, IconData>{
-      'restaurant': Icons.restaurant,
-      'shopping_cart': Icons.shopping_cart,
-      'directions_car': Icons.directions_car,
-      'movie': Icons.movie,
-      'payments': Icons.payments,
-      'trending_up': Icons.trending_up,
-    };
-    return iconMap[iconName] ?? Icons.category;
+    return IconConstants.getIconFromString(iconName);
   }
 
   // 颜色字符串转Color

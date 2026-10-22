@@ -607,6 +607,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get textCannotBeEmpty => 'Text cannot be empty, please enter content';
 
   @override
+  String voiceRecordedAs(Object amount, Object category, Object type) {
+    return 'Recorded: $type ¥$amount $category';
+  }
+
+  @override
+  String get manualEntry => 'Manual entry';
+
+  @override
   String get xiaomiHuaweiCheckGoogleApp =>
       '   • Xiaomi/Huawei, etc.: Check if Google app is installed';
 
@@ -1185,5 +1193,20 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String taskInProgress(Object task) {
     return '$task in progress';
+  }
+
+  @override
+  String get billAssignHint =>
+      'Tap the category on a group to assign it to all transactions of that counterparty';
+
+  @override
+  String get billDuplicateSkip => 'Already imported, will skip';
+
+  @override
+  String get billParseFailed => 'Cannot recognize this bill file';
+
+  @override
+  String billGroupCount(Object count) {
+    return '$count transactions';
   }
 }

@@ -38,11 +38,21 @@ dependencies:
   qr_flutter: ^4.1.0
   mobile_scanner: ^5.2.3
 
+  # 本地数据库（本地优先架构，数据真身）
+  drift: '>=2.31.0 <2.32.0'
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.6
+
+  # 账单 CSV 编码支持（支付宝账单为 GBK 编码）
+  fast_gbk: ^1.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
   flutter_launcher_icons: ^0.13.1
+  drift_dev: '>=2.31.0 <2.32.0'
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true
@@ -51,6 +61,7 @@ flutter:
   # 资源文件
   assets:
     - assets/images/
+    - assets/category_rules.json
 
 # 应用图标配置
 flutter_launcher_icons:

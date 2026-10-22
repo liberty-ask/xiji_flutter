@@ -141,6 +141,7 @@ class IconConstants {
     IconDataItem(name: 'gift', icon: Icons.card_giftcard),
     IconDataItem(name: 'travel_explore', icon: Icons.travel_explore),
     IconDataItem(name: 'category', icon: Icons.category),
+    IconDataItem(name: 'help_outline', icon: Icons.help_outline),
     IconDataItem(name: 'more_horiz', icon: Icons.more_horiz),
     IconDataItem(name: 'beach_access', icon: Icons.beach_access),
     IconDataItem(name: 'outdoor_grill', icon: Icons.outdoor_grill),

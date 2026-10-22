@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import '../../services/api/voice_transaction_service.dart';
+import '../../data/local/category_rule_loader.dart';
+import '../../data/local/db_provider.dart';
+import '../../data/local/voice_transaction_parser.dart';
+import '../../services/api/transaction_service.dart';
+import '../home/add_transaction_screen.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
@@ -38,7 +43,6 @@ class VoiceTransactionScreen extends StatefulWidget {
 class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     with SingleTickerProviderStateMixin {
   final stt.SpeechToText _speech = stt.SpeechToText();
-  final VoiceTransactionService _voiceTransactionService = VoiceTransactionService();
 
   bool _isListening = false;
   bool _isSpeechAvailable = false;
@@ -251,6 +255,8 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     }
 
     try {
+      // 新一轮识别开始，清空上一句识别结果
+      _recognizedText = '';
       await _speech.listen(
         onResult: (result) {
           if (kDebugMode) {
@@ -361,7 +367,9 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     }
   }
 
-  /// 提交语音文本到后台
+  /// 提交语音文本：本地解析（全程离线），按置信度分流：
+  /// - 有把握（金额/类型/分类齐备）：直接入库，Snackbar 带修改入口
+  /// - 无把握（无金额/多金额冲突/类型未明示/分类未命中）：落预填表单由用户确认
   Future<void> _submitVoiceText(String text) async {
     if (text.isEmpty) {
       CustomSnackBar.showError(context, AppLocalizations.of(context)!.recognitionTextEmpty);
@@ -373,28 +381,19 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     });
 
     try {
-      final result = await _voiceTransactionService.addTransactionByVoice(text);
+      final engine = await CategoryRuleLoader.loadDefaultEngine();
+      final parser = VoiceTransactionParser(engine, Db.categories);
+      final result = await parser.parse(text);
 
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+      });
 
-        // 检查结果
-        if (result['success'] == true || result['code'] == 200) {
-          CustomSnackBar.showSuccess(
-            context,
-            result['message'] as String? ?? AppLocalizations.of(context)!.transactionSuccess,
-          );
-        } else {
-          // 记账失败
-          final errorMessage = result['message'] as String? ??
-              ErrorHelper.extractErrorMessage(
-                Exception(AppLocalizations.of(context)!.transactionFailed),
-                defaultMessage: AppLocalizations.of(context)!.transactionFailed,
-              );
-          CustomSnackBar.showError(context, errorMessage);
-        }
+      if (result.isConfident) {
+        await _saveDirectly(text, result);
+      } else {
+        _openPrefilledForm(text, result);
       }
     } catch (e) {
       if (mounted) {
@@ -410,6 +409,56 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
         );
       }
     }
+  }
+
+  /// 有把握：一句话一步记账，直接入库 + 结果 Snackbar 带修改入口
+  Future<void> _saveDirectly(String text, VoiceParseResult result) async {
+    final date = result.date ?? DateTime.now();
+    final saved = await TransactionService().addTransaction(
+      type: result.type!,
+      category: result.categoryName!,
+      amount: result.amount!,
+      date: DateFormat('yyyy-MM-dd').format(date),
+      note: text,
+    );
+
+    if (!mounted) return;
+    // 清空识别结果，防止快速松手时重复提交上一句
+    _recognizedText = '';
+
+    final l10n = AppLocalizations.of(context)!;
+    final typeLabel = result.type == 0 ? l10n.income : l10n.expense;
+    final amountText = result.amount! % 1 == 0
+        ? result.amount!.toStringAsFixed(0)
+        : result.amount!.toString();
+    CustomSnackBar.showSuccessWithAction(
+      context,
+      l10n.voiceRecordedAs(typeLabel, amountText, result.categoryName!),
+      l10n.edit,
+      () {
+        // 修改入口：打开编辑模式表单（预填刚入库的交易）
+        context.push('/add-transaction', extra: TransactionPrefill(
+          transactionId: saved['id'] as String,
+          type: result.type,
+          amount: result.amount,
+          categoryName: result.categoryName,
+          date: date,
+          note: text,
+          voiceMatchText: text,
+        ));
+      },
+    );
+  }
+
+  /// 无把握：打开预填表单，识别文本带出、金额/类型预填，用户确认后入库
+  void _openPrefilledForm(String text, VoiceParseResult result) {
+    context.push('/add-transaction', extra: TransactionPrefill(
+      type: result.type,
+      amount: result.amount,
+      date: result.date,
+      note: text,
+      voiceMatchText: text,
+    ));
   }
 
   /// 构建语音输入按钮
@@ -743,7 +792,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
                           padding: EdgeInsets.symmetric(horizontal: ResponsiveHelper.horizontalPadding(context)),
                           child: ScaledText(
                             AppLocalizations.of(context)!.editRecognizedText,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
@@ -908,7 +957,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
                           ),
                           child: ScaledText(
                             AppLocalizations.of(context)!.cancel,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -940,7 +989,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
                           ),
                           child: ScaledText(
                             AppLocalizations.of(context)!.editRecognizedText,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -970,7 +1019,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
         backgroundColor: ThemeHelper.surface(context),
         title: ScaledText(
           AppLocalizations.of(context)!.voiceRecognitionServiceUnavailable,
-          style: TextStyle(color: Colors.white),
+          style: const TextStyle(color: Colors.white),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -985,7 +1034,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
                 '${AppLocalizations.of(context)!.orInstallGoogleVoiceService}\n'
                 '3. ${AppLocalizations.of(context)!.tryRestartingApp}\n'
                 '4. ${AppLocalizations.of(context)!.checkSystemSettings}',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
               if (kDebugMode && diagnostics != null) ...[
                 const SizedBox(height: 16),
@@ -1000,7 +1049,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
                     children: [
                       ScaledText(
                         AppLocalizations.of(context)!.diagnosticInformation,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -1025,11 +1074,22 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
           ),
         ),
         actions: [
+          // 手动记账引导：语音不可用时无需离开记账流程
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.push('/add-transaction');
+            },
+            child: ScaledText(
+              AppLocalizations.of(context)!.manualEntry,
+              style: TextStyle(color: ThemeHelper.primary(context)),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: ScaledText(
               AppLocalizations.of(context)!.gotIt,
-              style: TextStyle(color: ThemeHelper.primary(context)),
+              style: const TextStyle(color: Colors.white70),
             ),
           ),
         ],

@@ -192,6 +192,8 @@
   "pressAndHoldToSpeakSlideToCancel": "按住按鈕說話，滑動到取消按鈕停止錄音，滑動到編輯文字按鈕進行編輯",
   "diagnosticInformation": "診斷資訊",
   "textCannotBeEmpty": "文本不能為空，請輸入內容",
+  "voiceRecordedAs": "已記：{type} ¥{amount} {category}",
+  "manualEntry": "手動記賬",
   "xiaomiHuaweiCheckGoogleApp": "   • 小米/華為等：檢查是否安裝了\"Google\"應用",
   "orInstallGoogleVoiceService": "   • 或安裝\"Google語音服務\"",
   "loadCategoryFailed": "載入分類失敗: {error}",
@@ -400,5 +402,9 @@
   "uploadImageFailed": "上傳圖片失敗: {error}",
   "taskUploadParse": "上傳解析",
   "taskImport": "導入",
-  "taskInProgress": "{task}中"
+  "taskInProgress": "{task}中",
+  "billAssignHint": "點擊分組上的分類，可為該商家全部交易批量指認",
+  "billDuplicateSkip": "已匯入，將跳過",
+  "billParseFailed": "無法識別該帳單檔案",
+  "billGroupCount": "{count}筆"
 }
