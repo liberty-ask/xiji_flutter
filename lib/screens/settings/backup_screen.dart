@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../crypto/key_vault.dart';
 import '../../crypto/vault_store.dart';
 import '../../data/local/backup_flag_store.dart';
+import '../../services/local/biometric_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
@@ -26,9 +27,12 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   final KeyVault _vault = KeyVault(SecureVaultStore.instance);
+  final BiometricService _biometric = BiometricService();
 
   bool _enabled = false;
   bool _configured = false;
+  bool _bioEnabled = false;
+  bool _vaultUnlocked = false;
 
   @override
   void initState() {
@@ -39,10 +43,13 @@ class _BackupScreenState extends State<BackupScreen> {
   Future<void> _loadState() async {
     final enabled = await BackupFlagStore.isEnabled();
     final configured = await _vault.isConfigured();
+    final bioEnabled = await _vault.isBiometricEnabled();
     if (mounted) {
       setState(() {
         _enabled = enabled;
         _configured = configured;
+        _bioEnabled = bioEnabled;
+        _vaultUnlocked = _vault.isUnlocked;
       });
     }
   }
@@ -472,6 +479,148 @@ class _BackupScreenState extends State<BackupScreen> {
     return null;
   }
 
+  /// 生物识别保护开关（6.6）：开启需先解锁（口令仅此处开启时输入），
+  /// 关闭直接移除生物识别包裹份。
+  Future<void> _onBiometricChanged(bool value) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    if (value) {
+      if (!await _biometric.isAvailable()) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.biometricUnavailable)),
+        );
+        return; // 不可用，开关回弹
+      }
+      if (!_vault.isUnlocked) {
+        final password = await _showPasswordUnlockDialog();
+        if (password == null || !mounted) return;
+        try {
+          await _vault.unlock(password);
+        } on KeyVaultUnlockException {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.backupPasswordWrong)),
+            );
+          }
+          return;
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.backupVaultUnlockFailed)),
+            );
+          }
+          return;
+        }
+      }
+      try {
+        await _vault.enableBiometric();
+        if (mounted) {
+          setState(() {
+            _bioEnabled = true;
+            _vaultUnlocked = true;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.biometricEnableFailed)),
+          );
+        }
+      }
+    } else {
+      await _vault.disableBiometric();
+      if (mounted) setState(() => _bioEnabled = false);
+    }
+  }
+
+  /// 日常解锁（6.6 验证场景）：系统生物识别提示通过后解包缓存私钥，
+  /// 全程不出现口令输入。
+  Future<void> _unlockWithBiometric() async {
+    final l10n = AppLocalizations.of(context)!;
+    final ok = await _biometric.authenticate(l10n);
+    if (!ok || !mounted) return;
+    try {
+      await _vault.unlockWithBiometric();
+      if (mounted) {
+        setState(() => _vaultUnlocked = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupVaultUnlocked)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupVaultUnlockFailed)),
+        );
+      }
+    }
+  }
+
+  /// 日常解锁的口令兜底（生物识别多次失败/本机临时不可用时）。
+  Future<void> _unlockWithPassword() async {
+    final l10n = AppLocalizations.of(context)!;
+    final password = await _showPasswordUnlockDialog();
+    if (password == null || !mounted) return;
+    try {
+      await _vault.unlock(password);
+      if (mounted) {
+        setState(() => _vaultUnlocked = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupVaultUnlocked)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupVaultUnlockFailed)),
+        );
+      }
+    }
+  }
+
+  /// 单口令输入对话框（解锁用，非设置流）。
+  Future<String?> _showPasswordUnlockDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    var obscure = true;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(l10n.backupVaultUnlockTitle),
+          content: TextFormField(
+            controller: controller,
+            obscureText: obscure,
+            decoration: InputDecoration(
+              labelText: l10n.backupPasswordLabel,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  obscure ? Icons.visibility : Icons.visibility_off,
+                ),
+                onPressed: () =>
+                    setDialogState(() => obscure = !obscure),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text),
+              child: Text(l10n.confirm),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -535,6 +684,82 @@ class _BackupScreenState extends State<BackupScreen> {
                 ],
               ),
             ),
+            // 重启后锁定横幅：日常解锁入口（6.6 验证场景）
+            if (_configured && !_vaultUnlocked) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: ThemeHelper.surface(context),
+                  border: Border.all(
+                    color: ThemeHelper.expenseColor(context).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      color: ThemeHelper.expenseColor(context),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ScaledText(
+                            l10n.backupVaultLocked,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          ScaledText(
+                            _bioEnabled
+                                ? l10n.backupVaultLockedBio
+                                : l10n.backupVaultLockedDesc,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white.withValues(alpha: 0.5),
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _bioEnabled
+                              ? _unlockWithBiometric
+                              : _unlockWithPassword,
+                          icon: Icon(
+                              _bioEnabled ? Icons.fingerprint : Icons.key),
+                          label: Text(l10n.backupVaultUnlock),
+                        ),
+                        if (_bioEnabled)
+                          TextButton(
+                            onPressed: _unlockWithPassword,
+                            child: ScaledText(
+                              l10n.backupUnlockWithPassword,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             // 备份开关
             Container(
@@ -618,6 +843,51 @@ class _BackupScreenState extends State<BackupScreen> {
                     ),
                   ),
                   onTap: _resetPassword,
+                ),
+              ),
+            if (_configured) const SizedBox(height: 16),
+            // 生物识别保护开关（6.6）
+            if (_configured)
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: ThemeHelper.surface(context),
+                  border: Border.all(color: borderColor),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color:
+                          ThemeHelper.primary(context).withValues(alpha: 0.2),
+                    ),
+                    child: Icon(
+                      Icons.fingerprint,
+                      color: ThemeHelper.primary(context),
+                      size: 20,
+                    ),
+                  ),
+                  title: ScaledText(
+                    l10n.biometricUnlockTitle,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  subtitle: ScaledText(
+                    l10n.biometricUnlockSubtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  trailing: Switch(
+                    value: _bioEnabled,
+                    onChanged: _onBiometricChanged,
+                  ),
                 ),
               ),
             if (_configured) const SizedBox(height: 16),

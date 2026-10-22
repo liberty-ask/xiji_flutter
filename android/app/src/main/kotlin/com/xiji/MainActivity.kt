@@ -3,11 +3,12 @@ package com.xiji
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// 必须用 FlutterFragmentActivity：local_auth 的指纹/面容提示依赖 FragmentActivity
+class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.xiji/widget"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

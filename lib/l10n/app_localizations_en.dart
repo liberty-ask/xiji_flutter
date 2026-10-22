@@ -480,6 +480,55 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupResetFailed => 'Reset failed, please try again';
 
   @override
+  String get backupPasswordWrong =>
+      'Password does not match, please check and retry';
+
+  @override
+  String get backupVaultUnlockTitle => 'Unlock Backup Key';
+
+  @override
+  String get backupVaultLocked => 'Backup key is locked';
+
+  @override
+  String get backupVaultLockedBio =>
+      'After restarting the app, verify fingerprint/face once — no password needed';
+
+  @override
+  String get backupVaultLockedDesc =>
+      'After restarting the app, unlock once with the encryption password';
+
+  @override
+  String get backupVaultUnlock => 'Unlock';
+
+  @override
+  String get backupVaultUnlocked => 'Unlocked, key ready';
+
+  @override
+  String get backupVaultUnlockFailed => 'Unlock failed, please try again';
+
+  @override
+  String get backupUnlockWithPassword => 'Use password';
+
+  @override
+  String get biometricUnlockTitle => 'Biometric Protection';
+
+  @override
+  String get biometricUnlockSubtitle =>
+      'Unlock with fingerprint/face, no password needed';
+
+  @override
+  String get biometricUnlockReason =>
+      'Verify fingerprint/face to unlock the backup key';
+
+  @override
+  String get biometricUnavailable =>
+      'No fingerprint or face enrolled on this device';
+
+  @override
+  String get biometricEnableFailed =>
+      'Failed to enable biometric protection, please try again';
+
+  @override
   String get monthlyBudget => 'Monthly Budget';
 
   @override

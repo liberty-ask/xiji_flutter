@@ -246,5 +246,62 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
+
+    test('生物识别包裹：开启需先解锁，解锁后凭包裹份解出同一私钥', () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('my-password-123');
+      vault.lock();
+      expect(vault.isUnlocked, isFalse);
+      // 锁定态不可开启（需先凭口令解锁）
+      expect(() => vault.enableBiometric(), throwsA(isA<StateError>()));
+      expect(await vault.isBiometricEnabled(), isFalse);
+
+      await vault.unlock('my-password-123');
+      await vault.enableBiometric();
+      expect(await vault.isBiometricEnabled(), isTrue);
+
+      // 重启模拟：lock 后无需口令，凭生物识别包裹份解锁
+      vault.lock();
+      final keyPair = await vault.unlockWithBiometric();
+      final pub = await keyPair.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+      expect(vault.isUnlocked, isTrue);
+
+      // KEK 独立存储：vault 文档与 KEK 都不含私钥明文
+      final raw = (await store.read(KeyVault.storageKey))!;
+      expect(raw.contains('my-password-123'), isFalse);
+    });
+
+    test('生物识别包裹：改口令/重置口令后仍有效，关闭后彻底移除', () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('old-password');
+      await vault.enableBiometric();
+
+      // 改口令不动 biometricWrap（私钥未换）
+      await vault.changePassword('old-password', 'new-password-1');
+      expect(await vault.isBiometricEnabled(), isTrue);
+      vault.lock();
+      final keyPair = await vault.unlockWithBiometric();
+      final pub = await keyPair.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+
+      // 恢复码重置口令后同样有效
+      await vault.resetPasswordWithRecoveryCode(
+          setupResult.recoveryCode, 'third-pass-1');
+      vault.lock();
+      final keyPair2 = await vault.unlockWithBiometric();
+      final pub2 = await keyPair2.extractPublicKey();
+      expect(pub2.bytes, equals(setupResult.publicKey.bytes));
+
+      // 关闭：包裹份与 KEK 一并移除，解锁仅剩口令路径
+      await vault.disableBiometric();
+      expect(await vault.isBiometricEnabled(), isFalse);
+      vault.lock();
+      expect(() => vault.unlockWithBiometric(), throwsA(isA<StateError>()));
+      await vault.unlock('third-pass-1');
+      expect(vault.isUnlocked, isTrue);
+    });
   });
 }

@@ -32,7 +32,10 @@ dependencies:
 
   # 网络图片磁盘缓存（头像离线显示）
   cached_network_image: ^3.4.1
-  
+
+  # 生物识别日常解锁（6.6：指纹/面容解锁缓存密钥，口令仅开启/重置时输入）
+  local_auth: ^2.3.0
+
   # 语音识别
   speech_to_text: ^7.3.0
   permission_handler: ^11.0.0

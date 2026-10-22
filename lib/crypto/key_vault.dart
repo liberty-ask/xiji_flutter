@@ -84,9 +84,14 @@ class KeyVault {
   /// secure storage 中的 vault 文档 key。
   static const String storageKey = 'xiji_key_vault';
 
+  /// 生物识别 KEK 在 secure storage 中的独立 key（与 vault 文档分开存，
+  /// 日常解锁先过生物识别提示，通过后才读取本 key）。
+  static const String _biometricKekStorageKey = 'xiji_biometric_kek';
+
   /// vault 文档结构版本（向后兼容扩展预留）。
   static const int _kVaultVersion = 1;
   static const int _kSaltLength = 16;
+  static const int _kKekLength = 32;
 
   /// 恢复码字符表：排除易混淆的 I/O/0/1（120 bit 熵，足够恢复口令用）。
   static const String _kRecoveryAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -218,6 +223,83 @@ class KeyVault {
     _unlockedPublicKey = publicKey;
   }
 
+  /// 是否已开启生物识别解锁（biometricWrap 与 KEK 双存才视为开启）。
+  Future<bool> isBiometricEnabled() async {
+    final raw = await _store.read(storageKey);
+    if (raw == null) return false;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic> ||
+        decoded['biometricWrap'] == null) {
+      return false;
+    }
+    return await _store.read(_biometricKekStorageKey) != null;
+  }
+
+  /// 开启生物识别解锁（6.6）：生成随机 KEK 包裹当前已解锁的私钥，
+  /// KEK 存 secure storage 独立 key。日常解锁由 UI 层先过生物识别
+  /// 提示，再调 [unlockWithBiometric] 取 KEK 解包。未解锁态不可开启
+  /// （需先凭口令/恢复码解锁，口令仅开启/重置时输入）。
+  /// 改口令/重置口令不动 biometricWrap（私钥未变）。
+  Future<void> enableBiometric() async {
+    final keyPair = _unlockedKeyPair;
+    final publicKey = _unlockedPublicKey;
+    if (keyPair == null || publicKey == null) {
+      throw StateError('KeyVault is locked');
+    }
+    final vault = await _readVault();
+    final kek = _randomBytes(_kKekLength);
+    final privateKeyBytes = await keyPair.extractPrivateKeyBytes();
+    final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
+        aad: publicKey.bytes);
+    vault['biometricWrap'] = _boxJson(box);
+    await _store.write(storageKey, jsonEncode(vault));
+    await _store.write(_biometricKekStorageKey, base64Encode(kek));
+  }
+
+  /// 生物识别提示通过后调用：用 KEK 解开私钥并缓存于内存。
+  /// 未开启抛 StateError；KEK/包裹物损坏抛 [KeyVaultUnlockException]。
+  Future<SimpleKeyPair> unlockWithBiometric() async {
+    final vault = await _readVault();
+    final wrap = vault['biometricWrap'];
+    final kekRaw = await _store.read(_biometricKekStorageKey);
+    if (wrap == null || kekRaw == null) {
+      throw StateError('Biometric unlock not enabled');
+    }
+    try {
+      final box = SecretBox(
+        base64Decode(wrap['ciphertext'] as String),
+        nonce: base64Decode(wrap['nonce'] as String),
+        mac: Mac(base64Decode(wrap['mac'] as String)),
+      );
+      final privateKeyBytes = await CryptoPrimitives.aeadDecrypt(
+          base64Decode(kekRaw), box,
+          aad: base64Decode(vault['publicKey'] as String));
+      final publicKey = SimplePublicKey(
+          base64Decode(vault['publicKey'] as String),
+          type: KeyPairType.x25519);
+      final keyPair = SimpleKeyPairData(privateKeyBytes,
+          publicKey: publicKey, type: KeyPairType.x25519);
+      _unlockedKeyPair = keyPair;
+      _unlockedPublicKey = publicKey;
+      return keyPair;
+    } on SecretBoxAuthenticationError {
+      throw KeyVaultUnlockException();
+    }
+  }
+
+  /// 关闭生物识别解锁：删除包裹份与 KEK（口令/恢复码包裹份不受影响）。
+  Future<void> disableBiometric() async {
+    final raw = await _store.read(storageKey);
+    if (raw == null) return;
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic> &&
+        decoded['biometricWrap'] != null) {
+      decoded.remove('biometricWrap');
+      await _store.write(storageKey, jsonEncode(decoded));
+    }
+    await _store.delete(_biometricKekStorageKey);
+  }
+
   /// 清除内存中的解锁缓存（App 退后台超时/登出时调用；不动物理包裹物）。
   void lock() {
     _unlockedKeyPair = null;
@@ -261,6 +343,15 @@ class KeyVault {
     return <String, dynamic>{
       'salt': base64Encode(salt),
       'argon2': profile.toJson(),
+      'nonce': base64Encode(box.nonce),
+      'mac': base64Encode(box.mac.bytes),
+      'ciphertext': base64Encode(box.cipherText),
+    };
+  }
+
+  /// 随机 KEK 包裹份（生物识别用）：无需口令派生参数，仅存密文盒。
+  Map<String, dynamic> _boxJson(SecretBox box) {
+    return <String, dynamic>{
       'nonce': base64Encode(box.nonce),
       'mac': base64Encode(box.mac.bytes),
       'ciphertext': base64Encode(box.cipherText),
