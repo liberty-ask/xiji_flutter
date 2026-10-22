@@ -6,6 +6,7 @@ import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
+import '../../utils/amount_format.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../utils/icon_constants.dart';
@@ -246,7 +247,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Expanded(
               child: ScaledText(
                 AppLocalizations.of(context)!.transactionDetail,
-                style: TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -369,7 +370,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Expanded(
                         child: _buildSummaryCard(
                           AppLocalizations.of(context)!.monthlyIncome,
-                          '${AppLocalizations.of(context)!.currencySymbol}${_calendarData!['monthlyIncome'] ?? '0'}',
+                          '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(_calendarData!['monthlyIncome'] as num?)}',
                           ThemeHelper.primary(context),
                           context,
                         ),
@@ -378,7 +379,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       Expanded(
                         child: _buildSummaryCard(
                           AppLocalizations.of(context)!.monthlyExpense,
-                          '${AppLocalizations.of(context)!.currencySymbol}${_calendarData!['monthlyExpense'] ?? '0'}',
+                          '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(_calendarData!['monthlyExpense'] as num?)}',
                           ThemeHelper.expenseColor(context),
                           context,
                         ),
@@ -420,7 +421,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                           if (_calendarData != null)
                             ScaledText(
-                              '${AppLocalizations.of(context)!.monthlySurplus} ${AppLocalizations.of(context)!.currencySymbol}${_calendarData!['surplus'] ?? '0'}',
+                              '${AppLocalizations.of(context)!.monthlySurplus} ${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(_calendarData!['surplus'] as num?)}',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: ThemeHelper.primary(context),
@@ -865,12 +866,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final expense = (summary['expense'] as num?)?.toDouble() ?? 0;
     final net = income - expense;
     
-    // 格式化金额（千分位）
-    String formatAmount(double amount) {
-      if (amount == 0) return '0';
-      final formatter = NumberFormat('#,###');
-      return formatter.format(amount);
-    }
+    // 格式化金额（全局口径：千分位 + 2 位小数，见 AmountFormat）
+    String formatAmount(double amount) => AmountFormat.format(amount);
     
     return Container(
       height: 100,
