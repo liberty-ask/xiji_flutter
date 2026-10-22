@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/backup_import_service.dart';
 import 'package:xiji_flutter/data/local/builtin_categories.dart';
+import 'package:xiji_flutter/data/local/transaction_repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -111,7 +112,7 @@ void main() {
     // 幂等导入之间用户改了当月预算，导入不得覆盖
     await (db.update(db.budgets)
           ..where((b) => b.familyId.equals('fam-1')))
-        .write(BudgetsCompanion(amount: const Value(5000)));
+        .write(const BudgetsCompanion(amount: Value(5000)));
 
     final result = await service.importFromString(backupJson());
 
@@ -135,5 +136,21 @@ void main() {
         service.importFromString('not json'), throwsFormatException);
     await expectLater(
         service.importFromString('{"version": 99}'), throwsFormatException);
+  });
+
+  test('导入后 FTS 可搜索：描述与交易对方关键词命中导入交易（回填存量）',
+      () async {
+    final repo = TransactionRepository(db);
+    // 导入器直写主表绕过 Repository 的 FTS 双写，导入末尾的 FTS
+    // 全量重建负责回填——真机 5.8 验证踩过的坑（搜索索引为空）
+    await service.importFromString(backupJson());
+
+    final hits1 = await repo.search('fam-1', '包子');
+    expect(hits1.length, 1); // 交易对方命中
+    expect(hits1.first.id, '7001');
+    final hits2 = await repo.search('fam-1', '早餐');
+    expect(hits2.length, 1); // 描述命中
+    final hits3 = await repo.search('fam-1', '工资');
+    expect(hits3, isEmpty); // 描述/对方为空的记录不进索引，搜索不出
   });
 }

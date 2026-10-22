@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'app_database.dart' as local;
 import 'builtin_categories.dart';
 import 'current_family_store.dart';
+import 'fts_tokenizer.dart';
 
 /// 在线版 -> 离线版 备份导入器（5.8，格式见 openspec design.md D10）。
 ///
@@ -208,8 +209,34 @@ class BackupImportService {
           }
         }
       }
+
+      // ---- FTS 全量重建 ----
+      // 导入器直写主表 batch 绕过了 Repository 的 FTS 双写，历史导入
+      // 数据不在搜索索引中（真机 5.8 验证：关键词搜不到任何导入交易）。
+      // 导入末尾统一重建：回填存量 + 覆盖本次新增，幂等可重复执行。
+      await _rebuildFts();
     });
     return result;
+  }
+
+  /// 全量重建 FTS 索引：清空后按 Repository 同规则回填全部未删除交易
+  /// （描述 + 交易对方，中文拆字）。墓碑行不进索引。
+  Future<void> _rebuildFts() async {
+    await _db.customStatement('DELETE FROM transactions_fts');
+    final rows = await (_db.select(_db.transactions)
+          ..where((t) => t.deleted.equals(false)))
+        .get();
+    for (final row in rows) {
+      final parts = [row.description, row.counterparty]
+          .whereType<String>()
+          .where((s) => s.isNotEmpty);
+      final fts = FtsTokenizer.tokenize(parts.join(' '));
+      if (fts.isEmpty) continue;
+      await _db.customInsert(
+        'INSERT INTO transactions_fts(fts_text, tx_id) VALUES (?, ?)',
+        variables: [Variable(fts), Variable(row.id)],
+      );
+    }
   }
 }
 
