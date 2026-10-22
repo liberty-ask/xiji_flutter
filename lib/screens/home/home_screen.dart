@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +13,7 @@ import '../../utils/theme_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/icon_constants.dart';
 import '../../services/api/family_service.dart';
+import '../../data/local/local_family_cache.dart';
 import '../../models/family.dart';
 import '../../models/family_member.dart';
 import '../../l10n/app_localizations.dart';
@@ -54,8 +56,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadFamilies() async {
+    // 先用本地缓存渲染（离线优先，无网络也显示上次家庭信息）
+    final cached = await LocalFamilyCache.load();
+    if (cached != null && cached.isNotEmpty && mounted) {
+      setState(() {
+        _families = cached;
+        _currentFamily = cached.firstWhere(
+          (f) => f.isCurrent,
+          orElse: () => cached.first,
+        );
+      });
+    }
     try {
       final families = await _familyService.getFamiliesList();
+      await LocalFamilyCache.cache(families);
       setState(() {
         _families = families;
         if (families.isNotEmpty) {
@@ -66,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       });
     } catch (e) {
-      // 静默失败，不影响首页显示
+      // 网络失败保持缓存数据，不影响首页显示
     }
   }
 
@@ -165,10 +179,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                                         child: _currentFamily?.avatar != null && _currentFamily!.avatar!.isNotEmpty
-                                            ? Image.network(
-                                                _currentFamily!.avatar!,
+                                            ? CachedNetworkImage(
+                                                imageUrl: _currentFamily!.avatar!,
                               fit: BoxFit.cover,
-                                                errorBuilder: (context, error, stackTrace) {
+                                                errorWidget: (context, url, error) {
                                                   return _buildFamilyAvatarPlaceholder();
                                                 },
                                               )
@@ -223,10 +237,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: family.avatar != null && family.avatar!.isNotEmpty
                                               ? ClipRRect(
                                                   borderRadius: BorderRadius.circular(8),
-                                                  child: Image.network(
-                                                    family.avatar!,
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: family.avatar!,
                                                     fit: BoxFit.cover,
-                                                    errorBuilder: (context, error, stackTrace) {
+                                                    errorWidget: (context, url, error) {
                                                       return Center(
                                                         child: Text(
                                                           family.name.isNotEmpty ? family.name[0].toUpperCase() : 'H',
@@ -323,10 +337,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
                                       child: _currentFamily?.avatar != null && _currentFamily!.avatar!.isNotEmpty
-                                          ? Image.network(
-                                              _currentFamily!.avatar!,
+                                          ? CachedNetworkImage(
+                                              imageUrl: _currentFamily!.avatar!,
                                               fit: BoxFit.cover,
-                                              errorBuilder: (context, error, stackTrace) {
+                                              errorWidget: (context, url, error) {
                                                 return _buildFamilyAvatarPlaceholder();
                                               },
                                             )

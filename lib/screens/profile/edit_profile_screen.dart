@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -207,11 +208,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         }
       }
 
-      // 尝试作为网络URL显示
-      return Image.network(
-        _avatarPreview!,
+      // 尝试作为网络URL显示（磁盘缓存，离线可显示）
+      return CachedNetworkImage(
+        imageUrl: _avatarPreview!,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
+        errorWidget: (context, url, error) {
           return Container(
             color: ThemeHelper.surfaceLight(context),
             child: Icon(
