@@ -109,6 +109,20 @@
   "financialManagement": "财务管理",
   "billImport": "账单导入",
   "billImportSubtitle": "支持微信/支付宝账单CSV",
+  "backupImport": "从备份文件导入",
+  "backupImportSubtitle": "从在线版迁移历史数据",
+  "backupImportDone": "导入完成",
+  "backupImportSummary": "交易：新增 {txInserted} 条，跳过 {txSkipped} 条\n分类：导入 {catImported} 项，跳过 {catSkipped} 项\n预算：{budgetCount} 条已导入当月",
+  "@backupImportSummary": {
+    "placeholders": {
+      "txInserted": {"type": "int"},
+      "txSkipped": {"type": "int"},
+      "catImported": {"type": "int"},
+      "catSkipped": {"type": "int"},
+      "budgetCount": {"type": "int"}
+    }
+  },
+  "backupImportBadFile": "备份文件无法识别，请确认选择的是导出的 JSON 备份",
   "monthlyBudget": "月度预算",
   "monthlyBudgetSubtitle": "设定理财目标",
   "categoryManagement": "分类管理",

@@ -1,7 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../data/local/backup_import_service.dart';
+import '../../data/local/db_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
@@ -31,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadAuditCount() async {
     final authProvider = context.read<AuthProvider>();
     final user = authProvider.user;
-    
+
     if (UserRole.isAdmin(user?.role)) {
       try {
         final profile = await _familyService.getUserProfile();
@@ -42,6 +49,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       } catch (e) {
         // 忽略错误
+      }
+    }
+  }
+
+  /// 从在线版备份文件导入（5.8 迁移通道，见 openspec design.md D10）
+  Future<void> _importBackup() async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
+      );
+      final files = result?.files;
+      if (files == null || files.isEmpty) return; // 用户取消
+      final file = files.single;
+      Uint8List bytes;
+      if (file.bytes != null && file.bytes!.isNotEmpty) {
+        bytes = file.bytes!;
+      } else if (!kIsWeb && file.path != null && file.path!.isNotEmpty) {
+        bytes = await File(file.path!).readAsBytes();
+      } else {
+        throw Exception(l10n.cannotGetFileData);
+      }
+      final content = utf8.decode(bytes);
+
+      if (!mounted) return;
+      // 8948 条量级导入需数秒，先给加载遮罩
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      final BackupImportResult outcome;
+      try {
+        outcome = await BackupImportService(Db.database)
+            .importFromString(content);
+      } finally {
+        // 导入成败都要先关遮罩，再走结果/错误提示
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(l10n.backupImportDone),
+          content: Text(l10n.backupImportSummary(
+            outcome.transactionsInserted,
+            outcome.transactionsSkipped,
+            outcome.categoriesMappedBuiltin + outcome.categoriesInserted,
+            outcome.categoriesSkipped,
+            outcome.budgetsImported,
+          )),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupImportBadFile)),
+        );
       }
     }
   }
@@ -188,6 +261,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       title: AppLocalizations.of(context)!.billImport,
                       subtitle: AppLocalizations.of(context)!.billImportSubtitle,
                       onTap: () => context.push('/import-bills'),
+                    ),
+                    _buildMenuCard(
+                      icon: Icons.cloud_download,
+                      title: AppLocalizations.of(context)!.backupImport,
+                      subtitle: AppLocalizations.of(context)!.backupImportSubtitle,
+                      onTap: _importBackup,
                     ),
                     _buildMenuCard(
                       icon: Icons.account_balance_wallet,

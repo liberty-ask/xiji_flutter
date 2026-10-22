@@ -110,6 +110,20 @@
   "financialManagement": "FINANCIAL MANAGEMENT",
   "billImport": "Bill Import",
   "billImportSubtitle": "Supports WeChat/Alipay bill CSV",
+  "backupImport": "Import from Backup",
+  "backupImportSubtitle": "Migrate data from the online version",
+  "backupImportDone": "Import Complete",
+  "backupImportSummary": "Transactions: {txInserted} added, {txSkipped} skipped\nCategories: {catImported} imported, {catSkipped} skipped\nBudget: {budgetCount} imported for this month",
+  "@backupImportSummary": {
+    "placeholders": {
+      "txInserted": {"type": "int"},
+      "txSkipped": {"type": "int"},
+      "catImported": {"type": "int"},
+      "catSkipped": {"type": "int"},
+      "budgetCount": {"type": "int"}
+    }
+  },
+  "backupImportBadFile": "Unrecognized backup file. Please select a JSON backup exported by the migration script",
   "monthlyBudget": "Monthly Budget",
   "monthlyBudgetSubtitle": "Set financial goals",
   "categoryManagement": "Category Management",

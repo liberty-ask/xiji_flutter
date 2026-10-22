@@ -340,6 +340,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get billImportSubtitle => '支持微信/支付宝账单CSV';
 
   @override
+  String get backupImport => '从备份文件导入';
+
+  @override
+  String get backupImportSubtitle => '从在线版迁移历史数据';
+
+  @override
+  String get backupImportDone => '导入完成';
+
+  @override
+  String backupImportSummary(int txInserted, int txSkipped, int catImported,
+      int catSkipped, int budgetCount) {
+    return '交易：新增 $txInserted 条，跳过 $txSkipped 条\n分类：导入 $catImported 项，跳过 $catSkipped 项\n预算：$budgetCount 条已导入当月';
+  }
+
+  @override
+  String get backupImportBadFile => '备份文件无法识别，请确认选择的是导出的 JSON 备份';
+
+  @override
   String get monthlyBudget => '月度预算';
 
   @override
@@ -1512,6 +1530,24 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get billImportSubtitle => '支持微信/支付宝账单CSV';
 
   @override
+  String get backupImport => '从备份文件导入';
+
+  @override
+  String get backupImportSubtitle => '从在线版迁移历史数据';
+
+  @override
+  String get backupImportDone => '导入完成';
+
+  @override
+  String backupImportSummary(int txInserted, int txSkipped, int catImported,
+      int catSkipped, int budgetCount) {
+    return '交易：新增 $txInserted 条，跳过 $txSkipped 条\n分类：导入 $catImported 项，跳过 $catSkipped 项\n预算：$budgetCount 条已导入当月';
+  }
+
+  @override
+  String get backupImportBadFile => '备份文件无法识别，请确认选择的是导出的 JSON 备份';
+
+  @override
   String get monthlyBudget => '月度预算';
 
   @override
@@ -2677,6 +2713,24 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get billImportSubtitle => '支持微信/支付寶賬單CSV';
+
+  @override
+  String get backupImport => '從備份檔案導入';
+
+  @override
+  String get backupImportSubtitle => '從線上版遷移歷史資料';
+
+  @override
+  String get backupImportDone => '導入完成';
+
+  @override
+  String backupImportSummary(int txInserted, int txSkipped, int catImported,
+      int catSkipped, int budgetCount) {
+    return '交易：新增 $txInserted 條，跳過 $txSkipped 條\n分類：導入 $catImported 項，跳過 $catSkipped 項\n預算：$budgetCount 條已導入當月';
+  }
+
+  @override
+  String get backupImportBadFile => '備份檔案無法識別，請確認選擇的是導出的 JSON 備份';
 
   @override
   String get monthlyBudget => '月度預算';

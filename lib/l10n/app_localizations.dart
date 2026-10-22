@@ -760,6 +760,37 @@ abstract class AppLocalizations {
   /// **'Supports WeChat/Alipay bill CSV'**
   String get billImportSubtitle;
 
+  /// No description provided for @backupImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from Backup'**
+  String get backupImport;
+
+  /// No description provided for @backupImportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Migrate data from the online version'**
+  String get backupImportSubtitle;
+
+  /// No description provided for @backupImportDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Complete'**
+  String get backupImportDone;
+
+  /// No description provided for @backupImportSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions: {txInserted} added, {txSkipped} skipped\nCategories: {catImported} imported, {catSkipped} skipped\nBudget: {budgetCount} imported for this month'**
+  String backupImportSummary(int txInserted, int txSkipped, int catImported,
+      int catSkipped, int budgetCount);
+
+  /// No description provided for @backupImportBadFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrecognized backup file. Please select a JSON backup exported by the migration script'**
+  String get backupImportBadFile;
+
   /// No description provided for @monthlyBudget.
   ///
   /// In en, this message translates to:

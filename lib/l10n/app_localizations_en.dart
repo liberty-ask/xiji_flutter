@@ -341,6 +341,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get billImportSubtitle => 'Supports WeChat/Alipay bill CSV';
 
   @override
+  String get backupImport => 'Import from Backup';
+
+  @override
+  String get backupImportSubtitle => 'Migrate data from the online version';
+
+  @override
+  String get backupImportDone => 'Import Complete';
+
+  @override
+  String backupImportSummary(int txInserted, int txSkipped, int catImported,
+      int catSkipped, int budgetCount) {
+    return 'Transactions: $txInserted added, $txSkipped skipped\nCategories: $catImported imported, $catSkipped skipped\nBudget: $budgetCount imported for this month';
+  }
+
+  @override
+  String get backupImportBadFile =>
+      'Unrecognized backup file. Please select a JSON backup exported by the migration script';
+
+  @override
   String get monthlyBudget => 'Monthly Budget';
 
   @override

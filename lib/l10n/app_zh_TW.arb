@@ -110,6 +110,20 @@
   "financialManagement": "財務管理",
   "billImport": "賬單導入",
   "billImportSubtitle": "支持微信/支付寶賬單CSV",
+  "backupImport": "從備份檔案導入",
+  "backupImportSubtitle": "從線上版遷移歷史資料",
+  "backupImportDone": "導入完成",
+  "backupImportSummary": "交易：新增 {txInserted} 條，跳過 {txSkipped} 條\n分類：導入 {catImported} 項，跳過 {catSkipped} 項\n預算：{budgetCount} 條已導入當月",
+  "@backupImportSummary": {
+    "placeholders": {
+      "txInserted": {"type": "int"},
+      "txSkipped": {"type": "int"},
+      "catImported": {"type": "int"},
+      "catSkipped": {"type": "int"},
+      "budgetCount": {"type": "int"}
+    }
+  },
+  "backupImportBadFile": "備份檔案無法識別，請確認選擇的是導出的 JSON 備份",
   "monthlyBudget": "月度預算",
   "monthlyBudgetSubtitle": "設定理財目標",
   "categoryManagement": "分類管理",
