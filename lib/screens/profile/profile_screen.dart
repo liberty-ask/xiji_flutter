@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -84,12 +85,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final content = utf8.decode(bytes);
 
       if (!mounted) return;
-      // 8948 条量级导入需数秒，先给加载遮罩
-      await showDialog(
+      // 8948 条量级导入需数秒，先给加载遮罩。不可 await showDialog——
+      // 它要等对话框 pop 才完成，会永远挂起且导入不启动；遮罩由下方
+      // finally 里的 pop 关闭。PopScope 拦系统返回键，防止遮罩被误关后
+      // 导入在后台默默跑（真机 5.8 验证踩过的坑）。
+      unawaited(showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ));
       final BackupImportResult outcome;
       try {
         outcome = await BackupImportService(Db.database)

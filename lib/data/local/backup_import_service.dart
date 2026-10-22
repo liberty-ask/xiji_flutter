@@ -70,6 +70,17 @@ class BackupImportService {
         }
       }
 
+      // 幂等索引（全量拉取内存查重，替代逐条单查——万级数据逐条
+      // count 是真机导入小时级卡顿的根因）
+      final existingCatById = <String, local.Category>{
+        for (final c in existingCats)
+          if (!c.deleted) c.id: c,
+      };
+      final existingCatByName = <String, local.Category>{
+        for (final c in existingCats)
+          if (!c.deleted && c.familyId == familyId) '${c.type}:${c.name}': c,
+      };
+
       for (final cat in categories) {
         final oldId = cat['id'] as String?;
         final name = cat['name'] as String?;
@@ -84,22 +95,14 @@ class BackupImportService {
           continue;
         }
         // 2) 同 ID 已存在（重复导入）-> 幂等映射自身
-        final byId = await (_db.select(_db.categories)
-              ..where((c) => c.id.equals(oldId) & c.deleted.equals(false)))
-            .getSingleOrNull();
+        final byId = existingCatById[oldId];
         if (byId != null) {
           catIdMap[oldId] = byId.id;
           result.categoriesSkipped++;
           continue;
         }
         // 3) 同名同型的自定义分类已存在（换设备/重复迁移）-> 映射到已有行
-        final byName = await (_db.select(_db.categories)
-              ..where((c) =>
-                  c.name.equals(name) &
-                  c.type.equals(type) &
-                  c.deleted.equals(false) &
-                  c.familyId.equals(familyId)))
-            .getSingleOrNull();
+        final byName = existingCatByName['$type:$name'];
         if (byName != null) {
           catIdMap[oldId] = byName.id;
           result.categoriesSkipped++;
@@ -128,6 +131,13 @@ class BackupImportService {
       }
 
       // ---- 交易 ----
+      // 幂等：一次拉全部已存在 ID，内存 Set 查重。逐条 count 是 8948 条
+      // 真机导入跑一个多小时的根因（万级数据改为两次查询，毫秒级）。
+      final existingTxIds = (await (_db.selectOnly(_db.transactions)
+              ..addColumns([_db.transactions.id]))
+            .get())
+          .map((row) => row.read(_db.transactions.id))
+          .toSet();
       final txToInsert = <local.TransactionsCompanion>[];
       for (final tx in transactions) {
         final id = tx['id'] as String?;
@@ -144,11 +154,7 @@ class BackupImportService {
           continue;
         }
         // 幂等：同 ID 已存在则跳过（保留本地数据）
-        final exists = await (_db.selectOnly(_db.transactions)
-              ..addColumns([_db.transactions.id.count()])
-              ..where(_db.transactions.id.equals(id)))
-            .getSingle();
-        if ((exists.read(_db.transactions.id.count()) ?? 0) > 0) {
+        if (existingTxIds.contains(id)) {
           result.transactionsSkipped++;
           continue;
         }
