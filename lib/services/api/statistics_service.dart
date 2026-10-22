@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/local_user.dart';
 import '../../data/local/statistics_repository.dart';
@@ -135,14 +136,15 @@ class StatisticsService {
         _currentRange(period, year, month, weekStartDate, weekEndDate);
     final prev =
         _previousRange(period, year, month, weekStartDate, weekEndDate);
+    final familyId = await CurrentFamilyStore.get();
 
     final items = await _stats.categoryStatistics(
-        type: type, start: cur.start, end: cur.end);
+        familyId: familyId, type: type, start: cur.start, end: cur.end);
     // 总额与环比分母：同类型区间总额（分母含已删分类金额，与分类统计口径一致）
-    final total =
-        await _stats.typeTotals(type: type, start: cur.start, end: cur.end);
-    final previous =
-        await _stats.typeTotals(type: type, start: prev.start, end: prev.end);
+    final total = await _stats.typeTotals(
+        familyId: familyId, type: type, start: cur.start, end: cur.end);
+    final previous = await _stats.typeTotals(
+        familyId: familyId, type: type, start: prev.start, end: prev.end);
 
     // 颜色按排序后名次循环分配（服务端按构建顺序分配、无稳定契约，取名次更直观）
     const colors = [
@@ -182,9 +184,12 @@ class StatisticsService {
         _currentRange(period, year, month, weekStartDate, weekEndDate);
     final prev =
         _previousRange(period, year, month, weekStartDate, weekEndDate);
+    final familyId = await CurrentFamilyStore.get();
 
-    final current = await _stats.rangeSummary(start: cur.start, end: cur.end);
-    final previous = await _stats.rangeSummary(start: prev.start, end: prev.end);
+    final current = await _stats.rangeSummary(
+        familyId: familyId, start: cur.start, end: cur.end);
+    final previous = await _stats.rangeSummary(
+        familyId: familyId, start: prev.start, end: prev.end);
 
     return {
       'totalIncome': current.income,
@@ -211,10 +216,14 @@ class StatisticsService {
   }) async {
     final List<({String date, String dateLabel, double income, double expense})>
         points;
+    final familyId = await CurrentFamilyStore.get();
     if (period == 'year') {
       // 年维度：按月聚合
       final rows = await _stats.monthlyTotals(
-          type: type, start: DateTime(year, 1, 1), end: DateTime(year, 12, 31));
+          familyId: familyId,
+          type: type,
+          start: DateTime(year, 1, 1),
+          end: DateTime(year, 12, 31));
       final byMonth = {for (final r in rows) r.month: r};
       points = [
         for (var m = 1; m <= 12; m++)
@@ -229,6 +238,7 @@ class StatisticsService {
       // 月维度：按天聚合
       final lastDay = DateTime(year, month! + 1, 0).day;
       final rows = await _stats.dailyTotals(
+          familyId: familyId,
           type: type,
           start: DateTime(year, month, 1),
           end: DateTime(year, month + 1, 0));
@@ -248,7 +258,8 @@ class StatisticsService {
       // 周维度：period='day'，周内按天聚合
       final start = DateTime.parse(weekStartDate!);
       final end = DateTime.parse(weekEndDate!);
-      final rows = await _stats.dailyTotals(type: type, start: start, end: end);
+      final rows = await _stats.dailyTotals(
+          familyId: familyId, type: type, start: start, end: end);
       final byDay = {for (final r in rows) r.day: r};
       points = [
         for (var d = start;
@@ -323,8 +334,13 @@ class StatisticsService {
   }) async {
     final cur =
         _currentRange(period, year, month, weekStartDate, weekEndDate);
+    final familyId = await CurrentFamilyStore.get();
     final totals = await _stats.typeTotals(
-        type: type, categoryId: categoryId, start: cur.start, end: cur.end);
+        familyId: familyId,
+        type: type,
+        categoryId: categoryId,
+        start: cur.start,
+        end: cur.end);
 
     final items = <Map<String, dynamic>>[];
     if (totals.count > 0) {
@@ -361,11 +377,12 @@ class StatisticsService {
   }) async {
     final cur =
         _currentRange(period, year, month, weekStartDate, weekEndDate);
-    final rows =
-        await _stats.dailyTotals(type: type, start: cur.start, end: cur.end);
+    final familyId = await CurrentFamilyStore.get();
+    final rows = await _stats.dailyTotals(
+        familyId: familyId, type: type, start: cur.start, end: cur.end);
     // 热力值分母：区间内单笔最大金额（对齐服务端 maxAmount 口径）
-    final maxSingle =
-        await _stats.maxAmount(type: type, start: cur.start, end: cur.end);
+    final maxSingle = await _stats.maxAmount(
+        familyId: familyId, type: type, start: cur.start, end: cur.end);
     final byDay = {for (final r in rows) r.day: r};
 
     // 区间内逐日生成（对齐服务端 dateList：无交易日也占位）

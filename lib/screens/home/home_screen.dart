@@ -13,6 +13,7 @@ import '../../utils/theme_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/icon_constants.dart';
 import '../../services/api/family_service.dart';
+import '../../data/local/current_family_store.dart';
 import '../../data/local/local_family_cache.dart';
 import '../../models/family.dart';
 import '../../models/family_member.dart';
@@ -59,17 +60,28 @@ class _HomeScreenState extends State<HomeScreen> {
     // 先用本地缓存渲染（离线优先，无网络也显示上次家庭信息）
     final cached = await LocalFamilyCache.load();
     if (cached != null && cached.isNotEmpty && mounted) {
+      final current = cached.firstWhere(
+        (f) => f.isCurrent,
+        orElse: () => cached.first,
+      );
+      // 同步当前家庭到路由源（本地库家庭维度的写入依据）
+      await CurrentFamilyStore.set(current.id);
       setState(() {
         _families = cached;
-        _currentFamily = cached.firstWhere(
-          (f) => f.isCurrent,
-          orElse: () => cached.first,
-        );
+        _currentFamily = current;
       });
     }
     try {
       final families = await _familyService.getFamiliesList();
       await LocalFamilyCache.cache(families);
+      if (families.isNotEmpty) {
+        await CurrentFamilyStore.set(
+          families.firstWhere(
+            (f) => f.isCurrent,
+            orElse: () => families.first,
+          ).id,
+        );
+      }
       setState(() {
         _families = families;
         if (families.isNotEmpty) {

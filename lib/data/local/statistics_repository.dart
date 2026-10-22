@@ -14,9 +14,12 @@ class StatisticsRepository {
 
   StatisticsRepository(this._db);
 
-  /// 首页月度概览：本月收入、支出、结余、今日支出、昨日支出
+  /// 首页月度概览：本月收入、支出、结余、今日支出、昨日支出。
+  /// 家庭维度：仅 [familyId] 家庭的交易
   Future<MonthlyOverview> monthlyOverview(
-      [DateTime? now]) async {
+    String familyId, [
+    DateTime? now,
+  ]) async {
     final n = now ?? DateTime.now();
     final monthStart = DateTime(n.year, n.month, 1);
     final monthEnd = DateTime(n.year, n.month + 1, 1)
@@ -28,8 +31,9 @@ class StatisticsRepository {
       'SELECT SUM(CASE WHEN type = 0 THEN amount ELSE 0 END) AS income, '
       'SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) AS expense '
       'FROM transactions WHERE deleted = 0 AND type IN (0, 1) '
-      'AND date >= ? AND date <= ?',
+      'AND family_id = ? AND date >= ? AND date <= ?',
       variables: [
+        Variable(familyId),
         Variable<DateTime>(monthStart),
         Variable<DateTime>(monthEnd),
       ],
@@ -37,8 +41,8 @@ class StatisticsRepository {
     ).get();
 
     // 今日/昨日支出（type=1）
-    final todayExpense = await _sumExpense(today);
-    final yesterdayExpense = await _sumExpense(yesterday);
+    final todayExpense = await _sumExpense(familyId, today);
+    final yesterdayExpense = await _sumExpense(familyId, yesterday);
 
     final r = rows.single;
     final income = (r.readNullable<double>('income') ?? 0);
@@ -52,13 +56,15 @@ class StatisticsRepository {
     );
   }
 
-  Future<double> _sumExpense(DateTime day) async {
+  Future<double> _sumExpense(String familyId, DateTime day) async {
     final dayEnd = day.add(const Duration(days: 1))
         .subtract(const Duration(microseconds: 1));
     final rows = await _db.customSelect(
       'SELECT SUM(amount) AS total FROM transactions '
-      'WHERE deleted = 0 AND type = 1 AND date >= ? AND date <= ?',
+      'WHERE deleted = 0 AND type = 1 AND family_id = ? '
+      'AND date >= ? AND date <= ?',
       variables: [
+        Variable(familyId),
         Variable<DateTime>(day),
         Variable<DateTime>(dayEnd),
       ],
@@ -67,10 +73,11 @@ class StatisticsRepository {
     return rows.single.readNullable<double>('total') ?? 0;
   }
 
-  /// 指定月份预算金额（无预算或墓碑返回 0）
-  Future<double> monthBudget(int year, int month) async {
+  /// 指定月份预算金额（无预算或墓碑返回 0）。家庭维度
+  Future<double> monthBudget(String familyId, int year, int month) async {
     final rows = await (_db.select(_db.budgets)
           ..where((b) =>
+              b.familyId.equals(familyId) &
               b.year.equals(year) &
               b.month.equals(month) &
               b.deleted.equals(false)))
@@ -79,8 +86,10 @@ class StatisticsRepository {
     return rows.first.amount;
   }
 
-  /// 分类统计：指定收支类型与日期区间，按分类聚合金额并降序
+  /// 分类统计：指定收支类型与日期区间，按分类聚合金额并降序。
+  /// 家庭维度：仅 [familyId] 家庭的交易
   Future<List<CategoryStatisticsItem>> categoryStatistics({
+    required String familyId,
     required int type, // 0-收入 1-支出（2 禁止传入）
     required DateTime start,
     required DateTime end,
@@ -92,10 +101,12 @@ class StatisticsRepository {
     // 聚合下推：SUM GROUP BY category_id
     final rows = await _db.customSelect(
       'SELECT category_id, SUM(amount) AS total FROM transactions '
-      'WHERE deleted = 0 AND type = ? AND date >= ? AND date <= ? '
+      'WHERE deleted = 0 AND type = ? AND family_id = ? '
+      'AND date >= ? AND date <= ? '
       'GROUP BY category_id ORDER BY total DESC',
       variables: [
         Variable(type),
+        Variable(familyId),
         Variable<DateTime>(start),
         Variable<DateTime>(endInclusive),
       ],
@@ -167,8 +178,9 @@ class StatisticsRepository {
     }
   }
 
-  /// 统计页概览：区间收入、支出、笔数（type IN (0,1)）
+  /// 统计页概览：区间收入、支出、笔数（type IN (0,1)）。家庭维度
   Future<RangeSummary> rangeSummary({
+    required String familyId,
     required DateTime start,
     required DateTime end,
   }) async {
@@ -176,8 +188,10 @@ class StatisticsRepository {
       'SELECT SUM(CASE WHEN type = 0 THEN amount ELSE 0 END) AS income, '
       'SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) AS expense, '
       'COUNT(*) AS cnt FROM transactions '
-      'WHERE deleted = 0 AND type IN (0, 1) AND date >= ? AND date <= ?',
+      'WHERE deleted = 0 AND type IN (0, 1) AND family_id = ? '
+      'AND date >= ? AND date <= ?',
       variables: [
+        Variable(familyId),
         Variable<DateTime>(start),
         Variable<DateTime>(_endInclusive(end)),
       ],
@@ -191,15 +205,16 @@ class StatisticsRepository {
   }
 
   /// 指定类型（可加分类过滤）的区间总额与笔数；type 为空表示 IN (0,1)。
-  /// 服务于分类统计环比分母与成员统计（一期单成员）
+  /// 服务于分类统计环比分母与成员统计（一期单成员）。家庭维度
   Future<TypeTotals> typeTotals({
+    required String familyId,
     int? type,
     String? categoryId,
     required DateTime start,
     required DateTime end,
   }) async {
-    final where = <String>['deleted = 0'];
-    final variables = <Variable>[];
+    final where = <String>['deleted = 0', 'family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
     _typeWhere(type, where, variables);
     if (categoryId != null && categoryId.isNotEmpty) {
       where.add('category_id = ?');
@@ -224,14 +239,16 @@ class StatisticsRepository {
   }
 
   /// 按天聚合（趋势与日历）：键为本地日期 yyyy-MM-dd。
-  /// type 过滤语义对齐服务端：null 拆分收支两列、0 仅收入列、1 仅支出列
+  /// type 过滤语义对齐服务端：null 拆分收支两列、0 仅收入列、1 仅支出列。
+  /// 家庭维度
   Future<List<DailyTotals>> dailyTotals({
+    required String familyId,
     int? type,
     required DateTime start,
     required DateTime end,
   }) async {
-    final where = <String>['deleted = 0'];
-    final variables = <Variable>[];
+    final where = <String>['deleted = 0', 'family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
     _typeWhere(type, where, variables);
     where
       ..add('date >= ?')
@@ -259,14 +276,15 @@ class StatisticsRepository {
         .toList();
   }
 
-  /// 年维度按月聚合（趋势图）：1-12 月
+  /// 年维度按月聚合（趋势图）：1-12 月。家庭维度
   Future<List<MonthlyTotals>> monthlyTotals({
+    required String familyId,
     int? type,
     required DateTime start,
     required DateTime end,
   }) async {
-    final where = <String>['deleted = 0'];
-    final variables = <Variable>[];
+    final where = <String>['deleted = 0', 'family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
     _typeWhere(type, where, variables);
     where
       ..add('date >= ?')
@@ -293,14 +311,16 @@ class StatisticsRepository {
         .toList();
   }
 
-  /// 区间内单笔最大金额（日历热力值分母，对齐服务端 maxAmount 口径）
+  /// 区间内单笔最大金额（日历热力值分母，对齐服务端 maxAmount 口径）。
+  /// 家庭维度
   Future<double> maxAmount({
+    required String familyId,
     int? type,
     required DateTime start,
     required DateTime end,
   }) async {
-    final where = <String>['deleted = 0'];
-    final variables = <Variable>[];
+    final where = <String>['deleted = 0', 'family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
     _typeWhere(type, where, variables);
     where
       ..add('date >= ?')

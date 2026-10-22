@@ -2,6 +2,7 @@ import '../../models/category_keyword_rule.dart';
 import 'builtin_categories.dart';
 import 'category_repository.dart';
 import 'category_rule_repository.dart';
+import 'current_family_store.dart';
 
 /// 本地分类引擎：账单导入与语音记账共用的离线分类判定。
 ///
@@ -38,9 +39,11 @@ class CategoryEngine {
     }
   }
 
-  /// 全量分类 ID → 类型缓存（分类被软删后不在缓存中，对应学习条目不再命中）
+  /// 全量分类 ID → 类型缓存（分类被软删后不在缓存中，对应学习条目不再命中）。
+  /// 家庭维度：内置（全局共享）+ 当前家庭自定义
   Future<Map<String, int>> loadCategoryTypeCache() async {
-    final all = await _categories.listAll();
+    final all =
+        await _categories.listAll(await CurrentFamilyStore.get());
     return {for (final c in all) c.id: c.type};
   }
 

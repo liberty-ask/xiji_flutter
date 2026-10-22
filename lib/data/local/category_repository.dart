@@ -14,10 +14,13 @@ class CategoryRepository {
 
   /// 全量列表（排除墓碑）：按类型分组（支出在前，与常量表顺序一致），
   /// 同类型内 sortOrder 升序——内置分类种子序 0-N，自定义分类从 N+1 起，
-  /// 自然内置在前
-  Future<List<Category>> listAll() {
+  /// 自然内置在前。
+  /// 家庭维度：内置分类（全局共享）+ [familyId] 家庭的自定义分类
+  Future<List<Category>> listAll(String familyId) {
     final query = _db.select(_db.categories)
-      ..where((c) => c.deleted.equals(false))
+      ..where((c) =>
+          c.deleted.equals(false) &
+          (c.isBuiltin.equals(true) | c.familyId.equals(familyId)))
       ..orderBy([
         (c) => OrderingTerm(expression: c.type, mode: OrderingMode.desc),
         (c) => OrderingTerm(expression: c.sortOrder),
@@ -35,23 +38,29 @@ class CategoryRepository {
 
   /// 按名称查找首个匹配（排除墓碑）。交易写入路径的名称→ID 解析，
   /// 与既有服务端行为一致（findFirst，类型过滤由调用方传入的类别列表保证）。
-  Future<Category?> findByName(String name, int type) {
+  /// 家庭维度：内置分类 + [familyId] 家庭的自定义分类
+  Future<Category?> findByName(String familyId, String name, int type) {
     return (_db.select(_db.categories)
           ..where((c) =>
               c.name.equals(name) &
               c.type.equals(type) &
-              c.deleted.equals(false))
+              c.deleted.equals(false) &
+              (c.isBuiltin.equals(true) | c.familyId.equals(familyId)))
           ..limit(1))
         .getSingleOrNull();
   }
 
-  /// 同名分类计数（排除墓碑），新增/改名查重用；excludeId 跳过自身
-  Future<int> countByName(String name, int type, {String? excludeId}) {
+  /// 同名分类计数（排除墓碑），新增/改名查重用；excludeId 跳过自身。
+  /// 家庭维度：查重范围为内置 + [familyId] 家庭
+  Future<int> countByName(String familyId, String name, int type,
+      {String? excludeId}) {
     final query = _db.selectOnly(_db.categories)
       ..addColumns([_db.categories.id.count()])
       ..where(_db.categories.name.equals(name) &
           _db.categories.type.equals(type) &
-          _db.categories.deleted.equals(false));
+          _db.categories.deleted.equals(false) &
+          (_db.categories.isBuiltin.equals(true) |
+              _db.categories.familyId.equals(familyId)));
     if (excludeId != null) {
       query.where(_db.categories.id.equals(excludeId).not());
     }
@@ -60,18 +69,23 @@ class CategoryRepository {
         .getSingle();
   }
 
-  /// 新增自定义分类：sortOrder 取同类型最大值 +1（对齐服务端语义）
-  Future<Category> insert(CategoriesCompanion c) {
+  /// 新增自定义分类：sortOrder 取同类型最大值 +1（对齐服务端语义）。
+  /// 家庭维度：归属 [familyId]（强制写入，调用方无需在 companion 重复传），
+  /// 最大值在「内置 + [familyId] 家庭」范围内取
+  Future<Category> insert(String familyId, CategoriesCompanion c) {
     return _db.transaction(() async {
       final maxRow = await (_db.selectOnly(_db.categories)
             ..addColumns([_db.categories.sortOrder.max()])
             ..where(_db.categories.type.equals(c.type.value) &
-                _db.categories.deleted.equals(false)))
+                _db.categories.deleted.equals(false) &
+                (_db.categories.isBuiltin.equals(true) |
+                    _db.categories.familyId.equals(familyId))))
           .getSingleOrNull();
       final maxSort = maxRow?.read(_db.categories.sortOrder.max()) ?? 0;
 
       return await _db.into(_db.categories).insertReturning(
-            c.copyWith(sortOrder: Value(maxSort + 1)),
+            c.copyWith(
+                sortOrder: Value(maxSort + 1), familyId: Value(familyId)),
           );
     });
   }

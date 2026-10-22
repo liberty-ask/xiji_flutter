@@ -6,6 +6,7 @@ import 'builtin_categories.dart';
 import 'category_engine.dart';
 import 'category_rule_loader.dart';
 import 'category_rule_repository.dart';
+import 'current_family_store.dart';
 import 'db_provider.dart';
 import 'local_user.dart';
 import 'transaction_repository.dart';
@@ -75,17 +76,19 @@ class BillImportService {
   }
 
   /// 预览准备：退款修正（描述/状态含「退款」→ 收入，对齐服务端）+
-  /// 引擎分类预填 + 本地重复单号标记
+  /// 引擎分类预填 + 本地重复单号标记。家庭维度：当前家庭内去重
   Future<List<BillImportPreviewItem>> prepare(List<ParsedBillRow> rows) async {
     final corrected = rows.map(_applyRefundRule).toList();
     final typeCache = await _engine.loadCategoryTypeCache();
+    final familyId = await CurrentFamilyStore.get();
 
     final tradeNos = corrected
         .map((r) => r.tradeNo)
         .whereType<String>()
         .where((t) => t.isNotEmpty)
         .toSet();
-    final existing = await _transactions.findExistingTradeNos(tradeNos);
+    final existing =
+        await _transactions.findExistingTradeNos(familyId, tradeNos);
 
     final items = <BillImportPreviewItem>[];
     for (final row in corrected) {
@@ -117,8 +120,10 @@ class BillImportService {
     );
   }
 
-  /// 入库：重复单号跳过、收/支未知行判失败、其余批量写入本地库
+  /// 入库：重复单号跳过、收/支未知行判失败、其余批量写入本地库。
+  /// 家庭维度：写入当前家庭，同家庭内去重
   Future<BillImportOutcome> importRows(List<BillImportPreviewItem> items) async {
+    final familyId = await CurrentFamilyStore.get();
     // 导入时刻重新查询已存在单号（prepare 与导入之间可能已有写入）
     final tradeNos = items
         .where((i) => !i.duplicate)
@@ -126,7 +131,7 @@ class BillImportService {
         .whereType<String>()
         .where((t) => t.isNotEmpty)
         .toSet();
-    final seen = await _transactions.findExistingTradeNos(tradeNos);
+    final seen = await _transactions.findExistingTradeNos(familyId, tradeNos);
 
     var skipCount = 0;
     var failCount = 0;
@@ -160,6 +165,7 @@ class BillImportService {
         amount: item.row.amount,
         date: item.row.date,
         userId: user?.id ?? '',
+        familyId: Value(familyId),
         description: Value(item.row.description),
         counterparty: Value(item.row.counterparty),
         tradeNo: Value(tradeNo),

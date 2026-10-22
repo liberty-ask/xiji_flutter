@@ -82,13 +82,13 @@ void main() {
       final first = await service.importRows(await service.prepare(csv));
       expect(first.successCount, 2);
       expect(first.skipCount, 0);
-      expect(await transactions.listAll(), hasLength(2));
+      expect(await transactions.listAll(''), hasLength(2));
 
       // 第二次导入：全部已存在，仅提示新增条数
       final second = await service.importRows(await service.prepare(csv));
       expect(second.successCount, 0, reason: '重复单号不再入库');
       expect(second.skipCount, 2);
-      expect(await transactions.listAll(), hasLength(2));
+      expect(await transactions.listAll(''), hasLength(2));
     });
 
     test('同一批次内重复单号只入库一条', () async {
@@ -130,7 +130,7 @@ void main() {
       final outcome = await service.importRows(preview);
       expect(outcome.successCount, 1, reason: '未分类不阻塞入库');
 
-      final saved = await transactions.listAll();
+      final saved = await transactions.listAll('');
       expect(saved.first.categoryId, uncategorizedExpenseId);
       expect(saved.first.counterparty, '陌生商户');
       expect(saved.first.tradeNo, 'TN001');
@@ -146,7 +146,7 @@ void main() {
       await service.importRows(await service.prepare([
         row(tradeNo: 'UNC1', counterparty: '陌生商户')
       ]));
-      final saved = await transactions.listAll();
+      final saved = await transactions.listAll('');
       expect(saved.first.categoryId, uncategorizedExpenseId);
 
       // 入库后修改分类为餐饮
@@ -164,7 +164,7 @@ void main() {
       expect(outcome.failCount, 1);
       expect(outcome.successCount, 0);
       expect(outcome.failures, isNotEmpty);
-      expect(await transactions.listAll(), isEmpty);
+      expect(await transactions.listAll(''), isEmpty);
     });
   });
 

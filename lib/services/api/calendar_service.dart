@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/local/category_repository.dart';
+import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/statistics_repository.dart';
 import '../../data/local/transaction_repository.dart';
@@ -55,16 +56,19 @@ class CalendarService {
     final monthEndExact =
         DateTime(year, month + 1, 1).subtract(const Duration(microseconds: 1));
 
+    final familyId = await CurrentFamilyStore.get();
+
     // 每日汇总：复用统计聚合（SUM CASE 口径，排除墓碑与 type=2 的收支）
-    final totals = await _stats.dailyTotals(start: start, end: monthEnd);
+    final totals = await _stats.dailyTotals(
+        familyId: familyId, start: start, end: monthEnd);
     final totalsByDay = <int, DailyTotals>{
       for (final t in totals) int.parse(t.day.substring(8, 10)): t,
     };
 
     // 每日明细：排除 type=2（对齐服务端），按业务日期倒序
-    final monthTransactions =
-        await _transactions.query(start: start, end: monthEndExact);
-    final categories = await _categories.listAll();
+    final monthTransactions = await _transactions.query(
+        familyId: familyId, start: start, end: monthEndExact);
+    final categories = await _categories.listAll(familyId);
     final categoryById = {
       for (final c in categories) c.id: c,
     };

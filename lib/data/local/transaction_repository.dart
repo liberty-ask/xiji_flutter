@@ -56,12 +56,15 @@ class TransactionRepository {
     });
   }
 
-  /// 已存在的平台单号集合（含墓碑行：软删记录仍占单号，重复导入跳过口径）
-  Future<Set<String>> findExistingTradeNos(Set<String> tradeNos) {
+  /// 已存在的平台单号集合（含墓碑行：软删记录仍占单号，重复导入跳过口径）。
+  /// 家庭维度：仅比对当前家庭的单号
+  Future<Set<String>> findExistingTradeNos(
+      String familyId, Set<String> tradeNos) {
     if (tradeNos.isEmpty) return Future.value(const {});
     final query = _db.selectOnly(_db.transactions)
       ..addColumns([_db.transactions.tradeNo])
-      ..where(_db.transactions.tradeNo.isIn(tradeNos));
+      ..where(_db.transactions.tradeNo.isIn(tradeNos) &
+          _db.transactions.familyId.equals(familyId));
     return query.map((row) => row.read(_db.transactions.tradeNo)!).get().then(
           (list) => list.whereType<String>().toSet(),
         );
@@ -121,10 +124,12 @@ class TransactionRepository {
     });
   }
 
-  /// 列表查询：排除墓碑，按业务日期倒序（date 字段，非 ID 时间戳）
-  Future<List<Transaction>> listAll() {
+  /// 列表查询：排除墓碑，按业务日期倒序（date 字段，非 ID 时间戳）。
+  /// 家庭维度：仅当前家庭的交易
+  Future<List<Transaction>> listAll(String familyId) {
     final query = _db.select(_db.transactions)
-      ..where((t) => t.deleted.equals(false))
+      ..where((t) =>
+          t.deleted.equals(false) & t.familyId.equals(familyId))
       ..orderBy([
         (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
         (t) =>
@@ -142,7 +147,9 @@ class TransactionRepository {
 
   /// 交易明细通用查询：类型/日期范围/单日/用户筛选 + FTS 关键词 + 分页，
   /// 排除墓碑，按业务日期倒序。明细列表、筛选、搜索共用此入口。
+  /// 家庭维度：仅 [familyId] 家庭的交易。
   Future<List<Transaction>> query({
+    required String familyId,
     int? type,
     DateTime? start, // 含
     DateTime? end, // 含
@@ -152,8 +159,8 @@ class TransactionRepository {
     int? page, // 从 1 起
     int? pageSize,
   }) {
-    final where = <String>['t.deleted = 0'];
-    final variables = <Variable>[];
+    final where = <String>['t.deleted = 0', 't.family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
 
     if (type != null) {
       where.add('t.type = ?');
@@ -207,19 +214,22 @@ class TransactionRepository {
     ).map(_mapRow).get();
   }
 
-  /// 首页近期动态：排除墓碑与不计收支（type=2），最近 N 条
-  Future<List<Transaction>> recent(int limit) {
+  /// 首页近期动态：排除墓碑与不计收支（type=2），最近 N 条。
+  /// 家庭维度：仅 [familyId] 家庭的交易
+  Future<List<Transaction>> recent(String familyId, int limit) {
     return _db.customSelect(
-      'SELECT t.* FROM transactions t WHERE t.deleted = 0 AND t.type != 2 '
+      'SELECT t.* FROM transactions t '
+      'WHERE t.deleted = 0 AND t.type != 2 AND t.family_id = ? '
       'ORDER BY t.date DESC, t.updated_at DESC LIMIT ?',
-      variables: [Variable(limit)],
+      variables: [Variable(familyId), Variable(limit)],
       readsFrom: {_db.transactions},
     ).map(_mapRow).get();
   }
 
-  /// FTS5 全文搜索：中文拆字短语匹配，排除墓碑，按日期倒序
-  Future<List<Transaction>> search(String keyword) {
-    return query(keyword: keyword);
+  /// FTS5 全文搜索：中文拆字短语匹配，排除墓碑，按日期倒序。
+  /// 家庭维度：仅 [familyId] 家庭的交易
+  Future<List<Transaction>> search(String familyId, String keyword) {
+    return query(familyId: familyId, keyword: keyword);
   }
 
   // 与生成代码 mapFromRow 等价的手动映射（2.31 的 mapFromRow 为异步）
@@ -231,6 +241,7 @@ class TransactionRepository {
       amount: row.read<double>('amount'),
       date: row.read<DateTime>('date'),
       userId: row.read<String>('user_id'),
+      familyId: row.read<String>('family_id'),
       description: row.readNullable<String>('description'),
       counterparty: row.readNullable<String>('counterparty'),
       tradeNo: row.readNullable<String>('trade_no'),

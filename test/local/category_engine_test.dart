@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/builtin_categories.dart';
 import 'package:xiji_flutter/data/local/category_engine.dart';
@@ -27,6 +28,8 @@ void main() {
   ''');
 
   setUp(() {
+    // 引擎类型缓存经 CurrentFamilyStore 解析当前家庭（mock prefs 下为 ''）
+    SharedPreferences.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     categories = CategoryRepository(db);
     rules = CategoryRuleRepository(db);
@@ -98,11 +101,14 @@ void main() {
 
     test('指认到已删除分类的条目不再命中', () async {
       // 指认到一个自定义分类，然后软删该分类
-      final custom = await categories.insert(CategoriesCompanion.insert(
-        name: '自定义甲',
-        icon: 'category',
-        type: 1,
-      ));
+      final custom = await categories.insert(
+        '',
+        CategoriesCompanion.insert(
+          name: '自定义甲',
+          icon: 'category',
+          type: 1,
+        ),
+      );
       await rules.assign(matchText: '陌生商户', categoryId: custom.id, source: 0);
       await categories.softDelete(custom.id);
 

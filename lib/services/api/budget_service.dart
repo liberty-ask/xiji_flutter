@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/local/budget_repository.dart';
+import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 
 /// 预算数据门面：本地优先架构下的唯一读写入口。
@@ -27,25 +28,33 @@ class BudgetService {
   @visibleForTesting
   BudgetService.withRepo(this._budgets);
 
-  /// 获取预算信息：返回 {'budget': amount}，未设置（或墓碑）返回 {'budget': null}
+  /// 获取预算信息：返回 {'budget': amount}，未设置（或墓碑）返回 {'budget': null}。
+  /// 家庭维度：当前家庭的月预算
   Future<Map<String, dynamic>> getBudget({
     int? year,
     int? month,
   }) async {
     final now = DateTime.now();
     final row = await _budgets.findByMonth(
+      await CurrentFamilyStore.get(),
       year ?? now.year,
       month ?? now.month,
     );
     return {'budget': row?.amount};
   }
 
-  /// 设置预算：同月已存在（含墓碑）则覆盖更新，否则新插入
+  /// 设置预算：同月已存在（含墓碑）则覆盖更新，否则新插入。
+  /// 家庭维度：写入当前家庭
   Future<void> setBudget({
     required double total,
     required int year,
     required int month,
   }) async {
-    await _budgets.upsertMonth(year: year, month: month, amount: total);
+    await _budgets.upsertMonth(
+      familyId: await CurrentFamilyStore.get(),
+      year: year,
+      month: month,
+      amount: total,
+    );
   }
 }

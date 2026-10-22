@@ -30,6 +30,7 @@ void main() {
     double amount,
     DateTime date, {
     String categoryId = diningId,
+    String familyId = 'f1',
   }) =>
       txRepo.insert(TransactionsCompanion.insert(
         type: type,
@@ -37,6 +38,7 @@ void main() {
         amount: amount,
         date: date,
         userId: 'user-1',
+        familyId: Value(familyId),
       ));
 
   group('任务 1.6：客户端统计聚合（对齐服务端口径）', () {
@@ -48,13 +50,22 @@ void main() {
       await seed(1, 45, DateTime(2026, 10, 14)); // 昨日
       await seed(1, 60, DateTime(2026, 9, 30)); // 上月（不计入）
 
-      final o = await statsRepo.monthlyOverview(now);
+      final o = await statsRepo.monthlyOverview('f1', now);
 
       expect(o.income, 8000);
       expect(o.expense, 30 + 120 + 45);
       expect(o.balance, 8000 - (30 + 120 + 45));
       expect(o.todayExpense, 120);
       expect(o.yesterdayExpense, 45);
+    });
+
+    test('家庭隔离：月度概览仅统计当前家庭的交易', () async {
+      final now = DateTime(2026, 10, 15);
+      await seed(1, 30, DateTime(2026, 10, 2));
+      await seed(1, 999, DateTime(2026, 10, 3), familyId: 'f2');
+
+      final o = await statsRepo.monthlyOverview('f1', now);
+      expect(o.expense, 30, reason: '他家的支出不得计入本家统计');
     });
 
     test('type=2（不计收支）排除在收支统计之外', () async {
@@ -65,7 +76,7 @@ void main() {
       await seed(2, 9999, DateTime(2026, 10, 3));
       await seed(2, 8888, DateTime(2026, 10, 15)); // 今日 type=2 也不进今日支出
 
-      final o = await statsRepo.monthlyOverview(now);
+      final o = await statsRepo.monthlyOverview('f1', now);
       expect(o.income, 5000, reason: 'type=2 不得污染收入');
       expect(o.expense, 100, reason: 'type=2 不得污染支出');
       expect(o.todayExpense, 0, reason: 'type=2 不得污染今日支出');
@@ -73,7 +84,10 @@ void main() {
       // 分类统计同样排除：type=2 传参直接禁止
       expect(
         () => statsRepo.categoryStatistics(
-            type: 2, start: DateTime(2026, 10, 1), end: DateTime(2026, 10, 31)),
+            familyId: 'f1',
+            type: 2,
+            start: DateTime(2026, 10, 1),
+            end: DateTime(2026, 10, 31)),
         throwsA(isA<AssertionError>()),
         reason: '收支统计禁止 type=2',
       );
@@ -87,11 +101,12 @@ void main() {
         amount: 500,
         date: DateTime(2026, 10, 3),
         userId: 'user-1',
+        familyId: const Value('f1'),
       ));
       await seed(1, 100, DateTime(2026, 10, 5));
       await txRepo.softDelete(deleted.id);
 
-      final o = await statsRepo.monthlyOverview(now);
+      final o = await statsRepo.monthlyOverview('f1', now);
       expect(o.expense, 100, reason: '墓碑不得计入统计');
     });
 
@@ -103,6 +118,7 @@ void main() {
       await seed(1, 999, DateTime(2026, 11, 1)); // 11月，区间外
 
       final items = await statsRepo.categoryStatistics(
+        familyId: 'f1',
         type: 1,
         start: DateTime(2026, 10, 1),
         end: DateTime(2026, 10, 31),
@@ -134,6 +150,7 @@ void main() {
       ));
 
       final items = await statsRepo.categoryStatistics(
+        familyId: 'f1',
         type: 1,
         start: DateTime(2026, 10, 1),
         end: DateTime(2026, 10, 31),

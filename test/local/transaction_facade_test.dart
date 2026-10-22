@@ -77,7 +77,7 @@ void main() {
         note: '瑞幸拿铁',
       );
 
-      final list = await txRepo.listAll();
+      final list = await txRepo.listAll('');
       expect(list, hasLength(1));
       final row = list.single;
       expect(row.categoryId, diningId, reason: '分类名称应解析为内置餐饮 ID');
@@ -101,7 +101,7 @@ void main() {
         ),
         throwsA(isA<Exception>()),
       );
-      expect(await txRepo.listAll(), isEmpty);
+      expect(await txRepo.listAll(''), isEmpty);
     });
 
     test('编辑：改名分类重解析、version+1、备注传 null 清空', () async {
@@ -112,7 +112,7 @@ void main() {
         date: '2026-10-15',
         note: '瑞幸拿铁',
       );
-      final before = (await txRepo.listAll()).single;
+      final before = (await txRepo.listAll('')).single;
 
       await txService.updateTransaction(
         id: before.id,
@@ -140,12 +140,12 @@ void main() {
         amount: 30,
         date: '2026-10-15',
       );
-      final id = (await txRepo.listAll()).single.id;
+      final id = (await txRepo.listAll('')).single.id;
 
       await txService.deleteTransaction(id);
 
       expect(await txRepo.findById(id), isNull);
-      expect(await txRepo.listAll(), isEmpty);
+      expect(await txRepo.listAll(''), isEmpty);
       // 墓碑行保留参与同步
       final tombstone = await (db.select(db.transactions)
             ..where((t) => t.id.equals(id)))
@@ -310,11 +310,14 @@ void main() {
 
       // 经仓储挂一条自定义分类的交易，再软删分类
       final catRepo = CategoryRepository(db);
-      final cat = await catRepo.insert(CategoriesCompanion.insert(
-        name: '猫舍',
-        icon: 'pets',
-        type: 1,
-      ));
+      final cat = await catRepo.insert(
+        '',
+        CategoriesCompanion.insert(
+          name: '猫舍',
+          icon: 'pets',
+          type: 1,
+        ),
+      );
       await txRepo.insert(TransactionsCompanion.insert(
         type: 1,
         categoryId: cat.id,

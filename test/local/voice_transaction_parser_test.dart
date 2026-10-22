@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/builtin_categories.dart';
 import 'package:xiji_flutter/data/local/category_engine.dart';
@@ -26,6 +27,8 @@ void main() {
   ''');
 
   setUp(() async {
+    // 引擎类型缓存经 CurrentFamilyStore 解析当前家庭（mock prefs 下为 ''）
+    SharedPreferences.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     categories = CategoryRepository(db);
     rules = CategoryRuleRepository(db);

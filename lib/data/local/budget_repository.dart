@@ -11,10 +11,12 @@ class BudgetRepository {
 
   BudgetRepository(this._db);
 
-  /// 查询指定月预算（排除墓碑），无则返回 null
-  Future<Budget?> findByMonth(int year, int month) async {
+  /// 查询指定月预算（排除墓碑），无则返回 null。家庭维度
+  Future<Budget?> findByMonth(
+      String familyId, int year, int month) async {
     final rows = await (_db.select(_db.budgets)
           ..where((b) =>
+              b.familyId.equals(familyId) &
               b.year.equals(year) &
               b.month.equals(month) &
               b.deleted.equals(false)))
@@ -22,18 +24,24 @@ class BudgetRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
-  /// 写入月预算：同月已存在（含墓碑行）则更新金额并复活、version+1；否则新插入
+  /// 写入月预算：同月已存在（含墓碑行）则更新金额并复活、version+1；否则新插入。
+  /// 家庭维度：同家庭同月唯一（UNIQUE(family_id, year, month)）
   Future<void> upsertMonth({
+    required String familyId,
     required int year,
     required int month,
     required double amount,
   }) async {
     final now = DateTime.now();
     final existing = await (_db.select(_db.budgets)
-          ..where((b) => b.year.equals(year) & b.month.equals(month)))
+          ..where((b) =>
+              b.familyId.equals(familyId) &
+              b.year.equals(year) &
+              b.month.equals(month)))
         .getSingleOrNull();
     if (existing == null) {
       await _db.into(_db.budgets).insert(BudgetsCompanion.insert(
+            familyId: Value(familyId),
             year: year,
             month: month,
             amount: amount,

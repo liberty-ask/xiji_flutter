@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../data/local/app_database.dart' as local;
 import '../../data/local/category_repository.dart';
+import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/local_user.dart';
 import '../../data/local/statistics_repository.dart';
@@ -67,7 +68,8 @@ class TransactionService {
     String? note,
     String? location,
   }) async {
-    final cat = await _categories.findByName(category, type);
+    final familyId = await CurrentFamilyStore.get();
+    final cat = await _categories.findByName(familyId, category, type);
     if (cat == null) {
       throw Exception('分类不存在');
     }
@@ -79,6 +81,7 @@ class TransactionService {
       amount: amount,
       date: _parseDate(date)!,
       userId: user?.id ?? '',
+      familyId: Value(familyId),
       description: Value(note),
       payMethod: Value(location),
     ));
@@ -100,6 +103,7 @@ class TransactionService {
     int? pageSize,
   }) async {
     final rows = await _transactions.query(
+      familyId: await CurrentFamilyStore.get(),
       type: type,
       start: _parseDate(startDate),
       end: _parseEndOfDay(endDate),
@@ -144,7 +148,8 @@ class TransactionService {
     if (existing == null) {
       throw Exception('交易记录不存在');
     }
-    final cat = await _categories.findByName(category, type);
+    final familyId = await CurrentFamilyStore.get();
+    final cat = await _categories.findByName(familyId, category, type);
     if (cat == null) {
       throw Exception('分类不存在');
     }
@@ -177,11 +182,13 @@ class TransactionService {
   /// [now] 仅供测试注入基准时间，生产不传。
   Future<Map<String, dynamic>> getHomeData([DateTime? now]) async {
     final current = now ?? DateTime.now();
-    final overview = await _stats.monthlyOverview(current);
-    final budgetTotal = await _stats.monthBudget(current.year, current.month);
+    final familyId = await CurrentFamilyStore.get();
+    final overview = await _stats.monthlyOverview(familyId, current);
+    final budgetTotal =
+        await _stats.monthBudget(familyId, current.year, current.month);
 
     // 近期动态：最近 10 条，排除不计收支（type=2），口径对齐服务端
-    final recent = await _transactions.recent(10);
+    final recent = await _transactions.recent(familyId, 10);
 
     final user = await LocalUser.load();
     final userName = (user != null && user.nickname.isNotEmpty)

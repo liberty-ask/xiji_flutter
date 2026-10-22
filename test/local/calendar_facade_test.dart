@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/builtin_categories.dart';
 import 'package:xiji_flutter/data/local/category_repository.dart';
@@ -14,6 +15,8 @@ void main() {
   late CalendarService service;
 
   setUp(() {
+    // 门面内部经 CurrentFamilyStore 解析当前家庭（mock prefs 下为 ''）
+    SharedPreferences.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     transactions = TransactionRepository(db);
     service = CalendarService.withRepos(

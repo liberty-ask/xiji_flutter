@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/local/current_family_store.dart';
 import '../data/local/local_family_cache.dart';
 import '../data/local/local_user.dart';
 import '../models/user.dart';
@@ -42,6 +43,7 @@ class AuthProvider with ChangeNotifier {
     await _apiClient.removeToken();
     await LocalUser.clear();
     await LocalFamilyCache.clear();
+    await CurrentFamilyStore.clear();
     _hasToken = false;
     _user = null;
     notifyListeners();

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../data/local/app_database.dart' as local;
 import '../../data/local/category_repository.dart';
+import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../models/category.dart';
 
@@ -29,9 +30,10 @@ class CategoryService {
   @visibleForTesting
   CategoryService.withRepos(this._categories);
 
-  /// 获取分类列表：内置在前（种子序），自定义在后（创建序）
+  /// 获取分类列表：内置在前（种子序），自定义在后（创建序）。
+  /// 家庭维度：内置（全局共享）+ 当前家庭自定义
   Future<List<Category>> getCategories() async {
-    final rows = await _categories.listAll();
+    final rows = await _categories.listAll(await CurrentFamilyStore.get());
     return rows
         .map((r) => Category(
               id: r.id,
@@ -49,15 +51,19 @@ class CategoryService {
     required int type,
   }) async {
     final trimmed = name.trim();
-    if (await _categories.countByName(trimmed, type) > 0) {
+    final familyId = await CurrentFamilyStore.get();
+    if (await _categories.countByName(familyId, trimmed, type) > 0) {
       throw Exception('该类型下分类名称已存在');
     }
 
-    final row = await _categories.insert(local.CategoriesCompanion.insert(
-      name: trimmed,
-      icon: icon,
-      type: type,
-    ));
+    final row = await _categories.insert(
+      familyId,
+      local.CategoriesCompanion.insert(
+        name: trimmed,
+        icon: icon,
+        type: type,
+      ),
+    );
 
     return <String, dynamic>{
       'id': row.id,
@@ -98,7 +104,12 @@ class CategoryService {
 
     final trimmed = name.trim();
     if (trimmed.isNotEmpty &&
-        await _categories.countByName(trimmed, category.type, excludeId: id) >
+        await _categories.countByName(
+          await CurrentFamilyStore.get(),
+          trimmed,
+          category.type,
+          excludeId: id,
+        ) >
             0) {
       throw Exception('该类型下分类名称已存在');
     }

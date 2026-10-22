@@ -15,6 +15,7 @@ void main() {
     DateTime? date,
     String? description,
     String? counterparty,
+    String familyId = 'f1',
   }) =>
       TransactionsCompanion.insert(
         type: type,
@@ -22,6 +23,7 @@ void main() {
         amount: amount,
         date: date ?? DateTime(2026, 10, 1),
         userId: 'user-1',
+        familyId: Value(familyId),
         description:
             description == null ? const Value.absent() : Value(description),
         counterparty:
@@ -47,7 +49,7 @@ void main() {
       expect(row.version, 1);
       expect(row.deleted, false);
 
-      final hits = await repo.search('拿铁');
+      final hits = await repo.search('f1', '拿铁');
       expect(hits.map((t) => t.id), [row.id]);
     });
 
@@ -66,9 +68,9 @@ void main() {
       expect(updated.syncPending, true);
       expect(updated.amount, 42);
 
-      expect(await repo.search('午餐'), isEmpty, reason: '旧关键词应从索引清除');
-      expect(await repo.search('晚餐').then((l) => l.single.id), row.id);
-      expect(await repo.search('外婆家').then((l) => l.single.id), row.id);
+      expect(await repo.search('f1', '午餐'), isEmpty, reason: '旧关键词应从索引清除');
+      expect(await repo.search('f1', '晚餐').then((l) => l.single.id), row.id);
+      expect(await repo.search('f1', '外婆家').then((l) => l.single.id), row.id);
     });
 
     test('删除：软删除墓碑保留行、FTS 摘除、列表与搜索均不可见', () async {
@@ -86,12 +88,12 @@ void main() {
       expect(tombstone.version, 2);
 
       // 列表与单查不可见
-      final list = await repo.listAll();
+      final list = await repo.listAll('f1');
       expect(list.map((t) => t.id), isNot(contains(a.id)));
       expect(await repo.findById(a.id), isNull);
       // 搜索也不可见
-      expect(await repo.search('拿铁'), isEmpty);
-      expect(await repo.search('星巴克'), isNotEmpty);
+      expect(await repo.search('f1', '拿铁'), isEmpty);
+      expect(await repo.search('f1', '星巴克'), isNotEmpty);
     });
 
     test('列表：排除墓碑、按业务日期倒序', () async {
@@ -103,9 +105,21 @@ void main() {
           newTx(description: '中', date: DateTime(2026, 10, 2), amount: 30));
       await repo.softDelete(deleted.id);
 
-      final list = await repo.listAll();
+      final list = await repo.listAll('f1');
       expect(list.map((t) => t.description), ['晚', '早'],
           reason: '按 date 倒序且排除墓碑');
+    });
+
+    test('家庭隔离：列表与搜索仅当前家庭可见', () async {
+      await repo.insert(newTx(description: '本家的拿铁'));
+      await repo.insert(
+          newTx(description: '他家的拿铁', familyId: 'f2'));
+
+      final list = await repo.listAll('f1');
+      expect(list.map((t) => t.description), ['本家的拿铁']);
+      expect(await repo.search('f1', '拿铁').then((l) => l.single.description),
+          '本家的拿铁',
+          reason: 'FTS 命中后仍按家庭过滤（同库多家庭不串数据）');
     });
 
     test('编辑不存在的交易抛错', () async {
