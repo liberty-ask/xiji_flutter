@@ -361,9 +361,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudBackup => '云备份';
 
   @override
-  String get cloudBackupSubtitle => '端到端加密，数据仅自己可见';
-
-  @override
   String get backupE2eDescription =>
       '开启后，记账数据将以端到端加密方式备份到云端。服务器仅存储密文，任何人（包括运营者）都无法查看内容。';
 
@@ -427,6 +424,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupLocalOnlyWarning => '备份未开启，数据仅存本机：卸载应用或更换设备会导致数据丢失，建议开启云备份。';
+
+  @override
+  String get backupGuidanceTitle => '数据仅存本机';
+
+  @override
+  String get backupGuidanceMessage =>
+      '记录已保存。备份未开启时，数据仅存本机：卸载应用或更换设备会导致数据丢失。开启端到端加密云备份后，数据将加密同步到云端，仅自己可见。';
+
+  @override
+  String get backupGuidanceGo => '去开启';
+
+  @override
+  String get backupGuidanceLater => '暂不';
 
   @override
   String get monthlyBudget => '月度预算';
@@ -1622,9 +1632,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get cloudBackup => '云备份';
 
   @override
-  String get cloudBackupSubtitle => '端到端加密，数据仅自己可见';
-
-  @override
   String get backupE2eDescription =>
       '开启后，记账数据将以端到端加密方式备份到云端。服务器仅存储密文，任何人（包括运营者）都无法查看内容。';
 
@@ -1688,6 +1695,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get backupLocalOnlyWarning => '备份未开启，数据仅存本机：卸载应用或更换设备会导致数据丢失，建议开启云备份。';
+
+  @override
+  String get backupGuidanceTitle => '数据仅存本机';
+
+  @override
+  String get backupGuidanceMessage =>
+      '记录已保存。备份未开启时，数据仅存本机：卸载应用或更换设备会导致数据丢失。开启端到端加密云备份后，数据将加密同步到云端，仅自己可见。';
+
+  @override
+  String get backupGuidanceGo => '去开启';
+
+  @override
+  String get backupGuidanceLater => '暂不';
 
   @override
   String get monthlyBudget => '月度预算';
@@ -2878,9 +2898,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get cloudBackup => '雲端備份';
 
   @override
-  String get cloudBackupSubtitle => '端對端加密，資料僅自己可見';
-
-  @override
   String get backupE2eDescription =>
       '開啟後，記帳資料將以端對端加密方式備份到雲端。伺服器僅儲存密文，任何人（包括營運者）都無法查看內容。';
 
@@ -2945,6 +2962,19 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get backupLocalOnlyWarning =>
       '備份未開啟，資料僅存本機：解除安裝應用或更換裝置會導致資料遺失，建議開啟雲端備份。';
+
+  @override
+  String get backupGuidanceTitle => '資料僅存本機';
+
+  @override
+  String get backupGuidanceMessage =>
+      '記錄已保存。備份未開啟時，資料僅存本機：解除安裝應用或更換裝置會導致資料遺失。開啟端對端加密雲端備份後，資料將加密同步到雲端，僅自己可見。';
+
+  @override
+  String get backupGuidanceGo => '去開啟';
+
+  @override
+  String get backupGuidanceLater => '暫不';
 
   @override
   String get monthlyBudget => '月度預算';

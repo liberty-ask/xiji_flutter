@@ -9,6 +9,7 @@ import '../../data/local/db_provider.dart';
 import '../../data/local/voice_transaction_parser.dart';
 import '../../services/api/transaction_service.dart';
 import '../home/add_transaction_screen.dart';
+import '../settings/backup_guidance.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
@@ -425,6 +426,11 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     if (!mounted) return;
     // 清空识别结果，防止快速松手时重复提交上一句
     _recognizedText = '';
+
+    // 首次记账后的云备份引导（仅一次，见 BackupGuidance）；
+    // 弹在结果 Snackbar 之前，保留 Snackbar 的修改入口
+    await BackupGuidance.maybeShowAfterFirstSave(context);
+    if (!mounted) return;
 
     final l10n = AppLocalizations.of(context)!;
     final typeLabel = result.type == 0 ? l10n.income : l10n.expense;

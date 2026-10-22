@@ -14,6 +14,7 @@ import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/constants.dart';
 import '../../utils/date_picker_helper.dart';
+import '../../screens/settings/backup_guidance.dart';
 import '../../models/category.dart';
 import '../../models/transaction.dart' as transaction_model;
 import '../../l10n/app_localizations.dart';
@@ -181,7 +182,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           context,
           editId != null ? l10n.editSuccess : l10n.addSuccess,
         );
-        context.pop();
+        if (editId == null) {
+          // 首次记账后的云备份引导（仅一次，见 BackupGuidance）
+          await BackupGuidance.maybeShowAfterFirstSave(context);
+        }
+        if (mounted) context.pop();
       }
     } catch (e) {
       if (mounted) {

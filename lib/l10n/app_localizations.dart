@@ -797,12 +797,6 @@ abstract class AppLocalizations {
   /// **'Cloud Backup'**
   String get cloudBackup;
 
-  /// No description provided for @cloudBackupSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'End-to-end encrypted; only you can see the data'**
-  String get cloudBackupSubtitle;
-
   /// No description provided for @backupE2eDescription.
   ///
   /// In en, this message translates to:
@@ -928,6 +922,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup is off. Data stays only on this device and will be lost if the app is uninstalled or the device is replaced. Enabling cloud backup is recommended.'**
   String get backupLocalOnlyWarning;
+
+  /// No description provided for @backupGuidanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data stays on this device'**
+  String get backupGuidanceTitle;
+
+  /// No description provided for @backupGuidanceMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your record has been saved. While backup is off, data stays on this device only and will be lost if the app is uninstalled or the device is replaced. With end-to-end encrypted backup, records sync to the cloud encrypted — only you can see them.'**
+  String get backupGuidanceMessage;
+
+  /// No description provided for @backupGuidanceGo.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable now'**
+  String get backupGuidanceGo;
+
+  /// No description provided for @backupGuidanceLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get backupGuidanceLater;
 
   /// No description provided for @monthlyBudget.
   ///

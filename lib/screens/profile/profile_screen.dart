@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../data/local/backup_import_service.dart';
+import '../../data/local/backup_flag_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api/family_service.dart';
@@ -28,11 +29,18 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final FamilyService _familyService = FamilyService();
   int? _auditCount;
+  bool _backupEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _loadAuditCount();
+    _loadBackupState();
+  }
+
+  Future<void> _loadBackupState() async {
+    final enabled = await BackupFlagStore.isEnabled();
+    if (mounted) setState(() => _backupEnabled = enabled);
   }
 
   Future<void> _loadAuditCount() async {
@@ -338,8 +346,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _buildMenuCard(
                       icon: Icons.cloud_outlined,
                       title: AppLocalizations.of(context)!.cloudBackup,
-                      subtitle: AppLocalizations.of(context)!.cloudBackupSubtitle,
-                      onTap: () => context.push('/backup'),
+                      // 6.4 设置页数据状态提示：未开启=数据仅存本机，开启=加密备份
+                      subtitle: _backupEnabled
+                          ? AppLocalizations.of(context)!.backupEnabled
+                          : AppLocalizations.of(context)!.backupDataLocalOnly,
+                      onTap: () =>
+                          context.push('/backup').then((_) => _loadBackupState()),
                     ),
                     _buildMenuCard(
                       icon: Icons.lock_reset,

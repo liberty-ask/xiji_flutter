@@ -363,10 +363,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cloudBackup => 'Cloud Backup';
 
   @override
-  String get cloudBackupSubtitle =>
-      'End-to-end encrypted; only you can see the data';
-
-  @override
   String get backupE2eDescription =>
       'When enabled, your records are backed up to the cloud with end-to-end encryption. The server stores only ciphertext — no one, not even the operator, can read your data.';
 
@@ -436,6 +432,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backupLocalOnlyWarning =>
       'Backup is off. Data stays only on this device and will be lost if the app is uninstalled or the device is replaced. Enabling cloud backup is recommended.';
+
+  @override
+  String get backupGuidanceTitle => 'Data stays on this device';
+
+  @override
+  String get backupGuidanceMessage =>
+      'Your record has been saved. While backup is off, data stays on this device only and will be lost if the app is uninstalled or the device is replaced. With end-to-end encrypted backup, records sync to the cloud encrypted — only you can see them.';
+
+  @override
+  String get backupGuidanceGo => 'Enable now';
+
+  @override
+  String get backupGuidanceLater => 'Later';
 
   @override
   String get monthlyBudget => 'Monthly Budget';
