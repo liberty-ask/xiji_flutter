@@ -52,6 +52,10 @@ dependencies:
   # 微信账单 XLSX 解析（官方邮箱导出为 XLSX 格式）
   excel: ^4.0.6
 
+  # 端到端加密原语（AES-256-GCM、X25519；Argon2id 口令派生由 pointycastle 提供）
+  cryptography: ^2.7.0
+  pointycastle: ^3.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
