@@ -247,6 +247,7 @@ class TransactionRepository {
       tradeNo: row.readNullable<String>('trade_no'),
       merchantOrderNo: row.readNullable<String>('merchant_order_no'),
       payMethod: row.readNullable<String>('pay_method'),
+      platform: row.readNullable<String>('platform'),
       version: row.read<int>('version'),
       updatedAt: row.read<DateTime>('updated_at'),
       deleted: row.read<bool>('deleted'),

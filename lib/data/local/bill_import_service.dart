@@ -171,6 +171,8 @@ class BillImportService {
         tradeNo: Value(tradeNo),
         merchantOrderNo: Value(item.row.merchantOrderNo),
         payMethod: Value(item.row.payMethod),
+        platform:
+            Value(kBillPlatformNames[item.row.platformCode]),
       ));
     }
 

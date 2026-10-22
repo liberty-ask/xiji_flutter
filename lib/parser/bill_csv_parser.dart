@@ -3,6 +3,9 @@ import 'dart:typed_data';
 
 import 'package:fast_gbk/fast_gbk.dart';
 
+/// 平台 code -> 展示名（与服务端表 platform 列口径一致，导入与迁移写入）
+const kBillPlatformNames = {'alipay': '支付宝', 'wechat': '微信', 'jd': '京东'};
+
 /// 账单单行解析结果（平台中立，字段对齐本地交易表）
 class ParsedBillRow {
   final String platformCode; // alipay / wechat / jd（平台来源字段）
@@ -81,7 +84,7 @@ class BillCsvParser {
     '交易状态', '收/支', '交易分类', '交易订单号', '商家订单号', '备注',
   };
 
-  static const _platformNames = {'alipay': '支付宝', 'wechat': '微信', 'jd': '京东'};
+  static const _platformNames = kBillPlatformNames;
 
   /// 解析账单字节：自动识别平台与编码，无法识别返回 null
   BillParseResult? parse(Uint8List bytes) {

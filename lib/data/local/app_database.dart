@@ -28,6 +28,7 @@ class Transactions extends Table {
   TextColumn get tradeNo => text().nullable()(); // 平台账单单号，导入去重
   TextColumn get merchantOrderNo => text().nullable()(); // 商户单号
   TextColumn get payMethod => text().nullable()(); // 支付方式
+  TextColumn get platform => text().nullable()(); // 所属平台（支付宝/微信/京东），账单导入与迁移写入
 
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get updatedAt =>
@@ -106,7 +107,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// 系统内置分类种子：固定 UUID 常量，insertOrIgnore 幂等。
   /// sortOrder 按类型分别计数（支出 0-12、收入 0-6），保证同类型内顺序稳定
@@ -180,6 +181,12 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement('DROP TABLE budgets');
         await customStatement('ALTER TABLE budgets_new RENAME TO budgets');
+      }
+      // v4：交易补 platform 列（对齐服务端表结构，账单导入与 5.8 迁移写入）
+      if (from < 4) {
+        await customStatement(
+          'ALTER TABLE transactions ADD COLUMN platform TEXT NULL',
+        );
       }
     },
   );
