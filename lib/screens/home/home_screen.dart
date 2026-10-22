@@ -496,12 +496,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                               ),
                                             ),
                                             const SizedBox(height: 4),
-                                            ScaledText(
-                                              '$currency$income',
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerLeft,
+                                              child: ScaledText(
+                                                '$currency$income',
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -532,12 +536,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                               ),
                                             ),
                                             const SizedBox(height: 4),
-                                            ScaledText(
-                                              '$currency$expense',
-                                              style: const TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerLeft,
+                                              child: ScaledText(
+                                                '$currency$expense',
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -859,6 +867,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   ScaledText(
                                     '${isIncome ? '+' : '-'}${_formatAmount((item['amount'] as num?)?.toDouble() ?? 0.0)}',
+                                    maxLines: 1,
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
