@@ -439,6 +439,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupGuidanceLater => '暂不';
 
   @override
+  String get backupResetPasswordTitle => '重置加密口令';
+
+  @override
+  String get backupResetPasswordSubtitle => '凭恢复码重设（忘记口令时使用）';
+
+  @override
+  String get backupResetRecoveryCodeLabel => '恢复码';
+
+  @override
+  String get backupResetCodeInvalid => '恢复码格式不正确（24 位字母数字）';
+
+  @override
+  String get backupResetNewPasswordLabel => '新口令';
+
+  @override
+  String get backupResetNewPasswordConfirmLabel => '确认新口令';
+
+  @override
+  String get backupResetting => '正在重置口令…';
+
+  @override
+  String get backupResetWrongCode => '恢复码不匹配，请检查后重试';
+
+  @override
+  String get backupResetDone => '加密口令已重设';
+
+  @override
+  String get backupResetFailed => '重置失败，请重试';
+
+  @override
   String get monthlyBudget => '月度预算';
 
   @override
@@ -1710,6 +1740,36 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupGuidanceLater => '暂不';
 
   @override
+  String get backupResetPasswordTitle => '重置加密口令';
+
+  @override
+  String get backupResetPasswordSubtitle => '凭恢复码重设（忘记口令时使用）';
+
+  @override
+  String get backupResetRecoveryCodeLabel => '恢复码';
+
+  @override
+  String get backupResetCodeInvalid => '恢复码格式不正确（24 位字母数字）';
+
+  @override
+  String get backupResetNewPasswordLabel => '新口令';
+
+  @override
+  String get backupResetNewPasswordConfirmLabel => '确认新口令';
+
+  @override
+  String get backupResetting => '正在重置口令…';
+
+  @override
+  String get backupResetWrongCode => '恢复码不匹配，请检查后重试';
+
+  @override
+  String get backupResetDone => '加密口令已重设';
+
+  @override
+  String get backupResetFailed => '重置失败，请重试';
+
+  @override
   String get monthlyBudget => '月度预算';
 
   @override
@@ -2975,6 +3035,36 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get backupGuidanceLater => '暫不';
+
+  @override
+  String get backupResetPasswordTitle => '重設加密口令';
+
+  @override
+  String get backupResetPasswordSubtitle => '憑恢復碼重設（忘記口令時使用）';
+
+  @override
+  String get backupResetRecoveryCodeLabel => '恢復碼';
+
+  @override
+  String get backupResetCodeInvalid => '恢復碼格式不正確（24 位字母數字）';
+
+  @override
+  String get backupResetNewPasswordLabel => '新口令';
+
+  @override
+  String get backupResetNewPasswordConfirmLabel => '確認新口令';
+
+  @override
+  String get backupResetting => '正在重設口令…';
+
+  @override
+  String get backupResetWrongCode => '恢復碼不匹配，請檢查後重試';
+
+  @override
+  String get backupResetDone => '加密口令已重設';
+
+  @override
+  String get backupResetFailed => '重設失敗，請重試';
 
   @override
   String get monthlyBudget => '月度預算';

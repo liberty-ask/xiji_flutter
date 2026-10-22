@@ -186,6 +186,38 @@ class KeyVault {
     await _store.write(storageKey, jsonEncode(vault));
   }
 
+  /// 凭恢复码重置口令（6.5）：恢复码解开私钥，新口令仅重包裹
+  /// passwordWrap；恢复码包裹份、公钥与存量密文体系不受影响。
+  /// 重置成功后私钥缓存于内存（解锁态）。恢复码错误抛
+  /// [KeyVaultUnlockException]；vault 无恢复码包裹份抛 StateError
+  /// （理论不可达：setup 必生成恢复码包裹份）。
+  Future<void> resetPasswordWithRecoveryCode(
+      String recoveryCodeInput, String newPassword) async {
+    final vault = await _readVault();
+    final wrap = vault['recoveryWrap'];
+    if (wrap == null) {
+      throw StateError('KeyVault has no recovery wrap');
+    }
+    final privateKeyBytes =
+        await _unwrap(vault, wrap, normalizeRecoveryCode(recoveryCodeInput));
+
+    final salt = _randomBytes(_kSaltLength);
+    final kek = CryptoPrimitives.deriveKek(newPassword, salt,
+        memoryKib: _defaultProfile.memoryKib,
+        iterations: _defaultProfile.iterations);
+    final publicKeyBytes = base64Decode(vault['publicKey'] as String);
+    final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
+        aad: publicKeyBytes);
+    vault['passwordWrap'] = _wrapJson(salt, _defaultProfile, box);
+    await _store.write(storageKey, jsonEncode(vault));
+
+    final publicKey =
+        SimplePublicKey(publicKeyBytes, type: KeyPairType.x25519);
+    _unlockedKeyPair = SimpleKeyPairData(privateKeyBytes,
+        publicKey: publicKey, type: KeyPairType.x25519);
+    _unlockedPublicKey = publicKey;
+  }
+
   /// 清除内存中的解锁缓存（App 退后台超时/登出时调用；不动物理包裹物）。
   void lock() {
     _unlockedKeyPair = null;

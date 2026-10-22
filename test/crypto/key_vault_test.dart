@@ -172,5 +172,79 @@ void main() {
         equals('ABCD-EFGH-JKLM-NPQR-STUV-WXY2'),
       );
     });
+
+    test('恢复码重置口令：新口令生效、旧口令失效、密钥对与恢复码包裹份不变',
+        () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('old-password');
+      final rawBefore = (await store.read(KeyVault.storageKey))!;
+      final docBefore = jsonDecode(rawBefore) as Map<String, dynamic>;
+      vault.lock();
+
+      // 用户输入带分隔符与小写的恢复码，归一后应正常解包
+      final formattedInput =
+          KeyVault.formatRecoveryCode(setupResult.recoveryCode).toLowerCase();
+      await vault.resetPasswordWithRecoveryCode(formattedInput, 'new-pass-9');
+
+      final rawAfter = (await store.read(KeyVault.storageKey))!;
+      final docAfter = jsonDecode(rawAfter) as Map<String, dynamic>;
+      expect(docAfter['publicKey'], equals(docBefore['publicKey']));
+      expect(docAfter['recoveryWrap'], equals(docBefore['recoveryWrap']));
+      expect(docAfter['passwordWrap'],
+          isNot(equals(docBefore['passwordWrap'])));
+      // 重置后即解锁态，缓存的是同一把私钥
+      expect(vault.isUnlocked, isTrue);
+
+      final fresh = newVault(store);
+      expect(
+        () => fresh.unlock('old-password'),
+        throwsA(isA<KeyVaultUnlockException>()),
+      );
+      final keyPair = await fresh.unlock('new-pass-9');
+      final pub = await keyPair.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+
+      // 恢复码可再次用于重置（包裹份未随重置失效）
+      await fresh.resetPasswordWithRecoveryCode(
+          setupResult.recoveryCode, 'another-pass-1');
+      final third = newVault(store);
+      final keyPair2 = await third.unlock('another-pass-1');
+      final pub2 = await keyPair2.extractPublicKey();
+      expect(pub2.bytes, equals(setupResult.publicKey.bytes));
+    });
+
+    test('恢复码重置口令：恢复码错误不改动任何包裹物', () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      await vault.setup('old-password');
+      final rawBefore = (await store.read(KeyVault.storageKey))!;
+
+      final wrongCode = List.generate(24, (_) => 'X').join();
+      expect(
+        () => vault.resetPasswordWithRecoveryCode(wrongCode, 'new-pass-9'),
+        throwsA(isA<KeyVaultUnlockException>()),
+      );
+
+      expect(await store.read(KeyVault.storageKey), equals(rawBefore));
+      final fresh = newVault(store);
+      await fresh.unlock('old-password'); // 旧口令仍有效
+    });
+
+    test('恢复码重置口令：无恢复码包裹份抛 StateError（理论不可达防御）',
+        () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      await vault.setup('old-password');
+      final doc =
+          jsonDecode((await store.read(KeyVault.storageKey))!) as Map<String, dynamic>;
+      doc.remove('recoveryWrap');
+      await store.write(KeyVault.storageKey, jsonEncode(doc));
+
+      expect(
+        () => vault.resetPasswordWithRecoveryCode('ABCDEFGHJKLMNPQRSTUVWXY2', 'n1'),
+        throwsA(isA<StateError>()),
+      );
+    });
   });
 }

@@ -447,6 +447,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupGuidanceLater => 'Later';
 
   @override
+  String get backupResetPasswordTitle => 'Reset Encryption Password';
+
+  @override
+  String get backupResetPasswordSubtitle =>
+      'Reset with the recovery code (use when the password is forgotten)';
+
+  @override
+  String get backupResetRecoveryCodeLabel => 'Recovery code';
+
+  @override
+  String get backupResetCodeInvalid =>
+      'Invalid recovery code format (24 letters/digits)';
+
+  @override
+  String get backupResetNewPasswordLabel => 'New password';
+
+  @override
+  String get backupResetNewPasswordConfirmLabel => 'Confirm new password';
+
+  @override
+  String get backupResetting => 'Resetting password…';
+
+  @override
+  String get backupResetWrongCode =>
+      'Recovery code does not match, please check and retry';
+
+  @override
+  String get backupResetDone => 'Encryption password has been reset';
+
+  @override
+  String get backupResetFailed => 'Reset failed, please try again';
+
+  @override
   String get monthlyBudget => 'Monthly Budget';
 
   @override

@@ -28,6 +28,7 @@ class _BackupScreenState extends State<BackupScreen> {
   final KeyVault _vault = KeyVault(SecureVaultStore.instance);
 
   bool _enabled = false;
+  bool _configured = false;
 
   @override
   void initState() {
@@ -37,7 +38,13 @@ class _BackupScreenState extends State<BackupScreen> {
 
   Future<void> _loadState() async {
     final enabled = await BackupFlagStore.isEnabled();
-    if (mounted) setState(() => _enabled = enabled);
+    final configured = await _vault.isConfigured();
+    if (mounted) {
+      setState(() {
+        _enabled = enabled;
+        _configured = configured;
+      });
+    }
   }
 
   void _onTabTapped(int index) {
@@ -77,7 +84,12 @@ class _BackupScreenState extends State<BackupScreen> {
       final saved = await _showRecoveryCodeDialog(result.recoveryCode);
       if (!saved || !mounted) return;
       await BackupFlagStore.setEnabled(true);
-      if (mounted) setState(() => _enabled = true);
+      if (mounted) {
+        setState(() {
+          _enabled = true;
+          _configured = true;
+        });
+      }
     } else {
       final confirmed = await _showDisableConfirm();
       if (confirmed != true || !mounted) return;
@@ -122,15 +134,7 @@ class _BackupScreenState extends State<BackupScreen> {
                           setDialogState(() => obscure = !obscure),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.length < 8) {
-                      return l10n.backupPasswordTooShort;
-                    }
-                    if (!RegExp(r'(?=.*[A-Za-z])(?=.*\d)').hasMatch(value)) {
-                      return l10n.backupPasswordWeak;
-                    }
-                    return null;
-                  },
+                  validator: (value) => _validatePassword(l10n, value),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -314,6 +318,160 @@ class _BackupScreenState extends State<BackupScreen> {
     );
   }
 
+  /// 恢复码重置口令流（6.5）：对话框输入恢复码 + 新口令两次，
+  /// 校验通过后调 KeyVault 重置（生产档 Argon2 两次派生，加载遮罩）。
+  Future<void> _resetPassword() async {
+    final input = await _showResetPasswordDialog();
+    if (input == null || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    _showResettingDialog(l10n);
+    try {
+      await _vault.resetPasswordWithRecoveryCode(input.$1, input.$2);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupResetDone)),
+        );
+      }
+    } on KeyVaultUnlockException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupResetWrongCode)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupResetFailed)),
+        );
+      }
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
+  Future<(String, String)?> _showResetPasswordDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final formKey = GlobalKey<FormState>();
+    final codeController = TextEditingController();
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    var obscure = true;
+
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(l10n.backupResetPasswordTitle),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: codeController,
+                  decoration: InputDecoration(
+                    labelText: l10n.backupResetRecoveryCodeLabel,
+                  ),
+                  validator: (value) {
+                    if (KeyVault.normalizeRecoveryCode(value ?? '').length !=
+                        24) {
+                      return l10n.backupResetCodeInvalid;
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: passwordController,
+                  obscureText: obscure,
+                  autofillHints: const [AutofillHints.newPassword],
+                  decoration: InputDecoration(
+                    labelText: l10n.backupResetNewPasswordLabel,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscure ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () =>
+                          setDialogState(() => obscure = !obscure),
+                    ),
+                  ),
+                  validator: (value) => _validatePassword(l10n, value),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: confirmController,
+                  obscureText: obscure,
+                  autofillHints: const [AutofillHints.newPassword],
+                  decoration: InputDecoration(
+                    labelText: l10n.backupResetNewPasswordConfirmLabel,
+                  ),
+                  validator: (value) {
+                    if (value != passwordController.text) {
+                      return l10n.backupPasswordMismatch;
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            TextButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(dialogContext)
+                      .pop((codeController.text, passwordController.text));
+                }
+              },
+              child: Text(l10n.confirm),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    codeController.dispose();
+    passwordController.dispose();
+    confirmController.dispose();
+    return result;
+  }
+
+  void _showResettingDialog(AppLocalizations l10n) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              ScaledText(l10n.backupResetting),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 口令强度校验（设置与重置共用）：≥8 位且同时包含字母与数字。
+  String? _validatePassword(AppLocalizations l10n, String? value) {
+    if (value == null || value.length < 8) {
+      return l10n.backupPasswordTooShort;
+    }
+    if (!RegExp(r'(?=.*[A-Za-z])(?=.*\d)').hasMatch(value)) {
+      return l10n.backupPasswordWeak;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -421,6 +579,48 @@ class _BackupScreenState extends State<BackupScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // 恢复码重置口令入口（已设置过口令才显示，见 6.5）
+            if (_configured)
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: ThemeHelper.surface(context),
+                  border: Border.all(color: borderColor),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color:
+                          ThemeHelper.primary(context).withValues(alpha: 0.2),
+                    ),
+                    child: Icon(
+                      Icons.key,
+                      color: ThemeHelper.primary(context),
+                      size: 20,
+                    ),
+                  ),
+                  title: ScaledText(
+                    l10n.backupResetPasswordTitle,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  subtitle: ScaledText(
+                    l10n.backupResetPasswordSubtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  onTap: _resetPassword,
+                ),
+              ),
+            if (_configured) const SizedBox(height: 16),
             // 当前状态提示
             Container(
               padding: const EdgeInsets.all(16),

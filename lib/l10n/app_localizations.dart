@@ -947,6 +947,66 @@ abstract class AppLocalizations {
   /// **'Later'**
   String get backupGuidanceLater;
 
+  /// No description provided for @backupResetPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Encryption Password'**
+  String get backupResetPasswordTitle;
+
+  /// No description provided for @backupResetPasswordSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset with the recovery code (use when the password is forgotten)'**
+  String get backupResetPasswordSubtitle;
+
+  /// No description provided for @backupResetRecoveryCodeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery code'**
+  String get backupResetRecoveryCodeLabel;
+
+  /// No description provided for @backupResetCodeInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid recovery code format (24 letters/digits)'**
+  String get backupResetCodeInvalid;
+
+  /// No description provided for @backupResetNewPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get backupResetNewPasswordLabel;
+
+  /// No description provided for @backupResetNewPasswordConfirmLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm new password'**
+  String get backupResetNewPasswordConfirmLabel;
+
+  /// No description provided for @backupResetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Resetting password…'**
+  String get backupResetting;
+
+  /// No description provided for @backupResetWrongCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery code does not match, please check and retry'**
+  String get backupResetWrongCode;
+
+  /// No description provided for @backupResetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption password has been reset'**
+  String get backupResetDone;
+
+  /// No description provided for @backupResetFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset failed, please try again'**
+  String get backupResetFailed;
+
   /// No description provided for @monthlyBudget.
   ///
   /// In en, this message translates to:
