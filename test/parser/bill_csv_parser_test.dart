@@ -27,26 +27,7 @@ void main() {
     return Uint8List.fromList(gbk.encode(content));
   }
 
-  /// 微信账单 fixture：UTF-8 带 BOM，首行首格含「微信支付账单」
-  Uint8List wechatCsv() {
-    const content = '''
-微信支付账单明细,,,,,,,,
-微信支付账单,,,,,,,,
-微信昵称：[测试],,,,,,,,
-起始时间：[2026-09-01 00:00:00] 终止时间：[2026-09-30 00:00:00],,,,,,,,
-导出类型：[全部],,,,,,,,
-交易时间,交易类型,交易对方,商品,收/支,金额(元),支付方式,当前状态,交易单号,商户单号,备注
-2026-09-05 08:30:00,商户消费,肯德基,肯德基早餐,支出,¥25.50,零钱,支付成功,4200001234,200001,/
-2026-09-06 09:00:00,转账,张三,转账,收入,¥100.00,零钱,已收款,4200001235,200002,/
-2026-09-07 12:00:00,商户消费,美团外卖,/,支出,¥30.00,银行卡,支付成功,4200001236,,/
-2026-09-08 14:00:00,商户消费,星巴克,拿铁,支出,¥35.00,零钱,支付成功,,200004,/
-2026-09-09 10:00:00,零钱通转入,零钱通,/,/,¥10.00,零钱,转账成功,4200001238,200005,/
-2026-09-10 10:00:00,商户消费,异常行,缺金额,支出,,零钱,支付成功,4200001239,200006,/
-''';
-    return Uint8List.fromList(utf8.encode('\uFEFF$content'));
-  }
-
-  group('任务 3.3：账单 CSV 本地解析器（支付宝/微信字段映射）', () {
+  group('任务 3.3：账单 CSV 本地解析器（支付宝字段映射）', () {
     test('支付宝：GBK 编码识别 + 平台来源字段 + 正常行字段映射', () {
       final result = parser.parse(alipayCsv());
 
@@ -87,47 +68,6 @@ void main() {
       expect(result.totalExpense, 97.0);
       expect(result.startDate, DateTime(2026, 9, 1, 10, 0, 0));
       expect(result.endDate, DateTime(2026, 9, 6, 9, 0, 0));
-    });
-
-    test('微信：UTF-8 BOM 识别 + 平台来源字段 + 正常行字段映射', () {
-      final result = parser.parse(wechatCsv());
-
-      expect(result, isNotNull);
-      expect(result!.platform, '微信');
-      expect(result.platformCode, 'wechat');
-      expect(result.rows, hasLength(5));
-      expect(result.errors, hasLength(1), reason: '金额缺失行为异常行');
-
-      final first = result.rows.first;
-      expect(first.platformCode, 'wechat');
-      expect(first.tradeNo, '4200001234');
-      expect(first.merchantOrderNo, '200001');
-      expect(first.date, DateTime(2026, 9, 5, 8, 30, 0));
-      expect(first.amount, 25.50, reason: '¥ 货币符号剥离');
-      expect(first.type, 1);
-      expect(first.counterparty, '肯德基');
-      expect(first.description, '肯德基早餐');
-      expect(first.payMethod, '零钱');
-      expect(first.status, '支付成功');
-    });
-
-    test('微信：收入类型、商品「/」回退、交易单号缺失兜底、收/支「/」默认支出', () {
-      final result = parser.parse(wechatCsv())!;
-
-      expect(result.rows[1].type, 0, reason: '收入 → 0');
-
-      // 商品为「/」时回退 交易类型/交易对方（对齐服务端）
-      expect(result.rows[2].description, '商户消费/美团外卖');
-
-      // 交易单号缺失时以 时间+金额+对方 生成兜底单号（对齐服务端）
-      expect(result.rows[3].tradeNo,
-          'wechat_2026-09-08 14:00:00_¥35.00_星巴克');
-
-      // 收/支 为「/」时默认支出（对齐服务端微信解析口径）
-      expect(result.rows[4].type, 1);
-
-      expect(result.totalIncome, 100.0);
-      expect(result.totalExpense, 100.5);
     });
 
     test('不支持的平台/非账单文件返回 null', () {

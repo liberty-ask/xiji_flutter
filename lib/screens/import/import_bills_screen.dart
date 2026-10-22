@@ -13,6 +13,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/bill_platform.dart';
 import '../../models/category.dart';
 import '../../parser/bill_csv_parser.dart';
+import '../../parser/bill_xlsx_parser.dart';
 import '../../services/api/category_service.dart';
 import '../../utils/icon_constants.dart';
 import '../../utils/responsive_helper.dart';
@@ -24,7 +25,8 @@ import '../../widgets/custom/category_selector.dart';
 
 /// 账单导入页（本地优先：全程离线，无网络请求）。
 ///
-/// 流程：选平台卡 → 选 CSV → 本地解析（GBK/UTF-8）→ 预览
+/// 流程：选平台卡 → 选文件（支付宝/京东 CSV，微信 XLSX）→ 本地解析
+/// （GBK/UTF-8/xlsx）→ 预览
 /// （按交易对方分组、点击组分类批量指认、指认回写学习表）→ 确认入库
 /// （tradeNo 去重、未分类兜底）→ 结果页。
 enum ImportStep {
@@ -41,10 +43,11 @@ class ImportBillsScreen extends StatefulWidget {
 }
 
 class _ImportBillsScreenState extends State<ImportBillsScreen> {
-  // 本地静态平台列表（原服务端 getSupportedPlatforms 退役，格式仅 CSV）
+  // 本地静态平台列表（原服务端 getSupportedPlatforms 退役；微信官方邮箱导出
+  // 仅 XLSX，支付宝/京东官方导出为 CSV）
   static final _platforms = [
     BillPlatform(code: 'alipay', name: '支付宝', supportedFormats: ['csv']),
-    BillPlatform(code: 'wechat', name: '微信', supportedFormats: ['csv']),
+    BillPlatform(code: 'wechat', name: '微信', supportedFormats: ['xlsx']),
     BillPlatform(code: 'jd', name: '京东', supportedFormats: ['csv']),
   ];
 
@@ -193,7 +196,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
 
   Widget _buildPlatformCard(BillPlatform platform) {
     return InkWell(
-      onTap: () => _selectFile(),
+      onTap: () => _selectFile(platform),
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,
       child: Container(
@@ -253,12 +256,12 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
 
   // ---------------- 文件选择与本地解析 ----------------
 
-  Future<void> _selectFile() async {
+  Future<void> _selectFile(BillPlatform platform) async {
     final l10n = AppLocalizations.of(context)!;
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const ['csv'],
+        allowedExtensions: platform.supportedFormats, // 微信 xlsx，其余 csv
         withData: true, // 直接读 bytes，规避移动端 path 访问差异
       );
       final files = result?.files;
@@ -294,8 +297,12 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
     });
 
     try {
-      // 1. 本地解析（自动识别平台与编码）
-      final parsed = BillCsvParser().parse(bytes);
+      // 1. 本地解析：xlsx 为 zip 容器（PK 魔数）→ 微信账单 xlsx 解析，
+      //    其余按 CSV 解析（自动识别平台与编码）
+      final isXlsx = bytes.length > 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+      final parsed = isXlsx
+          ? BillXlsxParser().parse(bytes)
+          : BillCsvParser().parse(bytes);
       if (parsed == null || parsed.rows.isEmpty) {
         throw Exception(AppLocalizations.of(context)!.billParseFailed);
       }

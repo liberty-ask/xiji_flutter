@@ -49,6 +49,9 @@ dependencies:
   # 账单 CSV 编码支持（支付宝账单为 GBK 编码）
   fast_gbk: ^1.0.0
 
+  # 微信账单 XLSX 解析（官方邮箱导出为 XLSX 格式）
+  excel: ^4.0.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

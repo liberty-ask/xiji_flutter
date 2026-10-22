@@ -63,21 +63,18 @@ class BillParseResult {
   int get totalCount => rows.length + errors.length;
 }
 
-/// 账单 CSV 本地解析器：支付宝/微信/京东格式识别与字段映射。
+/// 账单 CSV 本地解析器：支付宝/京东格式识别与字段映射。
 ///
-/// 编码：微信 CSV 为 UTF-8，支付宝 CSV 为 GBK，京东 CSV 为 GBK 或 UTF-8——
+/// 编码：支付宝 CSV 为 GBK，京东 CSV 为 GBK 或 UTF-8——
 /// 先按严格 UTF-8 解码，失败则回退 GBK（服务端 HeaderDetector 同序尝试，口径一致）。
-/// 字段映射与收/支语义逐条对齐服务端 AlipayBillParser / WechatBillParser / JdBillParser，
+/// 字段映射与收/支语义逐条对齐服务端 AlipayBillParser / JdBillParser，
 /// 平台自身的分类列不参与本地分类（分类列由本地引擎预填，spec 约定）。
+/// 微信账单官方仅导出 XLSX（不产 CSV），走 BillXlsxParser 解析。
 class BillCsvParser {
   /// 平台识别关键字段（对齐服务端 HeaderDetector.PLATFORM_KEYWORDS）
   static const _alipayKeywords = {
     '交易订单号', '交易时间', '金额', '收/支', '交易对方',
     '商品说明', '收/付款方式', '交易分类', '交易状态', '商家订单号',
-  };
-  static const _wechatKeywords = {
-    '交易单号', '交易时间', '金额(元)', '收/支', '交易类型',
-    '交易对方', '商品', '支付方式', '当前状态', '商户单号',
   };
   static const _jdKeywords = {
     '交易时间', '商户名称', '交易说明', '金额', '收/付款方式',
@@ -134,10 +131,10 @@ class BillCsvParser {
       }
     }
 
-    return _buildResult(platformCode, rows, errors);
+    return buildResult(platformCode, rows, errors);
   }
 
-  /// 平台识别：支付宝第 4 行首格含「支付宝账户」；微信首行首格含「微信支付账单」；
+  /// 平台识别：支付宝第 4 行首格含「支付宝账户」；
   /// 京东第 2 行首格含「京东账号」
   String? _detectPlatform(List<String> lines) {
     String firstCellOf(String line) {
@@ -147,9 +144,6 @@ class BillCsvParser {
 
     if (lines.length > 3 && firstCellOf(lines[3]).contains('支付宝账户')) {
       return 'alipay';
-    }
-    if (lines.isNotEmpty && firstCellOf(lines.first).contains('微信支付账单')) {
-      return 'wechat';
     }
     if (lines.length > 1 && firstCellOf(lines[1]).contains('京东账号')) {
       return 'jd';
@@ -161,7 +155,6 @@ class BillCsvParser {
   int _detectHeaderRow(List<String> lines, String platformCode) {
     final keywords = switch (platformCode) {
       'alipay' => _alipayKeywords,
-      'wechat' => _wechatKeywords,
       _ => _jdKeywords,
     };
     final maxSearch = lines.length < 30 ? lines.length : 30;
@@ -192,18 +185,16 @@ class BillCsvParser {
       return null;
     }
 
-    final date = _parseDate(cell(switch (platformCode) {
+    final date = parseDate(cell(switch (platformCode) {
       'alipay' => ['交易时间', '交易创建时间', '付款时间'],
-      'wechat' => ['交易时间', '支付时间'],
       _ => ['交易时间'],
     }));
     final amountRaw = cell(switch (platformCode) {
       'alipay' => ['金额', '金额（元）'],
-      'wechat' => ['金额(元)', '金额'],
       _ => ['金额'],
     });
     // 京东金额可能带括号退款标记（如 19.88(已退款2)），取括号前数值
-    final amount = _parseAmount(
+    final amount = parseAmount(
         platformCode == 'jd' && amountRaw != null
             ? amountRaw.replaceAll(RegExp(r'\([^)]*\)'), '').trim()
             : amountRaw);
@@ -236,19 +227,6 @@ class BillCsvParser {
         type = 1;
       } else if (incomeExpense == '不计收支') {
         type = amountRaw != null && amountRaw.contains('已全额退款') ? 1 : 2;
-      }
-    } else {
-      // 微信：收入/收款/转入→0，支出/付款/转出→1，其余默认支出（对齐服务端）
-      if (incomeExpense == '收入' ||
-          incomeExpense == '收款' ||
-          incomeExpense == '转入') {
-        type = 0;
-      } else if (incomeExpense == '支出' ||
-          incomeExpense == '付款' ||
-          incomeExpense == '转出') {
-        type = 1;
-      } else {
-        type = 1;
       }
     }
 
@@ -283,34 +261,11 @@ class BillCsvParser {
       );
     }
 
-    // 微信：交易单号缺失时以 时间+金额+对方 生成兜底单号（对齐服务端）
-    var tradeNo = cell(['交易单号']);
-    tradeNo ??= 'wechat_${cell(['交易时间']) ?? ''}_${cell(['金额(元)']) ?? ''}_${cell(['交易对方']) ?? ''}';
-
-    // 微信商品列为空或「/」时，回退 交易类型/交易对方（对齐服务端）
-    var description = cell(['商品']);
-    if (description == null || description == '/') {
-      final category = cell(['交易类型']) ?? '';
-      final counterparty = cell(['交易对方']) ?? '';
-      description = '$category/$counterparty';
-    }
-
-    return ParsedBillRow(
-      platformCode: platformCode,
-      tradeNo: tradeNo,
-      merchantOrderNo: cell(['商户单号']),
-      date: date,
-      amount: amount,
-      type: type,
-      counterparty: cell(['交易对方']),
-      description: description,
-      payMethod: cell(['支付方式']),
-      status: cell(['当前状态']),
-    );
+    return null; // 不可达：平台识别仅产出 alipay/jd
   }
 
-  /// 日期解析：yyyy-MM-dd[ HH:mm[:ss]] 及 yyyy/M/d、yyyy年M月d日
-  DateTime? _parseDate(String? raw) {
+  /// 日期解析：yyyy-MM-dd[ HH:mm[:ss]] 及 yyyy/M/d、yyyy年M月d日（CSV/XLSX 共用）
+  static DateTime? parseDate(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     var s = raw.trim();
     s = s.replaceAll('年', '-').replaceAll('月', '-').replaceAll('/', '-');
@@ -320,8 +275,8 @@ class BillCsvParser {
     return DateTime.tryParse(s);
   }
 
-  /// 金额解析：去货币符号与千分位后转数值（对齐服务端 ExcelUtil.parseAmount）
-  double? _parseAmount(String? raw) {
+  /// 金额解析：去货币符号与千分位后转数值（对齐服务端 ExcelUtil.parseAmount，CSV/XLSX 共用）
+  static double? parseAmount(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     final cleaned = raw
         .trim()
@@ -334,7 +289,8 @@ class BillCsvParser {
     return double.tryParse(cleaned);
   }
 
-  BillParseResult _buildResult(
+  /// 解析结果汇总：起止日期与收支合计（CSV/XLSX 共用）
+  static BillParseResult buildResult(
       String platformCode, List<ParsedBillRow> rows, List<BillParseError> errors) {
     DateTime? start;
     DateTime? end;
