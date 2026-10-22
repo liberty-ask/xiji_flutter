@@ -43,7 +43,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleIntent(intent)
+        // 冷启动不推送路由：此时 FlutterFragment 尚未 attach、delegate 为 null，
+        // 访问 flutterEngine 会 NPE 闪退；冷启动路由由 Dart 侧 getInitialRoute 拉取兜底
     }
 
     override fun onNewIntent(intent: Intent) {
