@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/local/current_family_store.dart';
+import '../data/local/db_provider.dart';
 import '../data/local/local_family_cache.dart';
 import '../data/local/local_user.dart';
 import '../models/user.dart';
@@ -44,6 +45,7 @@ class AuthProvider with ChangeNotifier {
     await LocalUser.clear();
     await LocalFamilyCache.clear();
     await CurrentFamilyStore.clear();
+    await Db.close(); // 关账号库清单例，文件保留（回登复用）
     _hasToken = false;
     _user = null;
     notifyListeners();
@@ -75,6 +77,7 @@ class AuthProvider with ChangeNotifier {
       _user = User.fromJson(userData);
       if (_user != null) {
         await LocalUser.cache(_user!);
+        await Db.switchAccount(_user!.id); // 登录/冷启动恢复后锚定账号库
       }
     } catch (e) {
       debugPrint('获取用户信息失败: $e');
@@ -147,6 +150,7 @@ class AuthProvider with ChangeNotifier {
       if (registerResult['user'] != null) {
         _user = User.fromJson(registerResult['user']);
         await LocalUser.cache(_user!);
+        await Db.switchAccount(_user!.id); // 注册即登录，锚定账号库
       } else {
         _user = null;
       }
