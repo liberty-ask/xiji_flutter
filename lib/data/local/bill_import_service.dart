@@ -10,6 +10,7 @@ import 'current_family_store.dart';
 import 'db_provider.dart';
 import 'local_user.dart';
 import 'transaction_repository.dart';
+import '../../utils/money.dart' show Money;
 
 /// 导入预览条目：一行账单 + 引擎预填分类 + 重复单号标记。
 /// categoryId 可变——预览页批量指认后就地更新
@@ -162,7 +163,7 @@ class BillImportService {
       toInsert.add(local.TransactionsCompanion.insert(
         type: type,
         categoryId: item.categoryId,
-        amount: item.row.amount,
+        amountCents: Money.yuanToCents(item.row.amount),
         date: item.row.date,
         userId: user?.id ?? '',
         familyId: Value(familyId),

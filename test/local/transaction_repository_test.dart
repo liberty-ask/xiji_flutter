@@ -11,7 +11,7 @@ void main() {
 
   TransactionsCompanion newTx({
     int type = 1,
-    double amount = 30,
+    int amountCents = 3000,
     DateTime? date,
     String? description,
     String? counterparty,
@@ -20,7 +20,7 @@ void main() {
       TransactionsCompanion.insert(
         type: type,
         categoryId: diningId,
-        amount: amount,
+        amountCents: amountCents,
         date: date ?? DateTime(2026, 10, 1),
         userId: 'user-1',
         familyId: Value(familyId),
@@ -55,18 +55,18 @@ void main() {
 
     test('编辑：version+1、updatedAt 刷新、FTS 重建', () async {
       final row = await repo.insert(newTx(
-          description: '午餐', counterparty: '公司食堂', amount: 15));
+          description: '午餐', counterparty: '公司食堂', amountCents: 1500));
       final before = row.updatedAt;
 
-      final updated = await repo.update(
-          row.id, newTx(description: '晚餐', counterparty: '外婆家', amount: 42));
+      final updated = await repo.update(row.id,
+          newTx(description: '晚餐', counterparty: '外婆家', amountCents: 4200));
 
       expect(updated.version, 2, reason: '编辑后 version 递增');
       // drift 存储秒级精度，同秒内编辑允许相等，但不得早于插入时间
       expect(updated.updatedAt.isBefore(before), false,
           reason: 'updatedAt 不得回退');
       expect(updated.syncPending, true);
-      expect(updated.amount, 42);
+      expect(updated.amountCents, 4200);
 
       expect(await repo.search('f1', '午餐'), isEmpty, reason: '旧关键词应从索引清除');
       expect(await repo.search('f1', '晚餐').then((l) => l.single.id), row.id);
@@ -98,11 +98,11 @@ void main() {
 
     test('列表：排除墓碑、按业务日期倒序', () async {
       await repo.insert(
-          newTx(description: '早', date: DateTime(2026, 10, 1), amount: 10));
+          newTx(description: '早', date: DateTime(2026, 10, 1), amountCents: 1000));
       await repo.insert(
-          newTx(description: '晚', date: DateTime(2026, 10, 3), amount: 20));
+          newTx(description: '晚', date: DateTime(2026, 10, 3), amountCents: 2000));
       final deleted = await repo.insert(
-          newTx(description: '中', date: DateTime(2026, 10, 2), amount: 30));
+          newTx(description: '中', date: DateTime(2026, 10, 2), amountCents: 3000));
       await repo.softDelete(deleted.id);
 
       final list = await repo.listAll('f1');
@@ -125,7 +125,7 @@ void main() {
     test('编辑不存在的交易抛错', () async {
       await expectLater(
         () => repo.update('00000000-0000-7000-8000-000000000000',
-            const TransactionsCompanion(amount: Value(1))),
+            const TransactionsCompanion(amountCents: Value(100))),
         throwsStateError,
       );
     });

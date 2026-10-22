@@ -7,6 +7,7 @@ import 'app_database.dart' as local;
 import 'builtin_categories.dart';
 import 'current_family_store.dart';
 import 'fts_tokenizer.dart';
+import '../../utils/money.dart' show Money;
 
 /// 在线版 -> 离线版 备份导入器（5.8，格式见 openspec design.md D10）。
 ///
@@ -168,7 +169,7 @@ class BackupImportService {
           id: Value(id),
           type: type,
           categoryId: categoryId,
-          amount: amount,
+          amountCents: Money.yuanToCents(amount),
           date: DateTime.parse(dateStr),
           userId: tx['createdBy'] as String? ?? '',
           familyId: Value(familyId),
@@ -202,7 +203,7 @@ class BackupImportService {
                   familyId: Value(familyId),
                   year: now.year,
                   month: now.month,
-                  amount: amount,
+                  amountCents: Money.yuanToCents(amount),
                   updatedAt: Value(now),
                 ));
             result.budgetsImported = 1;

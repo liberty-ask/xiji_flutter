@@ -78,7 +78,7 @@ void main() {
           ..where((t) => t.id.equals('7001')))
         .getSingle();
     expect(tx.type, 1);
-    expect(tx.amount, 47.62);
+    expect(tx.amountCents, 4762);
     expect(tx.categoryId, diningId); // 9001 -> 内置餐饮 UUID
     expect(tx.familyId, 'fam-1'); // 归一化当前家庭
     expect(tx.userId, '2009264986806337537');
@@ -104,7 +104,7 @@ void main() {
               b.year.equals(now.year) &
               b.month.equals(now.month)))
         .getSingle();
-    expect(budget.amount, 2000.0);
+    expect(budget.amountCents, 200000);
   });
 
   test('幂等：重复导入零副作用（分类同名映射、交易按 ID 跳过、预算不覆盖）', () async {
@@ -112,7 +112,7 @@ void main() {
     // 幂等导入之间用户改了当月预算，导入不得覆盖
     await (db.update(db.budgets)
           ..where((b) => b.familyId.equals('fam-1')))
-        .write(const BudgetsCompanion(amount: Value(5000)));
+        .write(const BudgetsCompanion(amountCents: Value(500000)));
 
     final result = await service.importFromString(backupJson());
 
@@ -128,7 +128,7 @@ void main() {
     final budget = await (db.select(db.budgets)
           ..where((b) => b.familyId.equals('fam-1')))
         .getSingle();
-    expect(budget.amount, 5000.0);
+    expect(budget.amountCents, 500000);
   });
 
   test('坏 JSON 与版本不符抛 FormatException', () async {

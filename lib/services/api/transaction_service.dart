@@ -10,6 +10,7 @@ import '../../data/local/local_user.dart';
 import '../../data/local/statistics_repository.dart';
 import '../../data/local/transaction_repository.dart';
 import '../../models/transaction.dart';
+import '../../utils/money.dart';
 
 /// 交易数据门面：本地优先架构下的唯一读写入口。
 ///
@@ -78,7 +79,7 @@ class TransactionService {
     final row = await _transactions.insert(local.TransactionsCompanion.insert(
       type: type,
       categoryId: cat.id,
-      amount: amount,
+      amountCents: Money.yuanToCents(amount),
       date: _parseDate(date)!,
       userId: user?.id ?? '',
       familyId: Value(familyId),
@@ -125,7 +126,7 @@ class TransactionService {
               type: TransactionType.fromInt(r.type),
               category: categoryById[r.categoryId]?.name ?? '',
               icon: categoryById[r.categoryId]?.icon,
-              amount: r.amount,
+              amount: Money.centsToYuan(r.amountCents),
               date: r.date,
               userId: r.userId,
               description: r.description,
@@ -159,7 +160,7 @@ class TransactionService {
       local.TransactionsCompanion(
         type: Value(type),
         categoryId: Value(cat.id),
-        amount: Value(amount),
+        amountCents: Value(Money.yuanToCents(amount)),
         date: Value(_parseDate(date)!),
         description: Value(note),
       ),
@@ -211,7 +212,7 @@ class TransactionService {
         'user': userName,
         'time': DateFormat('yyyy-MM-dd HH:mm').format(r.updatedAt),
         'date': DateFormat('yyyy-MM-dd').format(r.date),
-        'amount': r.amount,
+        'amount': Money.centsToYuan(r.amountCents),
         'isIncome': r.type == 0,
         'counterparty': r.counterparty,
         'description': r.description,

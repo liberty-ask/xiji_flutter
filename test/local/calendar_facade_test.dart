@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:xiji_flutter/utils/money.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/builtin_categories.dart';
 import 'package:xiji_flutter/data/local/category_repository.dart';
@@ -44,7 +45,7 @@ void main() {
     return transactions.insert(TransactionsCompanion.insert(
       type: type,
       categoryId: categoryId,
-      amount: amount,
+      amountCents: Money.yuanToCents(amount),
       date: date,
       userId: 'user-1',
       description: Value(description),
@@ -127,7 +128,7 @@ void main() {
       final t2 = await transactions.insert(TransactionsCompanion.insert(
         type: 2,
         categoryId: diningId,
-        amount: 100,
+        amountCents: 10000,
         date: DateTime(2026, 9, 8, 10, 0),
         userId: 'user-1',
       ));

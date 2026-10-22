@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:xiji_flutter/utils/money.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/category_repository.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
@@ -59,7 +60,7 @@ void main() {
     await txRepo.insert(TransactionsCompanion.insert(
       type: type,
       categoryId: diningId,
-      amount: amount,
+      amountCents: Money.yuanToCents(amount),
       date: date,
       userId: userId,
       description: Value(desc),
@@ -126,7 +127,7 @@ void main() {
       final row = await txRepo.findById(before.id);
       expect(row!.categoryId,
           isNot(diningId), reason: '编辑应把分类解析为新的 ID');
-      expect(row.amount, 15);
+      expect(row.amountCents, 1500);
       expect(row.date, DateTime(2026, 10, 16));
       expect(row.description, isNull, reason: '备注传 null 应清空');
       expect(row.version, before.version + 1);
@@ -275,7 +276,7 @@ void main() {
       await db.into(db.budgets).insert(BudgetsCompanion.insert(
             year: 2026,
             month: 11,
-            amount: 1000,
+            amountCents: 100000,
           ));
 
       final home = await txService.getHomeData(now);
@@ -321,7 +322,7 @@ void main() {
       await txRepo.insert(TransactionsCompanion.insert(
         type: 1,
         categoryId: cat.id,
-        amount: 88,
+        amountCents: 8800,
         date: now,
         userId: 'u1',
         description: const Value('猫粮'),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:xiji_flutter/utils/money.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
 import 'package:xiji_flutter/data/local/statistics_repository.dart';
@@ -51,7 +52,7 @@ void main() {
       txRepo.insert(TransactionsCompanion.insert(
         type: type,
         categoryId: categoryId,
-        amount: amount,
+        amountCents: Money.yuanToCents(amount),
         date: date,
         userId: 'u1',
       ));
@@ -264,7 +265,7 @@ void main() {
       final deleted = await txRepo.insert(TransactionsCompanion.insert(
         type: 1,
         categoryId: diningId,
-        amount: 500,
+        amountCents: 50000,
         date: DateTime(2026, 10, 7),
         userId: 'u1',
       ));

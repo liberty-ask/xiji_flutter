@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/local/budget_repository.dart';
 import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
+import '../../utils/money.dart';
 
 /// 预算数据门面：本地优先架构下的唯一读写入口。
 ///
@@ -40,7 +41,7 @@ class BudgetService {
       year ?? now.year,
       month ?? now.month,
     );
-    return {'budget': row?.amount};
+    return {'budget': row == null ? null : Money.centsToYuan(row.amountCents)};
   }
 
   /// 设置预算：同月已存在（含墓碑）则覆盖更新，否则新插入。
@@ -54,7 +55,7 @@ class BudgetService {
       familyId: await CurrentFamilyStore.get(),
       year: year,
       month: month,
-      amount: total,
+      amountCents: Money.yuanToCents(total),
     );
   }
 }

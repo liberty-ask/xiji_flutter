@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xiji_flutter/utils/money.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/statistics_repository.dart';
 import 'package:xiji_flutter/data/local/transaction_repository.dart';
@@ -35,7 +36,7 @@ void main() {
       txRepo.insert(TransactionsCompanion.insert(
         type: type,
         categoryId: categoryId,
-        amount: amount,
+        amountCents: Money.yuanToCents(amount),
         date: date,
         userId: 'user-1',
         familyId: Value(familyId),
@@ -98,7 +99,7 @@ void main() {
       final deleted = await txRepo.insert(TransactionsCompanion.insert(
         type: 1,
         categoryId: diningId,
-        amount: 500,
+        amountCents: 50000,
         date: DateTime(2026, 10, 3),
         userId: 'user-1',
         familyId: const Value('f1'),

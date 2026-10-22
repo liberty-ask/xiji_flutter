@@ -6,6 +6,7 @@ import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/statistics_repository.dart';
 import '../../data/local/transaction_repository.dart';
+import '../../utils/money.dart';
 
 /// 日历数据门面：本地优先架构下的日历页唯一数据源。
 ///
@@ -73,19 +74,24 @@ class CalendarService {
       for (final c in categories) c.id: c,
     };
 
-    var monthlyIncome = 0.0;
-    var monthlyExpense = 0.0;
     final dailySummary = <String, dynamic>{};
 
     // 汇总覆盖当月每天（含无交易日的零值），保持服务端键序
     for (var d = 1; d <= daysInMonth; d++) {
       final t = totalsByDay[d];
-      final income = t?.income ?? 0;
-      final expense = t?.expense ?? 0;
-      monthlyIncome += income;
-      monthlyExpense += expense;
-      dailySummary['$d'] = {'income': income, 'expense': expense};
+      dailySummary['$d'] = {
+        'income': t?.income ?? 0,
+        'expense': t?.expense ?? 0,
+      };
     }
+
+    // 月度三值走 monthlyOverview：SQL 分域整数 SUM 后一次性转元，
+    // 不再对每日元 double 做 Dart 累加（那是 15 位小数尾巴的根源）
+    final overview = await _stats.monthlyOverview(familyId,
+        DateTime(year, month, daysInMonth));
+    final monthlyIncome = overview.income;
+    final monthlyExpense = overview.expense;
+    final surplus = overview.balance;
 
     // 明细按日分组（每天均有键，空日为空列表）
     final dailyDetails = <String, dynamic>{
@@ -113,7 +119,7 @@ class CalendarService {
         'time': DateFormat('HH:mm').format(tx.date),
         'type': tx.type,
         'amount':
-            '${tx.type == 0 ? '+' : '-'} ${tx.amount.toStringAsFixed(2)}',
+            '${tx.type == 0 ? '+' : '-'} ${Money.centsToYuanText(tx.amountCents)}',
         'description': tx.description,
         'counterparty': tx.counterparty,
       });
@@ -122,7 +128,7 @@ class CalendarService {
     return {
       'monthlyIncome': monthlyIncome,
       'monthlyExpense': monthlyExpense,
-      'surplus': monthlyIncome - monthlyExpense,
+      'surplus': surplus,
       'dailySummary': dailySummary,
       'dailyDetails': dailyDetails,
     };

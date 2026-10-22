@@ -1,6 +1,7 @@
 ﻿import 'package:drift/drift.dart';
 
 import 'app_database.dart';
+import '../../utils/money.dart';
 
 /// 收支统计聚合：对齐服务端统计口径，聚合下推 SQLite（SUM GROUP BY）。
 ///
@@ -28,8 +29,8 @@ class StatisticsRepository {
     final yesterday = today.subtract(const Duration(days: 1));
 
     final rows = await _db.customSelect(
-      'SELECT SUM(CASE WHEN type = 0 THEN amount ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) AS expense '
+      'SELECT SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
+      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense '
       'FROM transactions WHERE deleted = 0 AND type IN (0, 1) '
       'AND family_id = ? AND date >= ? AND date <= ?',
       variables: [
@@ -45,12 +46,13 @@ class StatisticsRepository {
     final yesterdayExpense = await _sumExpense(familyId, yesterday);
 
     final r = rows.single;
-    final income = (r.readNullable<double>('income') ?? 0);
-    final expense = (r.readNullable<double>('expense') ?? 0);
+    final incomeCents = (r.readNullable<int>('income') ?? 0);
+    final expenseCents = (r.readNullable<int>('expense') ?? 0);
     return MonthlyOverview(
-      income: income,
-      expense: expense,
-      balance: income - expense,
+      income: Money.centsToYuan(incomeCents),
+      expense: Money.centsToYuan(expenseCents),
+      // 结余在分域整数相减后一次性转元，避免元 double 减法尾巴
+      balance: Money.centsToYuan(incomeCents - expenseCents),
       todayExpense: todayExpense,
       yesterdayExpense: yesterdayExpense,
     );
@@ -60,7 +62,7 @@ class StatisticsRepository {
     final dayEnd = day.add(const Duration(days: 1))
         .subtract(const Duration(microseconds: 1));
     final rows = await _db.customSelect(
-      'SELECT SUM(amount) AS total FROM transactions '
+      'SELECT SUM(amount_cents) AS total FROM transactions '
       'WHERE deleted = 0 AND type = 1 AND family_id = ? '
       'AND date >= ? AND date <= ?',
       variables: [
@@ -70,7 +72,7 @@ class StatisticsRepository {
       ],
       readsFrom: {_db.transactions},
     ).get();
-    return rows.single.readNullable<double>('total') ?? 0;
+    return Money.centsToYuan(rows.single.readNullable<int>('total') ?? 0);
   }
 
   /// 指定月份预算金额（无预算或墓碑返回 0）。家庭维度
@@ -83,7 +85,7 @@ class StatisticsRepository {
               b.deleted.equals(false)))
         .get();
     if (rows.isEmpty) return 0;
-    return rows.first.amount;
+    return Money.centsToYuan(rows.first.amountCents);
   }
 
   /// 分类统计：指定收支类型与日期区间，按分类聚合金额并降序。
@@ -98,9 +100,9 @@ class StatisticsRepository {
     final endInclusive = end.add(const Duration(days: 1))
         .subtract(const Duration(microseconds: 1));
 
-    // 聚合下推：SUM GROUP BY category_id
+    // 聚合下推：SUM GROUP BY category_id（分域整数聚合）
     final rows = await _db.customSelect(
-      'SELECT category_id, SUM(amount) AS total FROM transactions '
+      'SELECT category_id, SUM(amount_cents) AS total FROM transactions '
       'WHERE deleted = 0 AND type = ? AND family_id = ? '
       'AND date >= ? AND date <= ? '
       'GROUP BY category_id ORDER BY total DESC',
@@ -122,9 +124,9 @@ class StatisticsRepository {
         .get();
     final categoryById = {for (final c in categories) c.id: c};
 
-    // 总额分母含全部命中交易（对齐服务端 currentTotal 口径）
-    final total =
-        rows.fold<double>(0, (sum, r) => sum + (r.read<double>('total')));
+    // 总额分母含全部命中交易（对齐服务端 currentTotal 口径）；分域整数
+    final totalCents =
+        rows.fold<int>(0, (sum, r) => sum + (r.read<int>('total')));
 
     // 对齐服务端行为：分类查不到（已删除）则该条目不展示，
     // 但其金额已计入上面的 total 分母
@@ -133,13 +135,15 @@ class StatisticsRepository {
           final categoryId = r.read<String>('category_id');
           final category = categoryById[categoryId];
           if (category == null) return null;
-          final amount = r.read<double>('total');
+          final amountCents = r.read<int>('total');
           return CategoryStatisticsItem(
             categoryId: categoryId,
             name: category.name,
             icon: category.icon,
-            amount: amount,
-            percentage: total == 0 ? 0 : amount / total * 100,
+            amount: Money.centsToYuan(amountCents),
+            // 比例在分域整数比计算，与元域结果一致且无精度损失
+            percentage:
+                totalCents == 0 ? 0 : amountCents / totalCents * 100,
           );
         })
         .whereType<CategoryStatisticsItem>()
@@ -185,8 +189,8 @@ class StatisticsRepository {
     required DateTime end,
   }) async {
     final r = (await _db.customSelect(
-      'SELECT SUM(CASE WHEN type = 0 THEN amount ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) AS expense, '
+      'SELECT SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
+      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense, '
       'COUNT(*) AS cnt FROM transactions '
       'WHERE deleted = 0 AND type IN (0, 1) AND family_id = ? '
       'AND date >= ? AND date <= ?',
@@ -198,8 +202,8 @@ class StatisticsRepository {
       readsFrom: {_db.transactions},
     ).get()).single;
     return RangeSummary(
-      income: r.readNullable<double>('income') ?? 0,
-      expense: r.readNullable<double>('expense') ?? 0,
+      income: Money.centsToYuan(r.readNullable<int>('income') ?? 0),
+      expense: Money.centsToYuan(r.readNullable<int>('expense') ?? 0),
       count: r.read<int>('cnt'),
     );
   }
@@ -227,13 +231,13 @@ class StatisticsRepository {
       ..add(Variable<DateTime>(start))
       ..add(Variable<DateTime>(_endInclusive(end)));
     final r = (await _db.customSelect(
-      'SELECT SUM(amount) AS total, COUNT(*) AS cnt FROM transactions '
+      'SELECT SUM(amount_cents) AS total, COUNT(*) AS cnt FROM transactions '
       'WHERE ${where.join(' AND ')}',
       variables: variables,
       readsFrom: {_db.transactions},
     ).get()).single;
     return TypeTotals(
-      amount: r.readNullable<double>('total') ?? 0,
+      amount: Money.centsToYuan(r.readNullable<int>('total') ?? 0),
       count: r.read<int>('cnt'),
     );
   }
@@ -258,8 +262,8 @@ class StatisticsRepository {
       ..add(Variable<DateTime>(_endInclusive(end)));
     final rows = await _db.customSelect(
       "SELECT strftime('%Y-%m-%d', date, 'unixepoch', ?) AS day_key, "
-      'SUM(CASE WHEN type = 0 THEN amount ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) AS expense, '
+      'SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
+      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense, '
       'COUNT(*) AS cnt FROM transactions '
       'WHERE ${where.join(' AND ')} '
       'GROUP BY day_key ORDER BY day_key',
@@ -269,8 +273,8 @@ class StatisticsRepository {
     return rows
         .map((r) => DailyTotals(
               day: r.read<String>('day_key'),
-              income: r.readNullable<double>('income') ?? 0,
-              expense: r.readNullable<double>('expense') ?? 0,
+              income: Money.centsToYuan(r.readNullable<int>('income') ?? 0),
+              expense: Money.centsToYuan(r.readNullable<int>('expense') ?? 0),
               count: r.read<int>('cnt'),
             ))
         .toList();
@@ -294,8 +298,8 @@ class StatisticsRepository {
       ..add(Variable<DateTime>(_endInclusive(end)));
     final rows = await _db.customSelect(
       "SELECT CAST(strftime('%m', date, 'unixepoch', ?) AS INTEGER) AS m, "
-      'SUM(CASE WHEN type = 0 THEN amount ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount ELSE 0 END) AS expense '
+      'SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
+      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense '
       'FROM transactions '
       'WHERE ${where.join(' AND ')} '
       'GROUP BY m ORDER BY m',
@@ -305,8 +309,8 @@ class StatisticsRepository {
     return rows
         .map((r) => MonthlyTotals(
               month: r.read<int>('m'),
-              income: r.readNullable<double>('income') ?? 0,
-              expense: r.readNullable<double>('expense') ?? 0,
+              income: Money.centsToYuan(r.readNullable<int>('income') ?? 0),
+              expense: Money.centsToYuan(r.readNullable<int>('expense') ?? 0),
             ))
         .toList();
   }
@@ -329,12 +333,12 @@ class StatisticsRepository {
       ..add(Variable<DateTime>(start))
       ..add(Variable<DateTime>(_endInclusive(end)));
     final r = (await _db.customSelect(
-      'SELECT MAX(amount) AS max_amount FROM transactions '
+      'SELECT MAX(amount_cents) AS max_amount FROM transactions '
       'WHERE ${where.join(' AND ')}',
       variables: variables,
       readsFrom: {_db.transactions},
     ).get()).single;
-    return r.readNullable<double>('max_amount') ?? 0;
+    return Money.centsToYuan(r.readNullable<int>('max_amount') ?? 0);
   }
 }
 

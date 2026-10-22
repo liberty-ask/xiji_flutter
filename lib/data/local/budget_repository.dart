@@ -24,13 +24,14 @@ class BudgetRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
-  /// 写入月预算：同月已存在（含墓碑行）则更新金额并复活、version+1；否则新插入。
-  /// 家庭维度：同家庭同月唯一（UNIQUE(family_id, year, month)）
+  /// 写入月预算（金额单位分）：同月已存在（含墓碑行）则更新金额并复活、
+  /// version+1；否则新插入。家庭维度：同家庭同月唯一（UNIQUE(family_id,
+  /// year, month)）
   Future<void> upsertMonth({
     required String familyId,
     required int year,
     required int month,
-    required double amount,
+    required int amountCents,
   }) async {
     final now = DateTime.now();
     final existing = await (_db.select(_db.budgets)
@@ -44,7 +45,7 @@ class BudgetRepository {
             familyId: Value(familyId),
             year: year,
             month: month,
-            amount: amount,
+            amountCents: amountCents,
             updatedAt: Value(now),
           ));
       return;
@@ -52,7 +53,7 @@ class BudgetRepository {
     await (_db.update(_db.budgets)
           ..where((b) => b.id.equals(existing.id)))
         .write(BudgetsCompanion(
-          amount: Value(amount),
+          amountCents: Value(amountCents),
           version: Value(existing.version + 1),
           updatedAt: Value(now),
           deleted: const Value(false),

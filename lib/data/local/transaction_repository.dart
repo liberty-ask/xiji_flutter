@@ -85,7 +85,7 @@ class TransactionRepository {
           .writeReturning(TransactionsCompanion(
         type: changes.type,
         categoryId: changes.categoryId,
-        amount: changes.amount,
+        amountCents: changes.amountCents,
         date: changes.date,
         description: changes.description,
         counterparty: changes.counterparty,
@@ -238,7 +238,7 @@ class TransactionRepository {
       id: row.read<String>('id'),
       type: row.read<int>('type'),
       categoryId: row.read<String>('category_id'),
-      amount: row.read<double>('amount'),
+      amountCents: row.read<int>('amount_cents'),
       date: row.read<DateTime>('date'),
       userId: row.read<String>('user_id'),
       familyId: row.read<String>('family_id'),

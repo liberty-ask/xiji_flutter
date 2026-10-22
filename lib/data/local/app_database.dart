@@ -19,7 +19,9 @@ class Transactions extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   IntColumn get type => integer()(); // 0-收入 1-支出 2-不计收支
   TextColumn get categoryId => text()();
-  RealColumn get amount => real()();
+  // 金额整数分（Money.yuanToCents）：存储与聚合域用分，加减精确无浮点尾巴；
+  // 元 double 只存在于门面出参与页面展示（见 utils/money.dart 语义边界）
+  IntColumn get amountCents => integer()();
   DateTimeColumn get date => dateTime()(); // 业务日期，ID 时间戳不作为时间依据
   TextColumn get userId => text()();
   TextColumn get familyId => text().withDefault(const Constant(''))(); // 家庭归属（D11）
@@ -66,7 +68,7 @@ class Budgets extends Table {
       text().withDefault(const Constant(''))(); // 家庭归属（D11）
   IntColumn get year => integer()();
   IntColumn get month => integer()();
-  RealColumn get amount => real()();
+  IntColumn get amountCents => integer()();
 
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get updatedAt =>
@@ -107,7 +109,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   /// 系统内置分类种子：固定 UUID 常量，insertOrIgnore 幂等。
   /// sortOrder 按类型分别计数（支出 0-12、收入 0-6），保证同类型内顺序稳定
@@ -187,6 +189,66 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'ALTER TABLE transactions ADD COLUMN platform TEXT NULL',
         );
+      }
+      // v5：金额整数分化（金额精度约定）——amount REAL 元 → amount_cents
+      // INTEGER 分，消除浮点累加误差。SQLite 无法改列类型，两表整体重建，
+      // 存量元数据 ×100 四舍五入转分
+      if (from < 5) {
+        await customStatement(
+          'CREATE TABLE transactions_new('
+          'id TEXT NOT NULL, '
+          'type INTEGER NOT NULL, '
+          'category_id TEXT NOT NULL, '
+          'amount_cents INTEGER NOT NULL, '
+          'date INTEGER NOT NULL, '
+          'user_id TEXT NOT NULL, '
+          "family_id TEXT NOT NULL DEFAULT '', "
+          'description TEXT NULL, '
+          'counterparty TEXT NULL, '
+          'trade_no TEXT NULL, '
+          'merchant_order_no TEXT NULL, '
+          'pay_method TEXT NULL, '
+          'platform TEXT NULL, '
+          'version INTEGER NOT NULL DEFAULT 1, '
+          'updated_at INTEGER NOT NULL, '
+          'deleted INTEGER NOT NULL DEFAULT 0, '
+          'sync_pending INTEGER NOT NULL DEFAULT 1, '
+          'PRIMARY KEY (id))',
+        );
+        await customStatement(
+          'INSERT INTO transactions_new '
+          'SELECT id, type, category_id, '
+          'CAST(ROUND(amount * 100) AS INTEGER), '
+          'date, user_id, family_id, description, counterparty, trade_no, '
+          'merchant_order_no, pay_method, platform, version, updated_at, '
+          'deleted, sync_pending FROM transactions',
+        );
+        await customStatement('DROP TABLE transactions');
+        await customStatement(
+            'ALTER TABLE transactions_new RENAME TO transactions');
+
+        await customStatement(
+          'CREATE TABLE budgets_new('
+          'id TEXT NOT NULL, '
+          "family_id TEXT NOT NULL DEFAULT '', "
+          'year INTEGER NOT NULL, '
+          'month INTEGER NOT NULL, '
+          'amount_cents INTEGER NOT NULL, '
+          'version INTEGER NOT NULL DEFAULT 1, '
+          'updated_at INTEGER NOT NULL, '
+          'deleted INTEGER NOT NULL DEFAULT 0, '
+          'sync_pending INTEGER NOT NULL DEFAULT 1, '
+          'PRIMARY KEY (id), '
+          'UNIQUE (family_id, year, month))',
+        );
+        await customStatement(
+          'INSERT INTO budgets_new '
+          'SELECT id, family_id, year, month, '
+          'CAST(ROUND(amount * 100) AS INTEGER), '
+          'version, updated_at, deleted, sync_pending FROM budgets',
+        );
+        await customStatement('DROP TABLE budgets');
+        await customStatement('ALTER TABLE budgets_new RENAME TO budgets');
       }
     },
   );

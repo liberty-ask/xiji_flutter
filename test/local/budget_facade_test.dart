@@ -63,7 +63,7 @@ void main() {
       await db.into(db.budgets).insert(BudgetsCompanion.insert(
             year: 2026,
             month: 10,
-            amount: 1000,
+            amountCents: 100000,
             deleted: const Value(true),
           ));
       await service.setBudget(total: 6000, year: 2026, month: 10);
@@ -71,7 +71,7 @@ void main() {
       final rows = await db.select(db.budgets).get();
       expect(rows.length, 1);
       expect(rows.first.deleted, false);
-      expect(rows.first.amount, 6000);
+      expect(rows.first.amountCents, 600000);
       expect(rows.first.version, 2);
 
       final data = await service.getBudget(year: 2026, month: 10);

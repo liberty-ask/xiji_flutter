@@ -56,7 +56,7 @@ void main() {
           TransactionsCompanion.insert(
             type: 1,
             categoryId: category.id,
-            amount: 30,
+            amountCents: 3000,
             date: now,
             userId: 'user-1',
           ));
@@ -69,11 +69,11 @@ void main() {
 
     test('预算表 year+month 唯一约束', () async {
       await db.into(db.budgets).insert(
-          BudgetsCompanion.insert(year: 2026, month: 10, amount: 3000));
+          BudgetsCompanion.insert(year: 2026, month: 10, amountCents: 300000));
 
       await expectLater(
         () => db.into(db.budgets).insert(
-            BudgetsCompanion.insert(year: 2026, month: 10, amount: 5000)),
+            BudgetsCompanion.insert(year: 2026, month: 10, amountCents: 500000)),
         throwsA(isA<Exception>()),
         reason: '同年月重复设置预算应冲突',
       );
