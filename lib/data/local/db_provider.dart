@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_database.dart';
+import 'budget_repository.dart';
 import 'category_repository.dart';
 import 'category_rule_repository.dart';
 import 'statistics_repository.dart';
@@ -22,6 +23,7 @@ class Db {
   static CategoryRepository? _categories;
   static CategoryRuleRepository? _categoryRules;
   static StatisticsRepository? _statistics;
+  static BudgetRepository? _budgets;
 
   static AppDatabase get database {
     if (_db == null) {
@@ -30,6 +32,7 @@ class Db {
       _categories = CategoryRepository(_db!);
       _categoryRules = CategoryRuleRepository(_db!);
       _statistics = StatisticsRepository(_db!);
+      _budgets = BudgetRepository(_db!);
     }
     return _db!;
   }
@@ -54,6 +57,11 @@ class Db {
     return _statistics!;
   }
 
+  static BudgetRepository get budgets {
+    database; // 确保初始化
+    return _budgets!;
+  }
+
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
       final dir = await getApplicationDocumentsDirectory();
@@ -70,5 +78,6 @@ class Db {
     _categories = null;
     _categoryRules = null;
     _statistics = null;
+    _budgets = null;
   }
 }
