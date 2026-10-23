@@ -7,6 +7,7 @@ import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/sync/sync_outbox.dart';
+import 'package:xiji_flutter/sync/sync_puller.dart';
 import 'package:xiji_flutter/sync/sync_scheduler.dart';
 
 /// 假推送端口：记录每次调用，可注入响应/异常模拟服务端行为
@@ -30,6 +31,20 @@ class FakePort implements SyncPushPort {
 
   int get totalRecords =>
       calls.fold(0, (sum, c) => sum + c.records.length);
+}
+
+/// 空拉取端口（默认页）：服务端无该家庭记录
+class NoopPullPort implements SyncPullPort {
+  @override
+  Future<Map<String, dynamic>> pull(
+    String familyId,
+    int? cursorTime,
+    String? cursorId,
+  ) async =>
+      <String, dynamic>{
+        'records': <Map<String, dynamic>>[],
+        'hasMore': false,
+      };
 }
 
 void main() {
@@ -71,6 +86,7 @@ void main() {
     scheduler = SyncScheduler(
       db: db,
       port: port,
+      pullPort: NoopPullPort(),
       vault: vault,
       isSignedIn: () async => true,
     );
@@ -94,6 +110,7 @@ void main() {
       final lockedScheduler = SyncScheduler(
         db: db,
         port: port,
+        pullPort: NoopPullPort(),
         vault: vault,
         isSignedIn: () async => false,
       );
@@ -167,7 +184,7 @@ void main() {
       expect(payload['amountCents'], 3000);
     });
 
-    test('批次内部分失败只清成功条，重推仅剩条目', () async {
+    test('批次内部分失败只清成功条，重试推净剩余条目', () async {
       await insertTx('tx-1');
       await insertTx('tx-2');
       port.handler = (familyId, records) async => records
@@ -176,15 +193,23 @@ void main() {
           .toSet();
 
       await scheduler.maybePush();
-      expect(port.calls, hasLength(1));
-      expect(await pendingCount('transactions'), 1);
+      // 推-拉-对账循环：首轮推送只回执 tx-1，补推 tx-2 仍被拒（标记保留）
+      expect(port.calls, hasLength(2));
+      expect(port.calls.first.records, hasLength(2));
+      expect(port.calls.last.records.single['id'], 'tx-2');
+      expect(await pendingCount('transactions'), 1,
+          reason: '服务端持续拒绝时标记保留待重试');
 
-      // 服务端恢复全量回执，重推只含 tx-2
+      // 服务端恢复全量回执，再触发推净 tx-2
       port.handler = null;
       await scheduler.maybePush();
-      expect(port.calls, hasLength(2));
+      expect(port.calls, hasLength(3));
       expect(port.calls.last.records.single['id'], 'tx-2');
       expect(await pendingCount('transactions'), 0);
+
+      // 无新变更再触发：不再发请求
+      await scheduler.maybePush();
+      expect(port.calls, hasLength(3));
     });
 
     test('网络失败全部保留，恢复后一次推净', () async {
@@ -209,6 +234,7 @@ void main() {
       final chunked = SyncScheduler(
         db: db,
         port: port,
+        pullPort: NoopPullPort(),
         vault: vault,
         isSignedIn: () async => true,
         batchSize: 2,

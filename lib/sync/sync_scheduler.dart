@@ -10,6 +10,7 @@ import '../data/local/backup_flag_store.dart';
 import '../data/local/db_provider.dart';
 import '../services/api/api_client.dart';
 import 'sync_outbox.dart';
+import 'sync_puller.dart';
 
 /// 推送端口：按家庭推送一批记录，返回「使命完成」的记录 ID 集合
 /// （accepted 与 rejected 均含——rejected 即服务端 LWW 仲裁已有更高
@@ -45,26 +46,37 @@ class ApiSyncPushPort implements SyncPushPort {
   }
 }
 
-/// 同步调度器（tasks.md 7.3）：联网批量推送发件箱。
+/// 同步调度器（tasks.md 7.3/7.4）：推-拉-对账循环。
+///
+/// 流程：门控 → 推送发件箱 → 拉取云端增量入库 → 补推
+/// （拉取仲裁跳过的本地高版本记录，一轮收敛双向一致）。
 ///
 /// 触发方式为写路径 fire-and-forget（不阻塞本地操作）：
 /// - 单飞：运行中再触发仅记重跑标记，结束后补跑一轮（天然防抖合并）
 /// - 门控：备份开关开 → 已登录 → 密钥已解锁（任一不满足静默跳过，
-///   标记保留；解锁/登录后的下一次写操作触发自动补推）
-/// - 失败重试不丢：任何推送异常终止本轮、标记保留，靠下次触发重推
+///   标记与游标保留；解锁/登录后的下一次触发自动补推）
+/// - 失败重试不丢：任何环节异常终止本轮、标记与游标保留，
+///   靠下次触发重推/重拉（LWW 幂等，重拉无害）
 /// - 分批：每家庭每批 ≤ [batchSize]（对齐服务端 500 上限）；
 ///   跨家庭记录不能同批（服务端按家庭校验归属）
 class SyncScheduler {
   SyncScheduler({
     AppDatabase? db,
     SyncPushPort? port,
+    SyncPullPort? pullPort,
     KeyVault? vault,
     Future<bool> Function()? isSignedIn,
+    SyncPuller? puller,
     this.batchSize = 500,
   })  : _db = db ?? Db.database,
         _port = port ?? ApiSyncPushPort(),
         _vault = vault ?? VaultProvider.vault,
-        _isSignedIn = isSignedIn ?? _defaultSignedIn;
+        _isSignedIn = isSignedIn ?? _defaultSignedIn,
+        _puller = puller ??
+            SyncPuller(
+              db: db ?? Db.database,
+              port: pullPort,
+            );
 
   static Future<bool> _defaultSignedIn() async =>
       await ApiClient().getToken() != null;
@@ -78,12 +90,13 @@ class SyncScheduler {
   final SyncPushPort _port;
   final KeyVault _vault;
   final Future<bool> Function() _isSignedIn;
+  final SyncPuller _puller;
   final int batchSize;
 
   bool _running = false;
   bool _rerun = false;
 
-  /// 尽力而为推送：调用方一律 fire-and-forget（unawaited），
+  /// 尽力而为同步：调用方一律 fire-and-forget（unawaited），
   /// 任何异常不出函数边界（后台任务的既定语义，真机日志可查
   /// debugPrint 输出）。
   Future<void> maybePush() async {
@@ -94,7 +107,7 @@ class SyncScheduler {
       }
       _running = true;
       try {
-        await _pushAll();
+        await _syncOnce();
       } finally {
         _running = false;
       }
@@ -103,25 +116,36 @@ class SyncScheduler {
         await maybePush();
       }
     } catch (e) {
-      debugPrint('[SyncScheduler] 推送中断，发件箱标记保留待重试: $e');
+      debugPrint('[SyncScheduler] 同步中断，标记与游标保留待重试: $e');
     }
   }
 
-  Future<void> _pushAll() async {
-    if (!await BackupFlagStore.isEnabled()) return;
-    if (!await _isSignedIn()) return;
-    final keyPair = _vault.unlockedKeyPair;
-    if (keyPair == null) return;
+  Future<void> _syncOnce() async {
+    final dataKey = await _gate();
+    if (dataKey == null) return;
 
+    await _pushAll(dataKey);
+    await _puller.pullAll(dataKey);
+    // 对账补推：拉取仲裁跳过的本地高版本记录（或推送环节部分
+    // 失败遗留）推上去，一轮收敛；已推净则空转返回
+    await _pushAll(dataKey);
+  }
+
+  /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生数据密钥。
+  /// 任一不满足返回 null（静默跳过，标记与游标保留）。
+  Future<Uint8List?> _gate() async {
+    if (!await BackupFlagStore.isEnabled()) return null;
+    if (!await _isSignedIn()) return null;
+    final keyPair = _vault.unlockedKeyPair;
+    if (keyPair == null) return null;
+    final privateKey = Uint8List.fromList(await keyPair.extractPrivateKeyBytes());
+    return CryptoPrimitives.hkdfSha256(privateKey,
+        info: CryptoPrimitives.kSyncDataKeyInfo);
+  }
+
+  Future<void> _pushAll(Uint8List dataKey) async {
     final rows = await SyncOutbox.collectAll(_db);
     if (rows.isEmpty) return;
-
-    final privateKey =
-        Uint8List.fromList(await keyPair.extractPrivateKeyBytes());
-    final dataKey = CryptoPrimitives.hkdfSha256(
-      privateKey,
-      info: CryptoPrimitives.kSyncDataKeyInfo,
-    );
 
     // 按家庭分组推送（服务端按家庭整批校验，跨家庭不能同批）
     final byFamily = <String, List<SyncPendingRow>>{};

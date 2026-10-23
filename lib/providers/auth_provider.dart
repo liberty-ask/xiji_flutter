@@ -10,6 +10,7 @@ import '../models/user.dart';
 import '../services/api/api_client.dart';
 import '../services/api/auth_service.dart';
 import '../services/api/family_service.dart';
+import '../sync/sync_scheduler.dart';
 
 /// 认证状态管理
 ///
@@ -61,6 +62,8 @@ class AuthProvider with ChangeNotifier {
         _hasToken = true;
         _user = await LocalUser.load();
         unawaited(refreshUser().catchError((_) {}));
+        // 冷启动触发一轮同步：增量拉取云端新数据（门控不满足时自动跳过）
+        unawaited(SyncScheduler.instance.maybePush());
       }
     } catch (_) {
       _hasToken = false;
@@ -104,6 +107,8 @@ class AuthProvider with ChangeNotifier {
       );
       _hasToken = true;
       await refreshUser();
+      // 登录成功触发一轮同步：新设备全量恢复（门控不满足时自动跳过）
+      unawaited(SyncScheduler.instance.maybePush());
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -127,6 +132,8 @@ class AuthProvider with ChangeNotifier {
       );
       _hasToken = true;
       await refreshUser();
+      // 登录成功触发一轮同步：新设备全量恢复（门控不满足时自动跳过）
+      unawaited(SyncScheduler.instance.maybePush());
     } finally {
       _isLoading = false;
       notifyListeners();
