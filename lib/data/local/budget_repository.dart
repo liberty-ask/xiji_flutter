@@ -57,10 +57,13 @@ class BudgetRepository {
     await (_db.update(_db.budgets)
           ..where((b) => b.id.equals(existing.id)))
         .write(BudgetsCompanion(
-          amountCents: Value(amountCents),
-          version: Value(existing.version + 1),
-          updatedAt: Value(now),
-          deleted: const Value(false),
-        ));
+      amountCents: Value(amountCents),
+      version: Value(existing.version + 1),
+      updatedAt: Value(now),
+      deleted: const Value(false),
+      // 已推送过的预算再修改须重新进发件箱（更新路径置位，
+      // 与插入路径的列默认值 true 对齐）
+      syncPending: const Value(true),
+    ));
   }
 }

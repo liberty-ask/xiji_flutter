@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/local/budget_repository.dart';
 import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/local_user.dart';
+import '../../sync/sync_scheduler.dart';
 import '../../utils/money.dart';
 
 /// 预算数据门面：本地优先架构下的唯一读写入口。
@@ -61,5 +64,7 @@ class BudgetService {
       month: month,
       amountCents: Money.yuanToCents(total),
     );
+    // 发件箱后台推送（fire-and-forget）
+    unawaited(SyncScheduler.instance.maybePush());
   }
 }

@@ -71,6 +71,42 @@ class CryptoPrimitives {
     return Uint8List.fromList(clear);
   }
 
+  /// 同步数据密钥的 HKDF info（固定域分离串：派生用途唯一，换用途必须换 info）
+  static const String kSyncDataKeyInfo = 'xiji-sync-data-key';
+
+  /// HKDF-SHA256（RFC 5869，salt 置空）：从高熵 ikm（X25519 私钥）派生
+  /// 同步数据密钥 F。同私钥必得同 F——新设备凭口令解出同一私钥即得同 F，
+  /// 存量密文全量可解（见 design.md 7.3）。
+  /// extract：PRK = HMAC-SHA256(零 salt, ikm)；expand：T(i) 逐块串联截断。
+  static Uint8List hkdfSha256(
+    Uint8List ikm, {
+    required String info,
+    int length = 32,
+  }) {
+    Uint8List hmac(Uint8List key, Uint8List data) {
+      final mac = HMac(SHA256Digest(), 64)..init(KeyParameter(key));
+      return mac.process(data);
+    }
+
+    // extract（salt 置空 = 32 字节全零 key）
+    final prk = hmac(Uint8List(32), ikm);
+
+    // expand：T(i) = HMAC(PRK, T(i-1) ‖ info ‖ i)，逐块拼接截断
+    final infoBytes = utf8.encode(info);
+    final result = Uint8List(length);
+    var filled = 0;
+    Uint8List t = Uint8List(0);
+    var counter = 1;
+    while (filled < length) {
+      t = hmac(prk, Uint8List.fromList([...t, ...infoBytes, counter]));
+      final take = t.length <= (length - filled) ? t.length : length - filled;
+      result.setRange(filled, filled + take, t);
+      filled += take;
+      counter++;
+    }
+    return result;
+  }
+
   /// 生成 X25519 密钥对（SimpleKeyPairData/SimplePublicKey）。
   static Future<SimpleKeyPair> generateX25519KeyPair() async {
     final algorithm = X25519();

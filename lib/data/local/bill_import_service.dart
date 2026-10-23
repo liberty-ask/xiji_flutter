@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 
 import '../../parser/bill_csv_parser.dart';
+import '../../sync/sync_scheduler.dart';
 import 'app_database.dart' as local;
 import 'builtin_categories.dart';
 import 'category_engine.dart';
@@ -178,6 +181,10 @@ class BillImportService {
     }
 
     await _transactions.insertAll(toInsert);
+    // 发件箱后台推送（fire-and-forget；本次无新增则不触发）
+    if (toInsert.isNotEmpty) {
+      unawaited(SyncScheduler.instance.maybePush());
+    }
 
     return BillImportOutcome(
       totalCount: items.length,

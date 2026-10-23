@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +12,7 @@ import '../../data/local/local_user.dart';
 import '../../data/local/statistics_repository.dart';
 import '../../data/local/transaction_repository.dart';
 import '../../models/transaction.dart';
+import '../../sync/sync_scheduler.dart';
 import '../../utils/money.dart';
 
 /// 交易数据门面：本地优先架构下的唯一读写入口。
@@ -89,6 +92,8 @@ class TransactionService {
 
     // 成功提示文案由页面本地化兜底，不再依赖服务端中文消息；
     // id 返回给语音记账做「修改入口」定位
+    // 发件箱后台推送（fire-and-forget，不阻塞本地操作）
+    unawaited(SyncScheduler.instance.maybePush());
     return <String, dynamic>{'id': row.id};
   }
 
@@ -166,6 +171,8 @@ class TransactionService {
       ),
     );
 
+    // 发件箱后台推送（fire-and-forget）
+    unawaited(SyncScheduler.instance.maybePush());
     return <String, dynamic>{};
   }
 
@@ -176,6 +183,8 @@ class TransactionService {
       throw Exception('交易记录不存在');
     }
     await _transactions.softDelete(id);
+    // 发件箱后台推送（fire-and-forget）
+    unawaited(SyncScheduler.instance.maybePush());
   }
 
   /// 获取首页数据：月度概览 + 预算 + 近期动态，全部本地聚合。

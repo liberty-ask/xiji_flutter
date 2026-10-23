@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../crypto/key_vault.dart';
-import '../../crypto/vault_store.dart';
+import '../../crypto/vault_provider.dart';
 import '../../data/local/backup_flag_store.dart';
 import '../../services/local/biometric_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -26,7 +26,7 @@ class BackupScreen extends StatefulWidget {
 }
 
 class _BackupScreenState extends State<BackupScreen> {
-  final KeyVault _vault = KeyVault(SecureVaultStore.instance);
+  final KeyVault _vault = VaultProvider.vault;
   final BiometricService _biometric = BiometricService();
 
   bool _enabled = false;
