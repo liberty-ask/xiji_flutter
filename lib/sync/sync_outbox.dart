@@ -43,6 +43,7 @@ class SyncOutbox {
   static const String kTypeTransaction = 'transaction';
   static const String kTypeCategory = 'category';
   static const String kTypeBudget = 'budget';
+  static const String kTypeCategoryRule = 'categoryRule';
 
   /// 业务日期以毫秒时间戳传输（避免 ISO 字符串的时区解析歧义，
   /// 7.4 侧 DateTime.fromMillisecondsSinceEpoch 原样恢复）
@@ -51,7 +52,15 @@ class SyncOutbox {
   /// 收集全部待推送行（含墓碑——墓碑必须上云才能在其它设备收敛删除），
   /// 按 updatedAt 升序保持产生顺序。内置分类只读永不变更、标记恒为
   /// false，不依赖查询特判自然排除。
-  static Future<List<SyncPendingRow>> collectAll(AppDatabase db) async {
+  ///
+  /// [currentFamilyId] 为学习表通道家庭：学习表是用户级表（无
+  /// familyId 列），推送通道取当前家庭；为 null（无家庭上下文）时
+  /// 跳过学习表收集。多家庭用户换家庭后旧家庭通道的条目不再重推，
+  /// 属已知近似（主力单家庭场景完全正确）。
+  static Future<List<SyncPendingRow>> collectAll(
+    AppDatabase db,
+    String? currentFamilyId,
+  ) async {
     final rows = <SyncPendingRow>[];
 
     final txs = await (db.select(db.transactions)
@@ -131,6 +140,31 @@ class SyncOutbox {
       ));
     }
 
+    // 学习表（7.6）：用户级数据走当前家庭通道
+    if (currentFamilyId != null) {
+      final rules = await (db.select(db.categoryRules)
+            ..where((r) => r.syncPending.equals(true))
+            ..orderBy([(r) => OrderingTerm.asc(r.updatedAt)]))
+          .get();
+      for (final r in rules) {
+        rows.add(SyncPendingRow(
+          recordType: kTypeCategoryRule,
+          id: r.id,
+          version: r.version,
+          updatedAt: r.updatedAt,
+          deleted: r.deleted,
+          familyId: currentFamilyId,
+          payload: <String, dynamic>{
+            'recordType': kTypeCategoryRule,
+            'matchText': r.matchText,
+            'categoryId': r.categoryId,
+            'source': r.source,
+            'hitCount': r.hitCount,
+          },
+        ));
+      }
+    }
+
     return rows;
   }
 
@@ -208,6 +242,7 @@ class SyncOutbox {
         kTypeTransaction => 'transactions',
         kTypeCategory => 'categories',
         kTypeBudget => 'budgets',
+        kTypeCategoryRule => 'category_rules',
         _ => throw ArgumentError('未知的同步记录类型: $recordType'),
       };
 }

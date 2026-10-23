@@ -7,6 +7,7 @@ import '../crypto/key_vault.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
 import '../data/local/backup_flag_store.dart';
+import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
 import '../services/api/api_client.dart';
 import 'sync_outbox.dart';
@@ -66,16 +67,19 @@ class SyncScheduler {
     SyncPullPort? pullPort,
     KeyVault? vault,
     Future<bool> Function()? isSignedIn,
+    Future<String?> Function()? currentFamilyId,
     SyncPuller? puller,
     this.batchSize = 500,
   })  : _db = db ?? Db.database,
         _port = port ?? ApiSyncPushPort(),
         _vault = vault ?? VaultProvider.vault,
         _isSignedIn = isSignedIn ?? _defaultSignedIn,
+        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get,
         _puller = puller ??
             SyncPuller(
               db: db ?? Db.database,
               port: pullPort,
+              currentFamilyId: currentFamilyId,
             );
 
   static Future<bool> _defaultSignedIn() async =>
@@ -90,6 +94,7 @@ class SyncScheduler {
   final SyncPushPort _port;
   final KeyVault _vault;
   final Future<bool> Function() _isSignedIn;
+  final Future<String?> Function() _currentFamilyId;
   final SyncPuller _puller;
   final int batchSize;
 
@@ -144,7 +149,7 @@ class SyncScheduler {
   }
 
   Future<void> _pushAll(Uint8List dataKey) async {
-    final rows = await SyncOutbox.collectAll(_db);
+    final rows = await SyncOutbox.collectAll(_db, await _currentFamilyId());
     if (rows.isEmpty) return;
 
     // 按家庭分组推送（服务端按家庭整批校验，跨家庭不能同批）

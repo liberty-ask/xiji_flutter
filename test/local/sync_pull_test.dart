@@ -7,56 +7,7 @@ import 'package:xiji_flutter/sync/sync_cursor_store.dart';
 import 'package:xiji_flutter/sync/sync_outbox.dart';
 import 'package:xiji_flutter/sync/sync_puller.dart';
 
-/// 内存假服务端：模拟服务端 (updated_at, id) 游标分页 + LWW upsert。
-/// push 侧按 id 幂等、version 高者胜（与 SyncRecordService 对齐）。
-class FakeSyncServer {
-  final Map<String, Map<String, dynamic>> _byId = {};
-  final int pageSize;
-  final List<({int? cursorTime, String? cursorId})> requests = [];
-
-  FakeSyncServer({this.pageSize = 500});
-
-  /// 设备 A 推送一批记录（服务端 upsert 语义）
-  void push(String familyId, List<Map<String, dynamic>> records) {
-    for (final r in records) {
-      final id = r['id'] as String;
-      final existing = _byId[id];
-      if (existing == null ||
-          (r['version'] as int) >= (existing['version'] as int)) {
-        _byId[id] = Map<String, dynamic>.of(r);
-      }
-    }
-  }
-
-  /// 服务端 pull 分页（排序 + 游标过滤 + limit+1 探测）
-  Map<String, dynamic> pull(
-      String familyId, int? cursorTime, String? cursorId) {
-    requests.add((cursorTime: cursorTime, cursorId: cursorId));
-    final sorted = _byId.values.toList()
-      ..sort((a, b) {
-        final at = (a['updatedAt'] as int).compareTo(b['updatedAt'] as int);
-        return at != 0 ? at : (a['id'] as String).compareTo(b['id'] as String);
-      });
-    final remaining = sorted.where((r) {
-      if (cursorTime == null || cursorId == null) return true;
-      final at = (r['updatedAt'] as int).compareTo(cursorTime);
-      if (at != 0) return at > 0;
-      return (r['id'] as String).compareTo(cursorId) > 0;
-    }).toList();
-
-    final probe = remaining.take(pageSize + 1).toList();
-    final hasMore = probe.length > pageSize;
-    if (hasMore) probe.removeLast();
-    return <String, dynamic>{
-      // 拷贝返回（调用方篡改不得污染服务端存储）
-      'records': probe.map((r) => Map<String, dynamic>.of(r)).toList(),
-      'hasMore': hasMore,
-      if (hasMore && probe.isNotEmpty)
-        'nextCursorTime': probe.last['updatedAt'],
-      if (hasMore && probe.isNotEmpty) 'nextCursorId': probe.last['id'],
-    };
-  }
-}
+import 'fake_sync_server.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -84,7 +35,7 @@ void main() {
 
       final puller = SyncPuller(
           db: db,
-          port: _ServerPort(server),
+          port: FakeServerPullPort(server),
           currentFamilyId: () async => 'f1');
       await puller.pullAll(dataKey);
 
@@ -108,7 +59,7 @@ void main() {
           [await SyncOutbox.encryptRecord(dataKey, _cloudTx('tx-1'))]);
       final puller = SyncPuller(
           db: db,
-          port: _ServerPort(server),
+          port: FakeServerPullPort(server),
           currentFamilyId: () async => 'f1');
       await puller.pullAll(dataKey);
       expect(server.requests.first.cursorTime, null,
@@ -155,7 +106,7 @@ void main() {
 
       // 重拉从断点继续：只取 tx-3（服务端已恢复完好密文）
       final recovered = SyncPuller(
-          db: db, port: _ServerPort(server), currentFamilyId: () async => 'f1');
+          db: db, port: FakeServerPullPort(server), currentFamilyId: () async => 'f1');
       await recovered.pullAll(dataKey);
       final rows = await db.select(db.transactions).get();
       expect(rows.map((r) => r.id), containsAll(<String>['tx-1', 'tx-2', 'tx-3']));
@@ -205,7 +156,7 @@ void main() {
         amountCents: 200000,
       ));
 
-      final outboxRows = await SyncOutbox.collectAll(deviceA);
+      final outboxRows = await SyncOutbox.collectAll(deviceA, 'f1');
       expect(outboxRows, hasLength(5), reason: '三表收集 3 交易+1 分类+1 预算');
       server.push(
           'f1',
@@ -219,7 +170,7 @@ void main() {
       addTearDown(deviceB.close);
       final puller = SyncPuller(
           db: deviceB,
-          port: _ServerPort(server),
+          port: FakeServerPullPort(server),
           currentFamilyId: () async => 'f1');
       await puller.pullAll(dataKey);
 
@@ -280,17 +231,6 @@ SyncPendingRow _cloudTx(String id, {DateTime? updatedAt}) {
       'platform': null,
     },
   );
-}
-
-class _ServerPort implements SyncPullPort {
-  _ServerPort(this._server);
-  final FakeSyncServer _server;
-
-  @override
-  Future<Map<String, dynamic>> pull(
-      String familyId, int? cursorTime, String? cursorId) async {
-    return _server.pull(familyId, cursorTime, cursorId);
-  }
 }
 
 /// 从第二页起破坏密文（模拟损坏记录）

@@ -34,6 +34,7 @@ class SyncIngest {
       SyncOutbox.kTypeTransaction => _applyTransaction(record, payload),
       SyncOutbox.kTypeCategory => _applyCategory(record, payload),
       SyncOutbox.kTypeBudget => _applyBudget(record, payload),
+      SyncOutbox.kTypeCategoryRule => _applyCategoryRule(record, payload),
       _ => throw ArgumentError('未知的同步记录类型: $recordType'),
     };
   }
@@ -185,6 +186,66 @@ class SyncIngest {
     }
     await (_db.update(_db.budgets)..where((b) => b.id.equals(id)))
         .write(row);
+    return IngestResult.updated;
+  }
+
+  /// 学习表入库（7.6）。matchText 在密文内、服务端无法按它去重，
+  /// 双端对同一文本并发指认会产生 id 不同、matchText 相同的服务端
+  /// 条目——归并必须在拉取侧做：
+  ///
+  /// - 本地无该 matchText → 插入云端行
+  /// - 本地有（同 id 常规路径 / 不同 id 并发归并路径）→ LWW；
+  ///   云端胜则把本地行更新为云端内容（保留本地 id 占位，满足
+  ///   UNIQUE(match_text)），服务端冗余条目由各设备归并吸收，
+  ///   最终该文本收敛到最新 version 的指认
+  Future<IngestResult> _applyCategoryRule(
+    Map<String, dynamic> record,
+    Map<String, dynamic> payload,
+  ) async {
+    final (version, updatedAt, deleted) = _meta(record);
+    final id = record['id'] as String;
+    final matchText = payload['matchText'] as String;
+
+    final existing = await (_db.select(_db.categoryRules)
+          ..where((r) => r.matchText.equals(matchText))
+          ..limit(1))
+        .getSingleOrNull();
+
+    if (existing != null && !_remoteWins(
+        localVersion: existing.version,
+        localUpdatedAt: existing.updatedAt,
+        remoteVersion: version,
+        remoteUpdatedAt: updatedAt)) {
+      return IngestResult.skipped;
+    }
+
+    final content = CategoryRulesCompanion(
+      categoryId: Value(payload['categoryId'] as String),
+      source: Value(payload['source'] as int),
+      hitCount: Value(payload['hitCount'] as int? ?? 0),
+      version: Value(version),
+      updatedAt: Value(updatedAt),
+      deleted: Value(deleted),
+      syncPending: const Value(false),
+    );
+
+    if (existing == null) {
+      await _db.into(_db.categoryRules).insert(CategoryRulesCompanion.insert(
+            id: Value(id),
+            matchText: matchText,
+            categoryId: payload['categoryId'] as String,
+            source: payload['source'] as int,
+            hitCount: Value(payload['hitCount'] as int? ?? 0),
+            version: Value(version),
+            updatedAt: Value(updatedAt),
+            deleted: Value(deleted),
+            syncPending: const Value(false),
+          ));
+      return IngestResult.inserted;
+    }
+    await (_db.update(_db.categoryRules)
+          ..where((r) => r.id.equals(existing.id)))
+        .write(content);
     return IngestResult.updated;
   }
 }

@@ -64,7 +64,7 @@ void main() {
       await insertCategory();
       await insertBudget();
 
-      final rows = await SyncOutbox.collectAll(db);
+      final rows = await SyncOutbox.collectAll(db, 'f1');
       expect(rows, hasLength(3));
 
       final tx = rows.singleWhere((r) => r.recordType == 'transaction');
@@ -96,7 +96,7 @@ void main() {
             version: Value(2),
           ));
 
-      final rows = await SyncOutbox.collectAll(db);
+      final rows = await SyncOutbox.collectAll(db, 'f1');
       expect(rows, hasLength(1));
       expect(rows.first.deleted, true);
       expect(rows.first.version, 2);
@@ -106,10 +106,10 @@ void main() {
       await insertTx();
       await insertCategory();
       await SyncOutbox.clearPending(
-          db, (await SyncOutbox.collectAll(db)).toList());
+          db, (await SyncOutbox.collectAll(db, 'f1')).toList());
       await db.seedBuiltinCategories(); // syncPending=false
 
-      expect(await SyncOutbox.collectAll(db), isEmpty);
+      expect(await SyncOutbox.collectAll(db, 'f1'), isEmpty);
       expect(await pendingCount('transactions'), 0);
       expect(await pendingCount('categories'), 0);
     });
@@ -121,7 +121,7 @@ void main() {
 
     test('加密可解密回原载荷；字段对齐服务端 SyncPushRecord', () async {
       await insertTx();
-      final row = (await SyncOutbox.collectAll(db)).single;
+      final row = (await SyncOutbox.collectAll(db, 'f1')).single;
 
       final record = await SyncOutbox.encryptRecord(dataKey, row);
       expect(record['id'], 'tx-1');
@@ -140,7 +140,7 @@ void main() {
 
     test('nonce 不重复（同密钥同明文两次加密）', () async {
       await insertTx();
-      final row = (await SyncOutbox.collectAll(db)).single;
+      final row = (await SyncOutbox.collectAll(db, 'f1')).single;
 
       final a = await SyncOutbox.encryptRecord(dataKey, row);
       final b = await SyncOutbox.encryptRecord(dataKey, row);
@@ -150,7 +150,7 @@ void main() {
 
     test('AAD 绑定记录 ID：换 ID 解密必须失败', () async {
       await insertTx();
-      final row = (await SyncOutbox.collectAll(db)).single;
+      final row = (await SyncOutbox.collectAll(db, 'f1')).single;
       final record = await SyncOutbox.encryptRecord(dataKey, row);
 
       final forged = Map<String, dynamic>.from(record)..['id'] = 'tx-other';
@@ -165,7 +165,7 @@ void main() {
     test('只清传入行，批次内部分失败条目保留', () async {
       await insertTx(id: 'tx-1');
       await insertTx(id: 'tx-2');
-      final rows = await SyncOutbox.collectAll(db);
+      final rows = await SyncOutbox.collectAll(db, 'f1');
       expect(rows, hasLength(2));
 
       // 只回执 tx-1（模拟服务端 results 缺失 tx-2）
@@ -173,7 +173,7 @@ void main() {
           db, rows.where((r) => r.id == 'tx-1').toList());
 
       expect(await pendingCount('transactions'), 1);
-      final rest = await SyncOutbox.collectAll(db);
+      final rest = await SyncOutbox.collectAll(db, 'f1');
       expect(rest.single.id, 'tx-2');
     });
   });
