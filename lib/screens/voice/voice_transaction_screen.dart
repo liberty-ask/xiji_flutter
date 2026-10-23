@@ -51,6 +51,8 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
   bool _showActionButtons = false;
   bool _showEditScreen = false;
   String _recognizedText = '';
+  // 最近一次识别层错误（release 也用于用户提示）
+  String? _lastSpeechError;
   String _editingText = '';
   late TextEditingController _textEditingController;
   // 记录手指是否在取消或编辑按钮区域
@@ -97,6 +99,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
       // 不请求权限，只检查服务是否可用（如果有权限的话）
       _isSpeechAvailable = await _speech.initialize(
         onError: (error) {
+          _lastSpeechError = error.errorMsg;
           if (kDebugMode) {
             debugPrint('语音识别错误: ${error.errorMsg}');
           }
@@ -256,8 +259,9 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     }
 
     try {
-      // 新一轮识别开始，清空上一句识别结果
+      // 新一轮识别开始，清空上一句识别结果与错误状态
       _recognizedText = '';
+      _lastSpeechError = null;
       await _speech.listen(
         onResult: (result) {
           if (kDebugMode) {
@@ -320,6 +324,43 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     }
   }
 
+  /// 停止语音识别会话：等待 stop() 完成并给最终结果留出送达余量。
+  /// 部分系统识别服务不推流式中间结果，只在 stop 后一次性回传全文，
+  /// 此前「stop 不等待 + 50ms 后 cancel」会截胡丢弃最终结果。
+  Future<void> _stopSpeechSession() async {
+    try {
+      await _speech.stop().timeout(const Duration(seconds: 2));
+      await Future.delayed(const Duration(milliseconds: 500));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('停止识别失败，降级cancel: $e');
+      }
+      _speech.cancel().catchError((error) {
+        if (kDebugMode) {
+          debugPrint('cancel方法调用失败: $error');
+        }
+      });
+    }
+  }
+
+  /// 空识别结果提示：优先透出识别层的真实错误（release 也可见），
+  /// 替代一刀切的「没有检测到内容」。
+  String _emptyVoiceMessage() {
+    final l10n = AppLocalizations.of(context)!;
+    final err = _lastSpeechError;
+    if (err == null) {
+      return l10n.noVoiceContentRecognized;
+    }
+    final e = err.toLowerCase();
+    if (e.contains('network') || e.contains('网络')) {
+      return l10n.networkConnectionError;
+    }
+    if (e.contains('no_speech') || e.contains('timeout')) {
+      return l10n.noVoiceContentRecognized;
+    }
+    return '${l10n.speechRecognitionFailed}: $err';
+  }
+
   /// 停止语音识别
   Future<void> _stopVoiceInput() async {
     if (kDebugMode) {
@@ -336,31 +377,13 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
       _pulseController.reset();
     }
     
-    // 2. 立即调用stop和cancel，不等待其完成（web端可能会有延迟）
-    // 这里不使用await，而是并行执行，尽快释放资源
-    _speech.stop().catchError((error) {
-      if (kDebugMode) {
-        debugPrint('stop方法调用失败: $error');
-      }
-    });
+    // 2. 等待识别会话真正结束，最终结果随 stop 送达（不再 50ms 截胡）
+    await _stopSpeechSession();
     
-    // 延迟一小段时间后调用cancel，确保stop有机会执行
-    Future.delayed(const Duration(milliseconds: 50), () {
-      _speech.cancel().catchError((error) {
-        if (kDebugMode) {
-          debugPrint('cancel方法调用失败: $error');
-        }
-      });
-    });
-    
-    if (kDebugMode) {
-      debugPrint('语音识别停止命令已发送');
-    }
-    
-    // 3. 直接处理识别结果，不等待stop/cancel完成
+    // 3. 处理最终识别结果
     if (mounted && !_showEditScreen) {
       if (_recognizedText.isEmpty) {
-        CustomSnackBar.showError(context, AppLocalizations.of(context)!.noVoiceContentRecognized);
+        CustomSnackBar.showError(context, _emptyVoiceMessage());
       } else {
         // 有识别结果，自动提交
         _submitVoiceText(_recognizedText);
@@ -692,19 +715,11 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     _pulseController.stop();
     _pulseController.reset();
     
-    // 2. 立即调用stop和cancel，不等待其完成
-    _speech.stop().catchError((error) {
+    // 2. 取消即丢弃结果，直接 cancel 释放会话（无需 stop + 延迟 cancel）
+    _speech.cancel().catchError((error) {
       if (kDebugMode) {
-        debugPrint('cancelRecording stop方法调用失败: $error');
+        debugPrint('cancelRecording cancel方法调用失败: $error');
       }
-    });
-    
-    Future.delayed(const Duration(milliseconds: 50), () {
-      _speech.cancel().catchError((error) {
-        if (kDebugMode) {
-          debugPrint('cancelRecording cancel方法调用失败: $error');
-        }
-      });
     });
     
     if (kDebugMode) {
@@ -719,31 +734,22 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
       _isListening = false;
       _showActionButtons = false;
       _showEditScreen = true;
-      _editingText = _recognizedText;
     });
     _pulseController.stop();
     _pulseController.reset();
     
-    // 2. 立即调用stop和cancel，不等待其完成
-    _speech.stop().catchError((error) {
-      if (kDebugMode) {
-        debugPrint('enterEditMode stop方法调用失败: $error');
-      }
-    });
-    
-    Future.delayed(const Duration(milliseconds: 50), () {
-      _speech.cancel().catchError((error) {
-        if (kDebugMode) {
-          debugPrint('enterEditMode cancel方法调用失败: $error');
-        }
-      });
-    });
+    // 2. 等待会话结束，确保最终结果送达后再带入编辑框
+    await _stopSpeechSession();
+    if (!mounted) return;
     
     if (kDebugMode) {
-      debugPrint('进入编辑模式，停止命令已发送');
+      debugPrint('进入编辑模式，识别结果: $_recognizedText');
     }
     
-    // 3. 直接设置文本控制器，不等待stop/cancel完成
+    // 3. 带入最终识别文本
+    setState(() {
+      _editingText = _recognizedText;
+    });
     _textEditingController.text = _recognizedText;
     _textEditingController.selection = TextSelection.fromPosition(
       TextPosition(offset: _recognizedText.length),
