@@ -79,8 +79,17 @@ class SyncPuller {
       );
       final records =
           (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
-      for (final record in records) {
-        await ingest.applyRecord(dataKey, record);
+      // 页级事务（全量恢复性能优化）：每页 500 条包一个事务提交，
+      // 避免逐条独立提交的 journal fsync（万条数据恢复从几十秒降到
+      // 秒级）。页内任一条失败整页回滚、游标不推进，与页级断点续拉
+      // 语义完全一致（LWW 幂等，重拉无害）。首页 watch 流在提交后
+      // 一次刷新（比逐条连刷更省 UI 开销）。
+      if (records.isNotEmpty) {
+        await _db.transaction(() async {
+          for (final record in records) {
+            await ingest.applyRecord(dataKey, record);
+          }
+        });
       }
       final hasMore = page['hasMore'] as bool? ?? false;
       if (hasMore) {
