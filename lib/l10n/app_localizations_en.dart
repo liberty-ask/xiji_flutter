@@ -507,6 +507,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupVaultUnlockFailed => 'Unlock failed, please try again';
 
   @override
+  String get backupRestoreUnlockTitle => 'Restore Cloud Backup';
+
+  @override
+  String get backupRestoreUnlockDesc =>
+      'Cloud backup is enabled for this account. Enter the backup password to restore your data to this device. You won\'t be asked again afterwards.';
+
+  @override
+  String get backupRestoreWrongPassword =>
+      'Incorrect password, please try again';
+
+  @override
+  String get backupRestoreStarted => 'Unlocked. Restoring data from cloud…';
+
+  @override
   String get backupCheckingCloudVault => 'Checking cloud backup…';
 
   @override

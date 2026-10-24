@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/home_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../crypto/key_vault.dart' show KeyVaultUnlockException;
+import '../../crypto/vault_provider.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -39,6 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
   List<FamilyMember> _members = [];
   // 上次见到的登录用户：检测「登出再登录」后账号变化重拉首页数据
   String? _lastUserId;
+  // 重装恢复口令框会话内只弹一次（取消/输错关闭后不再打扰，
+  // 下次启动再提示）
+  bool _restorePromptShown = false;
 
   @override
   void initState() {
@@ -72,20 +77,114 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 家庭上下文就绪后的 vault 探测恢复（6.8）：本机未配置时从云端
+  /// 家庭上下文就绪后的 vault 探测恢复（6.8/6.9）：本机未配置时从云端
   /// 拉取 vault 导入（免口令，开关状态随 vault 恢复——重装/换设备
-  /// 后开关不再显示关闭）；已配置时探测内部直接跳过（幂等）。
-  /// 恢复后触发一轮同步：开关已开但密钥锁定时门控静默跳过，
-  /// 待用户在备份页输口令解锁后的下轮触发补上。
+  /// 后开关不再显示关闭）；已配置时探测内部直接跳过（幂等）。探测/
+  /// 导入后自动尝试自动解锁（6.9 自动解锁份：不卸载免口令）。
+  ///
+  /// 云备份已开但密钥仍锁定（自动解锁份缺失：重装/换设备/老版本升级
+  /// 首启）时主动弹口令框完成恢复——不能等用户逛到备份页才发现记录
+  /// 没上云；输对口令即解锁并触发全量拉取恢复。会话内只弹一次。
   Future<void> _restoreVaultThenSync() async {
     try {
-      final restored = await VaultSyncService.restoreFromCloud();
-      if (restored) {
-        await SyncScheduler.instance.maybePush();
+      await VaultSyncService.restoreFromCloud();
+      final vault = VaultProvider.vault;
+      if (await vault.isBackupEnabled() &&
+          !vault.isUnlocked &&
+          !await vault.isBiometricEnabled() &&
+          !_restorePromptShown &&
+          mounted) {
+        _restorePromptShown = true;
+        await _showRestoreUnlockDialog();
+        return;
       }
+      await SyncScheduler.instance.maybePush();
     } catch (_) {
       // 探测失败静默：下次家庭上下文就绪再试
     }
+  }
+
+  /// 云备份重装恢复口令框：输对口令解锁并触发全量恢复（自动解锁份
+  /// 随即重建，之后启动恢复无感）；输错留在框内重试；取消则下次
+  /// 启动再提示。
+  Future<void> _showRestoreUnlockDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    var obscure = true;
+    String? error;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(l10n.backupRestoreUnlockTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                l10n.backupRestoreUnlockDesc,
+                style: const TextStyle(fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: controller,
+                obscureText: obscure,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: l10n.backupPasswordLabel,
+                  errorText: error,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscure ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () =>
+                        setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  await VaultProvider.vault.unlock(controller.text);
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                  if (mounted) {
+                    CustomSnackBar.showSuccess(
+                        context, l10n.backupRestoreStarted);
+                  }
+                  // 解锁完成即触发一轮同步：重装场景首轮全量拉取恢复
+                  unawaited(SyncScheduler.instance.maybePush());
+                } on KeyVaultUnlockException {
+                  setDialogState(() {
+                    error = l10n.backupRestoreWrongPassword;
+                    controller.clear();
+                  });
+                } catch (_) {
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                  if (mounted) {
+                    CustomSnackBar.showError(
+                        context, l10n.backupVaultUnlockFailed);
+                  }
+                }
+              },
+              child: Text(l10n.confirm),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
   }
 
   Future<void> _loadFamilies() async {

@@ -1055,6 +1055,30 @@ abstract class AppLocalizations {
   /// **'Unlock failed, please try again'**
   String get backupVaultUnlockFailed;
 
+  /// No description provided for @backupRestoreUnlockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Cloud Backup'**
+  String get backupRestoreUnlockTitle;
+
+  /// No description provided for @backupRestoreUnlockDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud backup is enabled for this account. Enter the backup password to restore your data to this device. You won\'t be asked again afterwards.'**
+  String get backupRestoreUnlockDesc;
+
+  /// No description provided for @backupRestoreWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect password, please try again'**
+  String get backupRestoreWrongPassword;
+
+  /// No description provided for @backupRestoreStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlocked. Restoring data from cloud…'**
+  String get backupRestoreStarted;
+
   /// No description provided for @backupCheckingCloudVault.
   ///
   /// In en, this message translates to:

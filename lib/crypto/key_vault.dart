@@ -98,6 +98,14 @@ class KeyVault {
   Future<String> _vaultKey() async =>
       '$_legacyStorageKey${await _keySuffix()}';
 
+  /// 自动解锁份（6.9）在 secure storage 中的独立 key：口令路径每次
+  /// 解锁成功后把私钥明文密封一份（Keystore/Keychain 硬件保护，
+  /// 卸载即销毁、不可导出），下次启动免口令恢复解锁态。
+  static const String _autoUnlockPrefix = 'xiji_vault_auto_unlock';
+
+  Future<String> _autoUnlockKey() async =>
+      '$_autoUnlockPrefix${await _keySuffix()}';
+
   Future<String> _keySuffix() async {
     final user = await LocalUser.load();
     return '@${user?.id ?? 'anonymous'}';
@@ -212,6 +220,8 @@ class KeyVault {
 
     _unlockedKeyPair = keyPair;
     _unlockedPublicKey = publicKey;
+    await _writeAutoUnlock(
+        Uint8List.fromList(privateKeyBytes));
     return KeyVaultSetupResult(
         publicKey: publicKey, recoveryCode: recoveryCode);
   }
@@ -229,7 +239,56 @@ class KeyVault {
         publicKey: publicKey, type: KeyPairType.x25519);
     _unlockedKeyPair = keyPair;
     _unlockedPublicKey = publicKey;
+    // 解锁成功即补写自动解锁份：重装/换设备后首次口令解锁完成后，
+    // 之后每次启动恢复无感
+    await _writeAutoUnlock(privateKeyBytes);
     return keyPair;
+  }
+
+  /// 自动解锁份（6.9）：读 secure storage 中密封的私钥副本，恢复
+  /// 解锁态。解决「每次打开 App 都要输备份口令」——本地库本为明文
+  /// SQLite，备份口令并不保护本机数据（锁屏才是本机真正的门），自动
+  /// 解锁份的安全增量损失≈0；口令退役为「卸载重装/换设备恢复 + 改
+  /// 口令/恢复码重置」专用凭证。
+  ///
+  /// 返回 false 的场景（由 UI 层决定是否弹口令框）：
+  /// - vault 未配置
+  /// - 开启了生物识别保护（尊重「解锁要过指纹」的用户意愿，走 6.6）
+  /// - 无自动解锁份（卸载重装/换设备/老版本升级后首次启动）
+  /// - 副本损坏（按无自动解锁份处理，走口令）
+  Future<bool> autoUnlock() async {
+    if (isUnlocked) return true;
+    if (await isBiometricEnabled()) return false;
+    final raw = await _readVaultRaw();
+    if (raw == null) return false;
+    final b64 = await _store.read(await _autoUnlockKey());
+    if (b64 == null) return false;
+    try {
+      final doc = jsonDecode(raw);
+      if (doc is! Map<String, dynamic>) return false;
+      if (!await _vaultBelongsToCurrentUser(doc)) return false;
+      final publicKey = SimplePublicKey(
+          base64Decode(doc['publicKey'] as String),
+          type: KeyPairType.x25519);
+      final keyPair = SimpleKeyPairData(base64Decode(b64),
+          publicKey: publicKey, type: KeyPairType.x25519);
+      _unlockedKeyPair = keyPair;
+      _unlockedPublicKey = publicKey;
+      return true;
+    } catch (_) {
+      return false; // 副本损坏：按无自动解锁份处理，走口令
+    }
+  }
+
+  /// 写自动解锁份（密封私钥副本到 secure storage）。私钥不变（改口令
+  /// 仅重包裹），自动解锁份天然免疫改口令。写失败静默不阻断解锁
+  /// （下次口令路径再补写）。
+  Future<void> _writeAutoUnlock(Uint8List privateKeyBytes) async {
+    try {
+      await _store.write(await _autoUnlockKey(), base64Encode(privateKeyBytes));
+    } catch (_) {
+      // 存储层异常不阻断解锁主流程
+    }
   }
 
   /// 改口令：旧口令验证并解包私钥，新口令仅重新包裹私钥落库。
@@ -282,6 +341,8 @@ class KeyVault {
     _unlockedKeyPair = SimpleKeyPairData(privateKeyBytes,
         publicKey: publicKey, type: KeyPairType.x25519);
     _unlockedPublicKey = publicKey;
+    // 恢复码重置路径同样补写自动解锁份（私钥未变，幂等覆盖）
+    await _writeAutoUnlock(privateKeyBytes);
   }
 
   /// 是否已开启生物识别解锁（biometricWrap 与 KEK 双存才视为开启）。

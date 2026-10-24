@@ -68,8 +68,10 @@ class VaultSyncService {
     }
   }
 
-  /// 登录后自动探测恢复（6.8）：本机未配置时从云端拉取 vault 导入。
-  /// 返回是否拉到并导入（false = 云端无 vault / 已配置 / 失败静默）。
+  /// 登录后自动探测恢复（6.8 + 6.9）：本机未配置时从云端拉取 vault 导入；
+  /// 随后尝试自动解锁（6.9 自动解锁份：不卸载免口令，重装/换设备无
+  /// 自动解锁份保持锁定由 UI 弹口令框）。返回是否拉到并导入
+  /// （false = 云端无 vault / 已配置 / 失败静默）。
   /// 免口令：传输密钥 = HKDF(userId)，登录即得——重装/换设备后
   /// 开关状态（enabled 字段随 vault 漫游）在登录瞬间即恢复。
   static Future<bool> restoreFromCloud({
@@ -80,11 +82,20 @@ class VaultSyncService {
   }) async {
     final vault_ = vault ?? VaultProvider.vault;
     try {
-      if (await vault_.isConfigured()) return false;
+      if (await vault_.isConfigured()) {
+        // 本机已配置（不卸载场景）：自动解锁恢复解锁态，同步全无感；
+        // 无自动解锁份（老版本升级首启）保持锁定，走口令路径补写
+        await vault_.autoUnlock();
+        return false;
+      }
       final cloudDoc = await pullVaultDoc(
           port: port, userId: userId, familyId: familyId);
       if (cloudDoc == null) return false;
-      return await vault_.importVaultDoc(cloudDoc);
+      final imported = await vault_.importVaultDoc(cloudDoc);
+      // 重装/换设备导入成功：自动解锁（重装后无自动解锁份，静默保持
+      // 锁定，由首页弹口令框完成首次恢复，口令解锁后重建自动解锁份）
+      if (imported) await vault_.autoUnlock();
+      return imported;
     } catch (_) {
       // 网络失败等：下次登录/开 App 再探测，静默
       return false;

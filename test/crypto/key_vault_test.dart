@@ -399,4 +399,109 @@ void main() {
           reason: '解锁路径同样被归属校验拦截');
     });
   });
+
+  group('自动解锁份（6.9：口令退役为恢复凭证）', () {
+    test('setup 后重启模拟：autoUnlock 免口令恢复解锁态，私钥与 setup 一致',
+        () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('my-password-123');
+
+      // 重启模拟：全新实例（内存解锁缓存空），免口令自动解锁
+      final fresh = newVault(store);
+      expect(fresh.isUnlocked, isFalse);
+      expect(await fresh.autoUnlock(), isTrue, reason: 'setup 已写自动解锁份');
+      expect(fresh.isUnlocked, isTrue);
+      final pub = await fresh.unlockedKeyPair!.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+    });
+
+    test('重装模拟：自动解锁份销毁 → autoUnlock 失败 → 口令解锁重建 → 之后免口令',
+        () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('my-password-123');
+
+      // 卸载重装：secure storage 清空（vault 由云端探测恢复，此处模拟
+      // 自动解锁份丢失）
+      await store.delete('xiji_vault_auto_unlock@anonymous');
+      final fresh = newVault(store);
+      expect(await fresh.autoUnlock(), isFalse, reason: '重装后无自动解锁份');
+      expect(fresh.isUnlocked, isFalse);
+
+      // 首启口令解锁（首页弹框路径）：解出同一私钥，自动解锁份重建
+      await fresh.unlock('my-password-123');
+      final pub = await fresh.unlockedKeyPair!.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+
+      final second = newVault(store);
+      expect(await second.autoUnlock(), isTrue,
+          reason: '口令解锁后自动解锁份已重建，下次启动免口令');
+    });
+
+    test('改口令与恢复码重置后 autoUnlock 仍有效（私钥不变，天然免疫）',
+        () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('old-password');
+      await vault.changePassword('old-password', 'new-password-1');
+
+      // 改口令不动私钥：自动解锁份无需轮换，重启依然免口令
+      final fresh = newVault(store);
+      expect(await fresh.autoUnlock(), isTrue, reason: '改口令后自动解锁份仍有效');
+      var pub = await fresh.unlockedKeyPair!.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+
+      // 恢复码重置口令同样免疫
+      fresh.lock();
+      await fresh.resetPasswordWithRecoveryCode(
+          setupResult.recoveryCode, 'third-pass-1');
+      final third = newVault(store);
+      expect(await third.autoUnlock(), isTrue, reason: '恢复码重置后仍有效');
+      pub = await third.unlockedKeyPair!.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+    });
+
+    test('生物识别开启时 autoUnlock 跳过（尊重解锁关卡意愿），关闭后恢复',
+        () async {
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      await vault.setup('my-password-123');
+      await vault.enableBiometric();
+
+      final fresh = newVault(store);
+      expect(await fresh.autoUnlock(), isFalse, reason: '生物识别用户走 6.6 指纹路径');
+      expect(fresh.isUnlocked, isFalse);
+
+      await vault.disableBiometric();
+      final second = newVault(store);
+      expect(await second.autoUnlock(), isTrue, reason: '关闭生物识别后自动解锁生效');
+    });
+
+    test('账号隔离：A/B 自动解锁份互不串，各解锁出自己的私钥', () async {
+      final store = InMemoryVaultStore();
+      await loginAs('user-a');
+      final vaultA = newVault(store);
+      final setupA = await vaultA.setup('password-a-123');
+
+      await loginAs('user-b');
+      final vaultB = newVault(store);
+      final setupB = await vaultB.setup('password-b-456');
+
+      // B 的自动解锁份解锁出 B 的私钥（键 @user-b 隔离）
+      final freshB = newVault(store);
+      expect(await freshB.autoUnlock(), isTrue);
+      final pubB = await freshB.unlockedKeyPair!.extractPublicKey();
+      expect(pubB.bytes, equals(setupB.publicKey.bytes),
+          reason: 'B 解锁的是自己的私钥，不是 A 的');
+
+      // A 回登：自己的自动解锁份完好
+      await loginAs('user-a');
+      final freshA = newVault(store);
+      expect(await freshA.autoUnlock(), isTrue);
+      final pubA = await freshA.unlockedKeyPair!.extractPublicKey();
+      expect(pubA.bytes, equals(setupA.publicKey.bytes),
+          reason: 'A 的自动解锁份未被 B 的 setup 破坏');
+    });
+  });
 }

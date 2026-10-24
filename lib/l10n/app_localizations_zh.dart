@@ -493,6 +493,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupVaultUnlockFailed => '解锁失败，请重试';
 
   @override
+  String get backupRestoreUnlockTitle => '恢复云备份';
+
+  @override
+  String get backupRestoreUnlockDesc =>
+      '此账号已开启云备份，请输入备份口令，将云端数据恢复到本机。之后打开应用无需再次输入。';
+
+  @override
+  String get backupRestoreWrongPassword => '口令不正确，请重新输入';
+
+  @override
+  String get backupRestoreStarted => '已解锁，正在从云端恢复数据…';
+
+  @override
   String get backupCheckingCloudVault => '正在检查云端备份…';
 
   @override
@@ -1843,6 +1856,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupVaultUnlockFailed => '解锁失败，请重试';
 
   @override
+  String get backupRestoreUnlockTitle => '恢复云备份';
+
+  @override
+  String get backupRestoreUnlockDesc =>
+      '此账号已开启云备份，请输入备份口令，将云端数据恢复到本机。之后打开应用无需再次输入。';
+
+  @override
+  String get backupRestoreWrongPassword => '口令不正确，请重新输入';
+
+  @override
+  String get backupRestoreStarted => '已解锁，正在从云端恢复数据…';
+
+  @override
   String get backupCheckingCloudVault => '正在检查云端备份…';
 
   @override
@@ -3187,6 +3213,19 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get backupVaultUnlockFailed => '解鎖失敗，請重試';
+
+  @override
+  String get backupRestoreUnlockTitle => '恢復雲端備份';
+
+  @override
+  String get backupRestoreUnlockDesc =>
+      '此帳號已開啟雲端備份，請輸入備份口令，將雲端資料恢復到本機。之後開啟應用無需再次輸入。';
+
+  @override
+  String get backupRestoreWrongPassword => '口令不正確，請重新輸入';
+
+  @override
+  String get backupRestoreStarted => '已解鎖，正在從雲端恢復資料…';
 
   @override
   String get backupCheckingCloudVault => '正在檢查雲端備份…';

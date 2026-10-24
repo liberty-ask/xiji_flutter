@@ -285,6 +285,72 @@ void main() {
           throwsA(isA<SecretBoxAuthenticationError>()));
     });
   });
+
+  group('6.9：自动解锁份与云端恢复链集成', () {
+    test('不卸载重启：restoreFromCloud 已配置分支自动解锁，免口令', () async {
+      await loginAs('user-1');
+      final store = InMemoryVaultStore();
+      final vault = newVault(store);
+      final setupResult = await vault.setup('my-password-123');
+      await vault.setBackupEnabled(true);
+      await VaultSyncService.pushVault(
+          port: _ServerPushPort(server),
+          vault: vault,
+          currentFamilyId: () async => 'f1');
+
+      // 重启模拟：已配置（不卸载），restoreFromCloud 内部 autoUnlock
+      final fresh = newVault(store);
+      expect(fresh.isUnlocked, isFalse);
+      final restored = await VaultSyncService.restoreFromCloud(
+          port: FakeServerPullPort(server),
+          vault: fresh,
+          userId: 'user-1',
+          familyId: 'f1');
+      expect(restored, isFalse, reason: '已配置不走云端导入');
+      expect(fresh.isUnlocked, isTrue, reason: '自动解锁份恢复解锁态，免口令');
+      final pub = await fresh.unlockedKeyPair!.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+    });
+
+    test('重装首启：探测导入保持锁定（等口令），口令解锁后下次启动自动',
+        () async {
+      await loginAs('user-1');
+      final storeA = InMemoryVaultStore();
+      final vaultA = newVault(storeA);
+      final setupResult = await vaultA.setup('my-password-123');
+      await vaultA.setBackupEnabled(true);
+      await VaultSyncService.pushVault(
+          port: _ServerPushPort(server),
+          vault: vaultA,
+          currentFamilyId: () async => 'f1');
+
+      // B 设备重装：全新 store（自动解锁份随卸载销毁），探测导入
+      final storeB = InMemoryVaultStore();
+      final vaultB = newVault(storeB);
+      final restored = await VaultSyncService.restoreFromCloud(
+          port: FakeServerPullPort(server),
+          vault: vaultB,
+          userId: 'user-1',
+          familyId: 'f1');
+      expect(restored, isTrue);
+      expect(vaultB.isUnlocked, isFalse,
+          reason: '重装无自动解锁份：保持锁定，由首页弹口令框完成恢复');
+
+      // 首启口令解锁 → 自动解锁份重建 → 下次启动免口令
+      await vaultB.unlock('my-password-123');
+      final pub = await vaultB.unlockedKeyPair!.extractPublicKey();
+      expect(pub.bytes, equals(setupResult.publicKey.bytes));
+
+      final vaultB2 = newVault(storeB);
+      await VaultSyncService.restoreFromCloud(
+          port: FakeServerPullPort(server),
+          vault: vaultB2,
+          userId: 'user-1',
+          familyId: 'f1');
+      expect(vaultB2.isUnlocked, isTrue,
+          reason: '口令解锁一次后，后续启动全程免口令');
+    });
+  });
 }
 
 /// FakeSyncServer 的推送端口适配（对齐 ApiSyncPushPort 语义）
