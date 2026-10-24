@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../crypto/crypto_primitives.dart';
 import '../crypto/key_vault.dart';
@@ -8,7 +10,9 @@ import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
+import '../data/local/local_user.dart';
 import '../services/api/api_client.dart';
+import 'family_key_service.dart';
 import 'sync_outbox.dart';
 import 'sync_puller.dart';
 import 'vault_sync_service.dart';
@@ -69,6 +73,7 @@ class SyncScheduler {
     Future<bool> Function()? isSignedIn,
     Future<String?> Function()? currentFamilyId,
     SyncPuller? puller,
+    Future<List<({String id, int role})>> Function()? membersProvider,
     this.batchSize = 500,
   })  : _injectedDb = db,
         _injectedPuller = puller,
@@ -76,7 +81,8 @@ class SyncScheduler {
         _port = port ?? ApiSyncPushPort(),
         _vault = vault ?? VaultProvider.vault,
         _isSignedIn = isSignedIn ?? _defaultSignedIn,
-        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get;
+        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get,
+        _membersProvider = membersProvider;
 
   static Future<bool> _defaultSignedIn() async =>
       await ApiClient().getToken() != null;
@@ -93,6 +99,7 @@ class SyncScheduler {
   final KeyVault _vault;
   final Future<bool> Function() _isSignedIn;
   final Future<String?> Function() _currentFamilyId;
+  final Future<List<({String id, int role})>> Function()? _membersProvider;
   final int batchSize;
 
   /// 当前库：注入（测试）优先；默认随 Db 单例动态取——Db.close()
@@ -107,6 +114,7 @@ class SyncScheduler {
         db: _db,
         port: _pullPort,
         currentFamilyId: _currentFamilyId,
+        vault: _vault,
       );
 
   bool _running = false;
@@ -148,30 +156,111 @@ class SyncScheduler {
   }
 
   Future<void> _syncOnce() async {
-    final dataKey = await _gate();
-    if (dataKey == null) {
+    final gate = await _gate();
+    if (gate == null) {
       debugPrint('[SyncScheduler] 门控未通过，本轮跳过');
       return;
     }
     debugPrint('[SyncScheduler] 门控通过，开始同步');
+    final familyId = await _currentFamilyId();
     // vault 托管补位（6.7）：每轮幂等推送最新 vault 到当前家庭通道，
     // 云端 upsert 覆盖——改口令/重置后下轮同步自动更新云端副本；
     // 新开启用户首轮同步即补上云端 vault。内部自吞异常，失败下轮重试
     await VaultSyncService.pushVault();
-    await _pushAll(dataKey);
-    await _puller.pullAll(dataKey);
+
+    // 三期 8.4：家庭密钥 F 保障——admin 首次生成 / 云端缺份的成员
+    // 补包裹分发。成员列表拉取失败静默跳过（下轮重试），不阻断同步
+    final members = await _loadMembers();
+    await FamilyKeyService.ensureDistributed(
+      members: members,
+      pushPort: _port,
+      pullPort: _pullPort,
+      currentFamilyId: _currentFamilyId,
+    );
+
+    // F 分发可能本轮新生成（admin 路径），重新读取
+    final familyKey =
+        familyId == null ? null : await _vault.familyDataKey(familyId);
+
+    // 存量重密封（8.4）：首次拿到 F 时把该家庭已上云密文从个人 key
+    // 迁移到家庭 key——version 不变、updated_at 刷新、syncPending 重标，
+    // 下方推送环节用家庭 key 全量重推（LWW 同 version 时间新者胜覆盖）
+    if (familyId != null && familyKey != null) {
+      await _maybeReseal(familyId);
+    }
+
+    await _pushAll();
+    await _puller.pullAll(
+      gate.personal,
+      // 惰性家庭密钥源：fkey 记录可能在本轮拉取中途送达 F（后加入
+      // 成员首拉），解出后同页后续业务记录立即可解
+      familyDataKeyProvider: familyId == null
+          ? null
+          : () async => await _vault.familyDataKey(familyId),
+    );
     // 对账补推：拉取仲裁跳过的本地高版本记录（或推送环节部分
     // 失败遗留）推上去，一轮收敛；已推净则空转返回
-    await _pushAll(dataKey);
+    await _pushAll();
     debugPrint('[SyncScheduler] 一轮同步完成');
     // 通知停留页面重拉数据（拉取模式 Provider 不感知本地库变更）
     _roundCompletedController.add(null);
   }
 
-  /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生数据密钥。
+  /// 当前家庭成员（分发 F 的检测范围）。注入（测试）优先；
+  /// 网络失败返回空列表（本轮跳过分发，成员数据同步不受影响）。
+  Future<List<({String id, int role})>> _loadMembers() async {
+    if (_membersProvider != null) return await _membersProvider!();
+    try {
+      final result =
+          await ApiClient().get<Map<String, dynamic>>('/v1/families/members');
+      final list = (result['data'] as List? ?? const []);
+      return list
+          .map((m) => (id: (m as Map)['id'] as String, role: m['role'] as int))
+          .toList();
+    } catch (e) {
+      debugPrint('[SyncScheduler] 成员列表拉取失败，本轮跳过 F 分发: $e');
+      return const [];
+    }
+  }
+
+  /// 首次拿到 F 的家庭做一次存量重密封标记（per 家庭 per 账号）：
+  /// 该家庭全部业务行 syncPending 重标 + updated_at 刷新，
+  /// 让推送环节以家庭 key 重加密重推（云端旧个人密文被覆盖，
+  /// 其他成员从「不可读跳过」变为可解——家庭数据共享的存量闭环）。
+  /// 学习表（用户级、走当前家庭通道）全表重标。version 不动，
+  /// 多设备侧按同 version 时间新者胜收敛，无翻案冲突。
+  Future<void> _maybeReseal(String familyId) async {
+    final user = await LocalUser.load();
+    final key = 'xiji_reseal_done@$familyId@${user?.id ?? ''}';
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(key) == true) return;
+
+    final now = DateTime.now();
+    await (_db.update(_db.transactions)
+          ..where((t) => t.familyId.equals(familyId)))
+        .write(TransactionsCompanion(
+            syncPending: const Value(true), updatedAt: Value(now)));
+    await (_db.update(_db.categories)
+          ..where((c) => c.familyId.equals(familyId)))
+        .write(CategoriesCompanion(
+            syncPending: const Value(true), updatedAt: Value(now)));
+    await (_db.update(_db.budgets)..where((b) => b.familyId.equals(familyId)))
+        .write(BudgetsCompanion(
+            syncPending: const Value(true), updatedAt: Value(now)));
+    await (_db.update(_db.categoryRules))
+        .write(CategoryRulesCompanion(
+            syncPending: const Value(true), updatedAt: Value(now)));
+
+    await prefs.setBool(key, true);
+    debugPrint('[SyncScheduler] 存量重密封完成：$familyId 全量重标待推');
+  }
+
+  /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生双数据密钥。
   /// 任一不满足返回 null（静默跳过，标记与游标保留）。
   /// 备份开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游）。
-  Future<Uint8List?> _gate() async {
+  /// 返回个人密钥（回落解密/无 F 家庭兜底）与当前家庭密钥（8.4；
+  /// 未获 F 为 null——业务推送跳过、拉取保留）。
+  Future<({Uint8List personal, Uint8List? family})?> _gate() async {
     if (!await _vault.isBackupEnabled()) {
       debugPrint('[SyncScheduler] 门控跳过：备份开关未开');
       return null;
@@ -186,11 +275,14 @@ class SyncScheduler {
       return null;
     }
     final privateKey = Uint8List.fromList(await keyPair.extractPrivateKeyBytes());
-    return CryptoPrimitives.hkdfSha256(privateKey,
+    final personal = CryptoPrimitives.hkdfSha256(privateKey,
         info: CryptoPrimitives.kSyncDataKeyInfo);
+    final familyId = await _currentFamilyId();
+    final family = familyId == null ? null : await _vault.familyDataKey(familyId);
+    return (personal: personal, family: family);
   }
 
-  Future<void> _pushAll(Uint8List dataKey) async {
+  Future<void> _pushAll() async {
     final rows = await SyncOutbox.collectAll(_db, await _currentFamilyId());
     if (rows.isEmpty) {
       debugPrint('[SyncScheduler] 发件箱为空，无需推送');
@@ -203,14 +295,22 @@ class SyncScheduler {
       byFamily.putIfAbsent(row.familyId, () => <SyncPendingRow>[]).add(row);
     }
 
+    // 8.4：行级加密键选择——该家庭有 F 用家庭密钥（家庭数据共享），
+    // 无 F（未获分发的家庭）跳过推送，标记保留待拿到 F 后重推
     for (final entry in byFamily.entries) {
+      final familyDataKey = await _vault.familyDataKey(entry.key);
+      if (familyDataKey == null) {
+        debugPrint('[SyncScheduler] 家庭 ${entry.key} 未获 F，'
+            '业务推送跳过（标记保留）');
+        continue;
+      }
       var start = 0;
       while (start < entry.value.length) {
         final batch =
             entry.value.skip(start).take(batchSize).toList(growable: false);
         final records = <Map<String, dynamic>>[];
         for (final row in batch) {
-          records.add(await SyncOutbox.encryptRecord(dataKey, row));
+          records.add(await SyncOutbox.encryptRecord(familyDataKey, row));
         }
         debugPrint('[SyncScheduler] 推送家庭 ${entry.key} '
             '批次 ${start ~/ batchSize + 1}：${records.length} 条');

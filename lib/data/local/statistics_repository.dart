@@ -78,7 +78,7 @@ class StatisticsRepository {
   /// 指定月份预算金额（无预算或墓碑返回 0）。个人口径（D8）：
   /// 当前用户在 [familyId] 家庭的预算
   Future<double> monthBudget(
-      String familyId, String userId, int year, int month) async {
+    String familyId, String userId, int year, int month) async {
     final rows = await (_db.select(_db.budgets)
           ..where((b) =>
               b.familyId.equals(familyId) &
@@ -89,6 +89,101 @@ class StatisticsRepository {
         .get();
     if (rows.isEmpty) return 0;
     return Money.centsToYuan(rows.first.amountCents);
+  }
+
+  /// 家庭预算进度（8.5）：按「已设预算成员」口径聚合，预算与支出
+  /// 同口径——未设预算成员的支出不计入分子，避免进度虚高。
+  /// X（已设预算成员数）= 该家庭该月 budgets 表 distinct userId；
+  /// N（参与同步成员数）由页面层从成员列表接口取 syncEnabled。
+  Future<FamilyBudgetProgress> familyBudgetProgress(
+    String familyId,
+    int year,
+    int month,
+  ) async {
+    final monthStart = DateTime(year, month, 1);
+    final monthEnd = DateTime(year, month + 1, 1)
+        .subtract(const Duration(microseconds: 1));
+
+    // 已设预算成员与预算合计（分域整数聚合，一次查询）
+    final bRows = await _db.customSelect(
+      'SELECT user_id, SUM(amount_cents) AS total FROM budgets '
+      'WHERE deleted = 0 AND family_id = ? AND year = ? AND month = ? '
+      'GROUP BY user_id',
+      variables: [
+        Variable(familyId),
+        Variable(year),
+        Variable(month),
+      ],
+      readsFrom: {_db.budgets},
+    ).get();
+    if (bRows.isEmpty) {
+      return FamilyBudgetProgress(total: 0, used: 0, memberCount: 0);
+    }
+
+    final budgetCents =
+        bRows.fold<int>(0, (sum, r) => sum + r.read<int>('total'));
+    final budgetedUserIds =
+        bRows.map((r) => r.read<String>('user_id')).toList();
+
+    // 同口径成员的本月支出（type=1、排除墓碑与不计收支）
+    final uRows = await _db.customSelect(
+      'SELECT SUM(amount_cents) AS used FROM transactions '
+      'WHERE deleted = 0 AND type = 1 AND family_id = ? '
+      'AND user_id IN (${List.filled(budgetedUserIds.length, '?').join(', ')}) '
+      'AND date >= ? AND date <= ?',
+      variables: [
+        Variable(familyId),
+        ...budgetedUserIds.map(Variable.new),
+        Variable<DateTime>(monthStart),
+        Variable<DateTime>(monthEnd),
+      ],
+      readsFrom: {_db.transactions},
+    ).get();
+    final usedCents = uRows.single.readNullable<int>('used') ?? 0;
+    return FamilyBudgetProgress(
+      total: Money.centsToYuan(budgetCents),
+      used: Money.centsToYuan(usedCents),
+      memberCount: bRows.length,
+    );
+  }
+
+  /// 个人预算进度（D8：本人预算 vs 本人支出）：预算页个人口径。
+  /// 一切加减在分域完成，出参才转元。
+  Future<PersonalBudgetProgress> personalBudgetProgress(
+    String familyId,
+    String userId,
+    int year,
+    int month,
+  ) async {
+    final monthStart = DateTime(year, month, 1);
+    final monthEnd = DateTime(year, month + 1, 1)
+        .subtract(const Duration(microseconds: 1));
+
+    final rows = await _db.customSelect(
+      'SELECT SUM(amount_cents) AS used FROM transactions '
+      'WHERE deleted = 0 AND type = 1 AND family_id = ? AND user_id = ? '
+      'AND date >= ? AND date <= ?',
+      variables: [
+        Variable(familyId),
+        Variable(userId),
+        Variable<DateTime>(monthStart),
+        Variable<DateTime>(monthEnd),
+      ],
+      readsFrom: {_db.transactions},
+    ).get();
+    final usedCents = rows.single.readNullable<int>('used') ?? 0;
+
+    final budgetRows = await (_db.select(_db.budgets)
+          ..where((b) =>
+              b.familyId.equals(familyId) &
+              b.userId.equals(userId) &
+              b.year.equals(year) &
+              b.month.equals(month) &
+              b.deleted.equals(false)))
+        .get();
+    final budgetCents = budgetRows.isEmpty ? null : budgetRows.first.amountCents;
+    return PersonalBudgetProgress(
+        budgetCents: budgetCents, usedCents: usedCents);
   }
 
   /// 分类统计：指定收支类型与日期区间，按分类聚合金额并降序。
@@ -424,4 +519,38 @@ class MonthlyTotals {
     required this.income,
     required this.expense,
   });
+}
+
+/// 家庭预算进度（8.5）：预算与支出同为「已设预算成员」口径
+class FamilyBudgetProgress {
+  final double total; // 已设预算成员的预算合计（元）
+  final double used; // 同口径成员的本月支出（元）
+  final int memberCount; // 已设预算成员数 X
+
+  FamilyBudgetProgress({
+    required this.total,
+    required this.used,
+    required this.memberCount,
+  });
+}
+
+/// 个人预算进度（D8）：本人预算 vs 本人支出（分域整数，
+/// 出参由调用方转元——加减在分域完成的纪律）
+class PersonalBudgetProgress {
+  final int? budgetCents; // 本人预算（分），null=未设置
+  final int usedCents; // 本人本月支出（分）
+
+  PersonalBudgetProgress({required this.budgetCents, required this.usedCents});
+
+  bool get hasBudget => budgetCents != null;
+
+  /// 剩余（分域减法）：未设预算为 0
+  int get remainingCents =>
+      hasBudget ? budgetCents! - usedCents : 0;
+
+  /// 使用百分比 0-100：未设预算或预算为 0 时 0
+  int get percentage =>
+      hasBudget && budgetCents! > 0
+          ? (usedCents * 100 / budgetCents!).round()
+          : 0;
 }

@@ -80,7 +80,7 @@ void main() {
       expect(rows.map((r) => r.id), containsAll(<String>['tx-1', 'tx-2']));
     });
 
-    test('中途页解密异常：游标停在成功页末，下次从断点重拉', () async {
+    test('中途页异常：游标停在成功页末，下次从断点重拉', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final server = FakeSyncServer(pageSize: 2);
       final db = AppDatabase(NativeDatabase.memory());
@@ -90,13 +90,17 @@ void main() {
         final row = _cloudTx('tx-$i', updatedAt: DateTime(2026, 10, 1, 0, 0, i));
         server.push('f1', [await SyncOutbox.encryptRecord(dataKey, row)]);
       }
-      // 第二页起损坏密文（篡改 ciphertext）→ 解密失败
-      final port = _CorruptingServerPort(server);
+      // 第二页放未知 recordType（解密成功但类型不识别）→ 页中断。
+      // 密文损坏在 8.4 后按「不可读跳过」处理（其他成员未重密封
+      // 旧密文不得堵死家庭通道拉取），页中断改由未知类型触发
+      final row = _cloudTx('tx-4', updatedAt: DateTime(2026, 10, 1, 0, 0, 4))
+        ..payload['recordType'] = 'unknown-type';
+      server.push('f1', [await SyncOutbox.encryptRecord(dataKey, row)]);
       final puller = SyncPuller(
-          db: db, port: port, currentFamilyId: () async => 'f1');
+          db: db, port: FakeServerPullPort(server), currentFamilyId: () async => 'f1');
 
-      await expectLater(puller.pullAll(dataKey), throwsA(anything));
-      // 游标停在第一页末条（tx-2 成功入库已推进），损坏页下次重拉
+      await expectLater(puller.pullAll(dataKey), throwsA(isA<ArgumentError>()));
+      // 游标停在第一页末条（tx-2 成功入库已推进），坏页下次重拉
       final cursor = await SyncCursorStore.load('f1');
       expect(cursor, isNotNull);
       expect(
@@ -104,14 +108,46 @@ void main() {
       expect(cursor.id, 'tx-2');
       expect(server.requests.length, 2, reason: '第一页成功、第二页拉取后失败');
 
-      // 重拉从断点继续：只取 tx-3（服务端已恢复完好密文）
+      // 重拉从断点继续：tx-3/tx-4 入库（服务端已恢复正常类型）
+      server.remove('tx-4');
+      final fixed = _cloudTx('tx-4', updatedAt: DateTime(2026, 10, 1, 0, 0, 4));
+      server.push('f1', [await SyncOutbox.encryptRecord(dataKey, fixed)]);
       final recovered = SyncPuller(
           db: db, port: FakeServerPullPort(server), currentFamilyId: () async => 'f1');
       await recovered.pullAll(dataKey);
       final rows = await db.select(db.transactions).get();
-      expect(rows.map((r) => r.id), containsAll(<String>['tx-1', 'tx-2', 'tx-3']));
+      expect(rows.map((r) => r.id), containsAll(<String>['tx-1', 'tx-2', 'tx-3', 'tx-4']));
       expect(server.requests.last.cursorId, 'tx-2',
           reason: '断点续拉带 tx-2 游标');
+    });
+
+    test('密文解不开的记录按不可读跳过（8.4：他人旧密文不堵拉取）', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final server = FakeSyncServer(pageSize: 10);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+
+      // tx-1 用他人密钥加密（本机解不开），tx-2 用本机密钥
+      final foreignKey =
+          Uint8List.fromList(List.generate(32, (i) => (i * 13 + 7) % 256));
+      server.push('f1', [
+        await SyncOutbox.encryptRecord(
+            foreignKey,
+            _cloudTx('tx-1', updatedAt: DateTime(2026, 10, 1, 0, 0, 1)))
+      ]);
+      server.push('f1', [
+        await SyncOutbox.encryptRecord(
+            dataKey, _cloudTx('tx-2', updatedAt: DateTime(2026, 10, 1, 0, 0, 2)))
+      ]);
+
+      final puller = SyncPuller(
+          db: db, port: FakeServerPullPort(server), currentFamilyId: () async => 'f1');
+      // 不抛、游标推进、tx-1 缺失、tx-2 入库
+      await puller.pullAll(dataKey);
+      final rows = await db.select(db.transactions).get();
+      expect(rows.map((r) => r.id), ['tx-2']);
+      final cursor = await SyncCursorStore.load('f1');
+      expect(cursor!.id, 'tx-2', reason: '游标越过不可读记录正常推进');
     });
   });
 
@@ -231,31 +267,4 @@ SyncPendingRow _cloudTx(String id, {DateTime? updatedAt}) {
       'platform': null,
     },
   );
-}
-
-/// 从第二页起破坏密文（模拟损坏记录）
-class _CorruptingServerPort implements SyncPullPort {
-  _CorruptingServerPort(this._server);
-  final FakeSyncServer _server;
-  int _pulled = 0;
-
-  @override
-  Future<Map<String, dynamic>> pull(
-    String familyId,
-    int? cursorTime,
-    String? cursorId, {
-    String? recordId,
-    int? limit,
-  }) async {
-    final page = _server.pull(familyId, cursorTime, cursorId,
-        recordId: recordId, limit: limit);
-    _pulled++;
-    if (_pulled == 2) {
-      final records = (page['records'] as List).cast<Map<String, dynamic>>();
-      for (final r in records) {
-        r['ciphertext'] = 'AAAA${r['ciphertext']}'; // 篡改 base64
-      }
-    }
-    return page;
-  }
 }

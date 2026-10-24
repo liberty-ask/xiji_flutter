@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:pointycastle/export.dart';
+import 'package:pointycastle/export.dart' hide Mac;
 
 /// 端到端加密原语封装（第 6 组基座，见 openspec design.md D3）。
 ///
@@ -127,4 +127,53 @@ class CryptoPrimitives {
     return Uint8List.fromList(bytes);
   }
 
+  /// 家庭密钥包裹的 HKDF info（域分离：与 dataKey/传输密钥互不可替）
+  static const String kFamilyKeyWrapInfo = 'xiji-family-key-wrap';
+
+  /// 密封盒包裹结果：临时公钥 + 包裹密文（nonce‖cipherText‖tag 拼接）。
+  /// 两者均以 base64 进 fkey 记录 payload（见 design.md D13）。
+  static Future<({String ephemeralPubKey, String wrappedF})>
+      sealFamilyKeyFor({
+    required Uint8List familyKey,
+    required SimplePublicKey recipientPublicKey,
+  }) async {
+    final ephemeral = await generateX25519KeyPair();
+    final shared = await x25519SharedSecret(
+        ourKeyPair: ephemeral, theirPublicKey: recipientPublicKey);
+    final wrapKey = hkdfSha256(shared, info: kFamilyKeyWrapInfo);
+    final box = await aeadEncrypt(wrapKey, familyKey);
+    final ephemeralPub = await ephemeral.extractPublicKey();
+    final ephemeralPubBytes = ephemeralPub.bytes;
+    final combined = Uint8List.fromList(
+        [...box.nonce, ...box.cipherText, ...box.mac.bytes]);
+    return (
+      ephemeralPubKey: base64Encode(ephemeralPubBytes),
+      wrappedF: base64Encode(combined),
+    );
+  }
+
+  /// 密封盒解包裹：己方私钥 + 密封盒携带的临时公钥 ECDH 派生包裹密钥
+  /// 解出家庭密钥 F。私钥不匹配（非本成员的包裹份）抛
+  /// [SecretBoxAuthenticationError]，由调用方按静默跳过处理。
+  static Future<Uint8List> openSealedFamilyKey({
+    required String ephemeralPubKeyBase64,
+    required String wrappedFBase64,
+    required SimpleKeyPair ourKeyPair,
+  }) async {
+    final ephemeralPub = SimplePublicKey(
+        base64Decode(ephemeralPubKeyBase64), type: KeyPairType.x25519);
+    final shared = await x25519SharedSecret(
+        ourKeyPair: ourKeyPair, theirPublicKey: ephemeralPub);
+    final wrapKey = hkdfSha256(shared, info: kFamilyKeyWrapInfo);
+
+    final combined = base64Decode(wrappedFBase64);
+    final nonce = combined.sublist(0, 12);
+    final cipherText = combined.sublist(12, combined.length - 16);
+    final mac = combined.sublist(combined.length - 16);
+    final clear = await aeadDecrypt(
+      wrapKey,
+      SecretBox(cipherText, nonce: nonce, mac: Mac(mac)),
+    );
+    return clear;
+  }
 }

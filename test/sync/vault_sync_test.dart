@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:cryptography/cryptography.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -278,11 +277,12 @@ void main() {
       // 已同版 → 幂等 skipped
       expect(await ingest.applyRecord(dataKey, vaultRecord),
           IngestResult.skipped);
-      // 非 vault 前缀记录解不开 → rethrow（真损坏语义不变）
+      // 非 vault/fkey 前缀记录解不开 → 8.4 语义：其他成员未重密封的
+      // 旧密文按不可读跳过（游标照常推进，不再中断家庭通道拉取）
       final foreign = Map<String, dynamic>.of(vaultRecord)
         ..['id'] = 'tx-foreign';
-      await expectLater(ingest.applyRecord(dataKey, foreign),
-          throwsA(isA<SecretBoxAuthenticationError>()));
+      expect(await ingest.applyRecord(dataKey, foreign),
+          IngestResult.skipped);
     });
   });
 

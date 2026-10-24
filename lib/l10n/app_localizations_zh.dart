@@ -220,6 +220,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get admin => '管理员';
 
   @override
+  String get memberSyncDormant => '未开启同步';
+
+  @override
+  String get memberSyncDormantDesc => '该成员未开启云备份，账单不会同步到家庭';
+
+  @override
+  String get backupRescueEntry => '恢复码也丢失了？';
+
+  @override
+  String get backupRescueWarnTitle => '重置加密密钥';
+
+  @override
+  String get backupRescueWarnMessage =>
+      '口令与恢复码均已丢失，需要重置加密密钥。重置后：\n\n· 需要任一家庭成员打开 App 完成重新授权，您的云端家庭数据才能恢复\n· 重置前的个人云端密文将无法解密\n\n确定继续吗？';
+
+  @override
+  String budgetMemberNote(int x, int n) {
+    return '预算按 $x/$n 位成员统计';
+  }
+
+  @override
+  String get joinFamilySyncHint => '您尚未开启云备份同步，加入家庭后无法查看家庭账单。请先在「设置 → 云备份」中开启。';
+
+  @override
   String get noTrendData => '暂无趋势数据';
 
   @override
@@ -1583,6 +1607,30 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get admin => '管理员';
 
   @override
+  String get memberSyncDormant => '未开启同步';
+
+  @override
+  String get memberSyncDormantDesc => '该成员未开启云备份，账单不会同步到家庭';
+
+  @override
+  String get backupRescueEntry => '恢复码也丢失了？';
+
+  @override
+  String get backupRescueWarnTitle => '重置加密密钥';
+
+  @override
+  String get backupRescueWarnMessage =>
+      '口令与恢复码均已丢失，需要重置加密密钥。重置后：\n\n· 需要任一家庭成员打开 App 完成重新授权，您的云端家庭数据才能恢复\n· 重置前的个人云端密文将无法解密\n\n确定继续吗？';
+
+  @override
+  String budgetMemberNote(int x, int n) {
+    return '预算按 $x/$n 位成员统计';
+  }
+
+  @override
+  String get joinFamilySyncHint => '您尚未开启云备份同步，加入家庭后无法查看家庭账单。请先在「设置 → 云备份」中开启。';
+
+  @override
   String get noTrendData => '暂无趋势数据';
 
   @override
@@ -2939,6 +2987,30 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get admin => '管理員';
+
+  @override
+  String get memberSyncDormant => '未開啟同步';
+
+  @override
+  String get memberSyncDormantDesc => '該成員未開啟雲備份，帳單不會同步到家庭';
+
+  @override
+  String get backupRescueEntry => '恢復碼也丟失了？';
+
+  @override
+  String get backupRescueWarnTitle => '重置加密密鑰';
+
+  @override
+  String get backupRescueWarnMessage =>
+      '口令與恢復碼均已丟失，需要重置加密密鑰。重置後：\n\n· 需要任一家庭成員開啟 App 完成重新授權，您的雲端家庭資料才能恢復\n· 重置前的個人雲端密文將無法解密\n\n確定繼續嗎？';
+
+  @override
+  String budgetMemberNote(int x, int n) {
+    return '預算按 $x/$n 位成員統計';
+  }
+
+  @override
+  String get joinFamilySyncHint => '您尚未開啟雲備份同步，加入家庭後無法查看家庭帳單。請先在「設定 → 雲備份」中開啟。';
 
   @override
   String get noTrendData => '暫無趨勢數據';

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../crypto/key_vault.dart';
 import '../data/local/app_database.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/local_user.dart';
@@ -59,25 +60,42 @@ class SyncPuller {
     required AppDatabase db,
     SyncPullPort? port,
     Future<String?> Function()? currentFamilyId,
+    KeyVault? vault,
   })  : _db = db,
         _port = port ?? ApiSyncPullPort(),
-        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get;
+        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get,
+        _vault = vault;
 
   final AppDatabase _db;
   final SyncPullPort _port;
   final Future<String?> Function() _currentFamilyId;
 
+  /// vault 注入（fkey/vault 机制记录的解密与 F 落库用）；
+  /// 缺省走 VaultProvider 单例（生产环境）。
+  final KeyVault? _vault;
+
   /// 拉取当前家庭的全部增量并入库。
+  /// [personalDataKey] 个人数据密钥（存量密文回落解密键）；
+  /// [familyDataKeyProvider] 家庭数据密钥的惰性来源（8.4 起业务记录
+  /// 主解密键）。用 provider 而非值：fkey 记录（epoch 时间戳排序恒在
+  /// 业务记录前）可能在本次拉取中途才把 F 送达，本机此前的存量 F 为
+  /// 空——惰性重读让同页先解出的 F 立即作用于后续业务记录，否则游标
+  /// 越过后该批家庭密文永久错过（后加入成员首拉数据不全）。
   /// 任何失败异常上抛（由调度器按「游标不动、下次重拉」处理）。
-  Future<void> pullAll(Uint8List dataKey) async {
+  Future<void> pullAll(
+    Uint8List personalDataKey, {
+    Future<Uint8List?> Function()? familyDataKeyProvider,
+  }) async {
     final familyId = await _currentFamilyId();
     if (familyId == null) return;
 
     final ingest = SyncIngest(
       _db,
+      vault: _vault,
       userId: () => LocalUser.load().then((u) => u?.id),
     );
     var cursor = await SyncCursorStore.load(familyId);
+    Uint8List? familyKey = await familyDataKeyProvider?.call();
 
     while (true) {
       // 每页 2000 条（服务端上限）：万条数据 18 页（200/页时 45 页）
@@ -98,7 +116,15 @@ class SyncPuller {
       if (records.isNotEmpty) {
         await _db.transaction(() async {
           for (final record in records) {
-            await ingest.applyRecord(dataKey, record);
+            final result = await ingest.applyRecord(personalDataKey, record,
+                familyDataKey: familyKey);
+            // 刚解出自己的包裹份拿到 F：重读家庭 key，同页后续业务
+            // 记录立即可解（只在 F 从无到有时发生一次，常态零开销）
+            if (familyKey == null &&
+                result == IngestResult.updated &&
+                (record['id'] as String).startsWith('fkey-')) {
+              familyKey = await familyDataKeyProvider?.call();
+            }
           }
         });
       }

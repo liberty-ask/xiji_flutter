@@ -202,8 +202,10 @@ class TransactionService {
     final familyId = await CurrentFamilyStore.get();
     final user = await LocalUser.load();
     final overview = await _stats.monthlyOverview(familyId, current);
-    final budgetTotal = await _stats.monthBudget(
-        familyId, user?.id ?? '', current.year, current.month);
+    // 家庭预算进度（8.5）：预算与支出同为「已设预算成员」口径，
+    // memberCount 供页面标注「预算按 X/N 位成员统计」
+    final budgetProgress = await _stats.familyBudgetProgress(
+        familyId, current.year, current.month);
 
     // 近期动态：最近 10 条，排除不计收支（type=2），口径对齐服务端
     final recent = await _transactions.recent(familyId, 10);
@@ -242,8 +244,9 @@ class TransactionService {
       'todayExpense': overview.todayExpense,
       'yesterdayExpense': overview.yesterdayExpense,
       'budget': <String, dynamic>{
-        'used': overview.expense,
-        'total': budgetTotal,
+        'used': budgetProgress.used,
+        'total': budgetProgress.total,
+        'memberCount': budgetProgress.memberCount,
       },
       'activities': activities,
     };

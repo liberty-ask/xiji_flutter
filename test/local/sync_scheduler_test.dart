@@ -2,7 +2,6 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:xiji_flutter/crypto/crypto_primitives.dart';
 import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
@@ -31,6 +30,26 @@ class FakePort implements SyncPushPort {
 
   int get totalRecords =>
       calls.fold(0, (sum, c) => sum + c.records.length);
+}
+
+/// 计数拉取端口：记录调用次数，验证「关=停止下拉」
+class CountingPullPort implements SyncPullPort {
+  int calls = 0;
+
+  @override
+  Future<Map<String, dynamic>> pull(
+    String familyId,
+    int? cursorTime,
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  }) async {
+    calls++;
+    return <String, dynamic>{
+      'records': <Map<String, dynamic>>[],
+      'hasMore': false,
+    };
+  }
 }
 
 /// 空拉取端口（默认页）：服务端无该家庭记录
@@ -85,12 +104,15 @@ void main() {
     port = FakePort();
     vault = KeyVault(InMemoryVaultStore(), profile: Argon2Profile.fast());
     await vault.setup('pw123456'); // setup 后即解锁态
+    // 8.4 后业务推送用家庭数据密钥：预置 f1 的 F 走通推送链路
+    await vault.putFamilyKey('f1', KeyVault.generateFamilyKey());
     scheduler = SyncScheduler(
       db: db,
       port: port,
       pullPort: NoopPullPort(),
       vault: vault,
       isSignedIn: () async => true,
+      membersProvider: () async => const [],
     );
   });
 
@@ -115,6 +137,7 @@ void main() {
         pullPort: NoopPullPort(),
         vault: vault,
         isSignedIn: () async => false,
+        membersProvider: () async => const [],
       );
       await insertTx('tx-1');
       await lockedScheduler.maybePush();
@@ -131,6 +154,47 @@ void main() {
       await vault.unlock('pw123456');
       await scheduler.maybePush();
       expect(port.totalRecords, 1);
+      expect(await pendingCount('transactions'), 0);
+    });
+  });
+
+  group('任务 8.7：开关三态语义', () {
+    test('关闭→重开：停止上传下拉、本地数据完整、重开自动恢复同步', () async {
+      final pullPort = CountingPullPort();
+      final stateScheduler = SyncScheduler(
+        db: db,
+        port: port,
+        pullPort: pullPort,
+        vault: vault,
+        isSignedIn: () async => true,
+        membersProvider: () async => const [],
+      );
+
+      // 开=同步中：新变更正常上传下拉
+      await insertTx('tx-1');
+      await stateScheduler.maybePush();
+      expect(port.totalRecords, 1);
+      expect(pullPort.calls, 1);
+      expect(await pendingCount('transactions'), 0);
+
+      // 关=停止上传下拉：门控短路，无任何同步请求发出
+      await insertTx('tx-2');
+      await vault.setBackupEnabled(false);
+      await stateScheduler.maybePush();
+      expect(port.calls, hasLength(1), reason: '关闭后不得再发推送请求');
+      expect(pullPort.calls, 1, reason: '关闭后不得再发拉取请求');
+      // 本地数据完整：关闭只停同步，不删任何本地记录
+      final rowCount = await db
+          .customSelect('SELECT COUNT(*) AS c FROM transactions')
+          .map((row) => row.read<int>('c'))
+          .getSingle();
+      expect(rowCount, 2);
+      expect(await pendingCount('transactions'), 1);
+
+      // 重开=自动恢复同步：遗留 pending 存量自动补推
+      await vault.setBackupEnabled(true);
+      await stateScheduler.maybePush();
+      expect(port.calls.last.records.single['id'], 'tx-2');
       expect(await pendingCount('transactions'), 0);
     });
   });
@@ -216,16 +280,14 @@ void main() {
       expect(port.calls, hasLength(1));
     });
 
-    test('推送密文可被本机密钥解开（密钥派生一致性）', () async {
+    test('推送密文可被本机家庭密钥解开（密钥派生一致性）', () async {
       await insertTx('tx-1');
       await scheduler.maybePush();
 
-      final privateKey = Uint8List.fromList(
-          await vault.unlockedKeyPair!.extractPrivateKeyBytes());
-      final dataKey = CryptoPrimitives.hkdfSha256(privateKey,
-          info: CryptoPrimitives.kSyncDataKeyInfo);
+      // 8.4 起业务记录用家庭 dataKey（HKDF(F)）加密
+      final dataKey = await vault.familyDataKey('f1');
       final record = port.calls.first.records.single;
-      final payload = await SyncOutbox.decryptRecord(dataKey, record);
+      final payload = await SyncOutbox.decryptRecord(dataKey!, record);
       expect(payload['recordType'], 'transaction');
       expect(payload['amountCents'], 3000);
     });
@@ -284,6 +346,7 @@ void main() {
         vault: vault,
         isSignedIn: () async => true,
         batchSize: 2,
+        membersProvider: () async => const [],
       );
       for (var i = 1; i <= 5; i++) {
         await insertTx('tx-$i');
@@ -295,6 +358,8 @@ void main() {
     });
 
     test('多家庭分组：跨家庭记录分批各自推送', () async {
+      // f2 也预置 F（8.4：无 F 的家庭业务推送跳过）
+      await vault.putFamilyKey('f2', KeyVault.generateFamilyKey());
       await insertTx('tx-1', familyId: 'f1');
       await insertTx('tx-2', familyId: 'f1');
       await insertTx('tx-3', familyId: 'f2');

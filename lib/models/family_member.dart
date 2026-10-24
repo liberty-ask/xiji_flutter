@@ -12,13 +12,20 @@ class FamilyMember {
   final String? avatar; // 改为可空类型
   final String? label;
 
+  /// 同步开关投影：1-开启云备份同步，0-休眠（该成员的账单不会上云，
+  /// 其他成员无法看到其数据；机制状态明文，仅展示用途）
+  final int syncEnabled;
+
   FamilyMember({
     required this.id,
     required this.name,
     required this.role,
     this.avatar, // 改为可选参数
     this.label,
+    this.syncEnabled = 0,
   });
+
+  bool get isSyncing => syncEnabled == 1;
 
   factory FamilyMember.fromJson(Map<String, dynamic> json) => FamilyMember(
         id: json['id'] as String,
@@ -26,6 +33,7 @@ class FamilyMember {
         role: json['role'] as int,
         avatar: json['avatar'] as String?, // 处理 null 情况
         label: json['label'] as String?,
+        syncEnabled: (json['syncEnabled'] as int?) ?? 0,
       );
 
   Map<String, dynamic> toJson() => {
@@ -34,5 +42,6 @@ class FamilyMember {
         'role': role,
         'avatar': avatar,
         'label': label,
+        'syncEnabled': syncEnabled,
       };
 }

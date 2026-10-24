@@ -5,13 +5,15 @@ import 'package:drift/drift.dart';
 import '../crypto/key_vault.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
+import '../data/local/member_public_key_store.dart';
+import 'family_key_service.dart';
 import 'sync_outbox.dart';
 import 'vault_sync_service.dart';
 
 /// 单条云端记录的入库仲裁结果
 enum IngestResult { inserted, updated, skipped }
 
-/// 云端拉取记录的本地入库仲裁器（tasks.md 7.4）。
+/// 云端拉取记录的本地入库仲裁器（tasks.md 7.4 / 8.4）。
 ///
 /// LWW 规则与服务端完全对齐（见 7.2）：
 /// - 本地无该 id → 插入
@@ -21,6 +23,12 @@ enum IngestResult { inserted, updated, skipped }
 /// - 墓碑与正常记录同规则：墓碑胜出即删除落库，正常记录胜出
 ///   不复活（只有更高 version 才能翻案）
 /// - 云端覆盖写入的行 syncPending=false（云端权威数据无需回推）
+///
+/// 解密键序（8.4 D13）：家庭 dataKey（业务记录主键）→ 失败按记录
+/// 前缀分流：vault-/fkey- 机制记录走传输密钥；普通业务记录回落
+/// 个人 dataKey（存量个人密文）→ 仍失败按「不可读跳过」（其他成员
+/// 未重密封的旧密文，本人无其个人 key；重密封后其重推覆盖可解），
+/// 不再按损坏中断——家庭通道拉取不能被他人旧密文堵死。
 class SyncIngest {
   SyncIngest(this._db, {KeyVault? vault, Future<String?> Function()? userId})
       : _vault = vault,
@@ -34,42 +42,116 @@ class SyncIngest {
   final Future<String?> Function()? _userId;
 
   /// 解密并仲裁入库单条拉取记录。
-  /// 解密失败（密钥不对/密文损坏/AAD 不匹配）抛原异常，由拉取循环
-  /// 终止本轮、游标不推进（重试无害；密钥错=全量失败不会推进任何游标）。
-  ///
-  /// vault 托管记录（6.7）特判：dataKey 解不开（传输密钥不同），
-  /// 按 id 前缀识别后用 vault 传输密钥解，importVaultDoc LWW 落地；
-  /// 解不开的 vault 记录静默跳过（跨账号 vault 无害：归属校验拒收）。
+  /// [familyDataKey] 家庭数据密钥（8.4 起业务记录主加密键，本机未获
+  /// F 时为 null）；[personalDataKey] 个人数据密钥（存量密文回落键）。
   Future<IngestResult> applyRecord(
-    Uint8List dataKey,
-    Map<String, dynamic> record,
-  ) async {
+    Uint8List personalDataKey,
+    Map<String, dynamic> record, {
+    Uint8List? familyDataKey,
+  }) async {
     final id = record['id'] as String;
-    Map<String, dynamic> payload;
-    try {
-      payload = await SyncOutbox.decryptRecord(dataKey, record);
-    } on SecretBoxAuthenticationError {
-      if (id.startsWith('vault-')) {
-        final userId = await (_userId?.call());
-        if (userId == null) return IngestResult.skipped;
-        final vaultPayload = await SyncOutbox.decryptRecord(
-            KeyVault.vaultTransportKey(userId), record);
-        final adopted = await (_vault ?? VaultProvider.vault)
-            .importVaultDoc(vaultPayload);
-        return adopted ? IngestResult.updated : IngestResult.skipped;
+    Map<String, dynamic>? payload;
+
+    // 键序解密：家庭 key → 个人 key
+    for (final key in [familyDataKey, personalDataKey]) {
+      if (key == null) continue;
+      try {
+        payload = await SyncOutbox.decryptRecord(key, record);
+        break;
+      } on SecretBoxAuthenticationError {
+        continue; // 试下一把键
       }
-      rethrow;
     }
+
+    if (payload == null) {
+      // 机制记录（传输密钥加密）：vault / fkey 特判
+      if (id.startsWith('vault-')) {
+        return _ingestVaultDoc(record);
+      }
+      if (id.startsWith('fkey-')) {
+        return _ingestFamilyKeyWrap(record);
+      }
+      // 其他成员未重密封的旧密文：本人无其个人 key，解不开是预期。
+      // 跳过且游标照常推进（重密封方重推后版本更新可增量拉到可解版）。
+      return IngestResult.skipped;
+    }
+
     final recordType = payload['recordType'] as String;
     return switch (recordType) {
       SyncOutbox.kTypeTransaction => _applyTransaction(record, payload),
       SyncOutbox.kTypeCategory => _applyCategory(record, payload),
       SyncOutbox.kTypeBudget => _applyBudget(record, payload),
       SyncOutbox.kTypeCategoryRule => _applyCategoryRule(record, payload),
-      VaultSyncService.kRecordType => Future<IngestResult>.value(
-          IngestResult.skipped),
+      VaultSyncService.kRecordType =>
+        Future<IngestResult>.value(IngestResult.skipped),
+      FamilyKeyService.kRecordType =>
+        Future<IngestResult>.value(IngestResult.skipped),
       _ => throw ArgumentError('未知的同步记录类型: $recordType'),
     };
+  }
+
+  /// vaultDoc 记录：按文档归属者的传输密钥解密（id 内嵌 userId——
+  /// 机制字段全家庭成员可知，他人 vaultDoc 也可解出 payload）→
+  /// 公钥登记（MemberPublicKeyStore：无论归属是否本账号——其他
+  /// 成员的 vaultDoc 拒收导入，但其公钥是 F 包裹分发的必需输入）
+  /// → importVaultDoc LWW/归属校验（他人文档拒收导入）。
+  /// vault 保密性由 Argon2id 口令包裹保证，payload 可见不破坏安全
+  /// （零信任兼容，见 key_vault.dart 传输密钥注释）。
+  Future<IngestResult> _ingestVaultDoc(
+      Map<String, dynamic> record) async {
+    final docUserId = (record['id'] as String).replaceFirst('vault-', '');
+    Map<String, dynamic> vaultPayload;
+    try {
+      vaultPayload = await SyncOutbox.decryptRecord(
+          KeyVault.vaultTransportKey(docUserId), record);
+    } on SecretBoxAuthenticationError {
+      return IngestResult.skipped; // 异常/残缺数据：静默跳过
+    }
+    final owner = vaultPayload['userId'] as String?;
+    final docPublicKey = vaultPayload['publicKey'] as String?;
+    if (owner != null && docPublicKey != null) {
+      await MemberPublicKeyStore.register(owner, docPublicKey);
+    }
+    final adopted =
+        await (_vault ?? VaultProvider.vault).importVaultDoc(vaultPayload);
+    return adopted ? IngestResult.updated : IngestResult.skipped;
+  }
+
+  /// fkey 记录：本人传输密钥解 payload → 私钥解密封盒得 F 落库。
+  /// 他人的包裹份（其传输密钥加密）解不开是预期，静默跳过——F 的
+  /// 机密性由密封盒保证，他人份跳过不影响家庭通道推进。锁定期不可
+  /// 达（拉取门控要求已解锁），异常静默跳过下轮再试。
+  Future<IngestResult> _ingestFamilyKeyWrap(
+      Map<String, dynamic> record) async {
+    final userId = await (_userId?.call());
+    if (userId == null) return IngestResult.skipped;
+    Map<String, dynamic> payload;
+    try {
+      payload = await SyncOutbox.decryptRecord(
+          KeyVault.vaultTransportKey(userId), record);
+    } on SecretBoxAuthenticationError {
+      return IngestResult.skipped; // 他人包裹份：解不开是预期，跳过
+    }
+    if (payload['forUserId'] != userId) return IngestResult.skipped;
+    // 墓碑态（互救重置废弃的旧包裹，等新包裹在路上）：无包裹字段，
+    // 静默跳过——重包裹份到达时按 updated_at 增量推进拉到
+    if (payload['ephemeralPubKey'] == null ||
+        payload['wrappedF'] == null) {
+      return IngestResult.skipped;
+    }
+    try {
+      final familyKey = await (_vault ?? VaultProvider.vault)
+          .openFamilyKeyWrap(
+        ephemeralPubKeyBase64: payload['ephemeralPubKey'] as String,
+        wrappedFBase64: payload['wrappedF'] as String,
+      );
+      await (_vault ?? VaultProvider.vault)
+          .putFamilyKey(payload['familyId'] as String, familyKey);
+      return IngestResult.updated;
+    } on SecretBoxAuthenticationError {
+      // 私钥对不上（老包裹份/异常数据）：静默跳过
+      return IngestResult.skipped;
+    }
   }
 
   /// 同步机制字段（三类表共用）

@@ -77,6 +77,9 @@ class FakeSyncServer {
 
   /// 服务端当前某条记录（测试断言用）
   Map<String, dynamic>? record(String id) => _byId[id];
+
+  /// 删除记录（测试模拟服务端修复/清理）
+  void remove(String id) => _byId.remove(id);
 }
 
 /// FakeSyncServer 的拉取端口适配

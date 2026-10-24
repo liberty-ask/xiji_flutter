@@ -70,6 +70,19 @@
   "budgetProgress": "預算進度",
   "todayExpense": "今日支出",
   "admin": "管理員",
+  "memberSyncDormant": "未開啟同步",
+  "memberSyncDormantDesc": "該成員未開啟雲備份，帳單不會同步到家庭",
+  "backupRescueEntry": "恢復碼也丟失了？",
+  "backupRescueWarnTitle": "重置加密密鑰",
+  "backupRescueWarnMessage": "口令與恢復碼均已丟失，需要重置加密密鑰。重置後：\n\n· 需要任一家庭成員開啟 App 完成重新授權，您的雲端家庭資料才能恢復\n· 重置前的個人雲端密文將無法解密\n\n確定繼續嗎？",
+  "budgetMemberNote": "預算按 {x}/{n} 位成員統計",
+  "@budgetMemberNote": {
+    "placeholders": {
+      "x": {"type": "int"},
+      "n": {"type": "int"}
+    }
+  },
+  "joinFamilySyncHint": "您尚未開啟雲備份同步，加入家庭後無法查看家庭帳單。請先在「設定 → 雲備份」中開啟。",
   "noTrendData": "暫無趨勢數據",
   "averageIncome": "平均收入",
   "averageExpense": "平均支出",

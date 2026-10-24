@@ -520,6 +520,48 @@ abstract class AppLocalizations {
   /// **'Admin'**
   String get admin;
 
+  /// No description provided for @memberSyncDormant.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync off'**
+  String get memberSyncDormant;
+
+  /// No description provided for @memberSyncDormantDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'This member hasn\'t enabled cloud backup; bills won\'t sync to the family'**
+  String get memberSyncDormantDesc;
+
+  /// No description provided for @backupRescueEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Also lost the recovery code?'**
+  String get backupRescueEntry;
+
+  /// No description provided for @backupRescueWarnTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset encryption key'**
+  String get backupRescueWarnTitle;
+
+  /// No description provided for @backupRescueWarnMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Both password and recovery code are lost. The encryption key must be reset. After reset:\n\n· A family member must open the app to re-authorize before your cloud family data can be restored\n· Personal cloud ciphertext from before the reset will be undecryptable\n\nContinue?'**
+  String get backupRescueWarnMessage;
+
+  /// No description provided for @budgetMemberNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Budget covers {x}/{n} members'**
+  String budgetMemberNote(int x, int n);
+
+  /// No description provided for @joinFamilySyncHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud backup sync is off. You won\'t see family bills after joining. Enable it in Settings → Cloud Backup first.'**
+  String get joinFamilySyncHint;
+
   /// No description provided for @noTrendData.
   ///
   /// In en, this message translates to:

@@ -39,6 +39,14 @@ class FamilyService {
     return list.map((json) => FamilyMember.fromJson(json as Map<String, dynamic>)).toList();
   }
 
+  // 上报同步开关投影（云备份开关切换时；账号级语义，服务端更新
+  // 该用户全部家庭行，供其他成员感知休眠状态。仅展示用途，失败静默）
+  Future<void> reportSyncStatus(bool enabled) async {
+    await _api.post('/v1/families/sync-status', data: {
+      'enabled': enabled,
+    });
+  }
+
   // 获取待审核申请列表
   Future<List<Application>> getPendingApplications() async {
     final result = await _api.get('/v1/families/pending-applications');

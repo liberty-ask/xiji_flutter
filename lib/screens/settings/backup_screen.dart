@@ -6,10 +6,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../crypto/key_vault.dart';
 import '../../crypto/vault_provider.dart';
+import '../../services/api/family_service.dart';
 import '../../services/local/biometric_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
+import '../../sync/family_key_service.dart';
 import '../../sync/sync_scheduler.dart';
 import '../../sync/vault_sync_service.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
@@ -58,6 +60,13 @@ class _BackupScreenState extends State<BackupScreen> {
         _vaultUnlocked = _vault.isUnlocked;
       });
     }
+  }
+
+  /// 上报同步开关投影（8.2）：开关切换后 fire-and-forget 上报服务端，
+  /// 供其他成员在成员列表看到休眠状态。仅展示用途，失败静默不打扰用户
+  /// （下次开关切换时自然对齐）。
+  void _reportSyncStatus(bool enabled) {
+    FamilyService().reportSyncStatus(enabled).catchError((_) {});
   }
 
   void _onTabTapped(int index) {
@@ -123,6 +132,7 @@ class _BackupScreenState extends State<BackupScreen> {
           }
         }
         await _vault.setBackupEnabled(true);
+        _reportSyncStatus(true);
         unawaited(SyncScheduler.instance.maybePush());
         if (mounted) {
           setState(() {
@@ -140,6 +150,7 @@ class _BackupScreenState extends State<BackupScreen> {
       if (!saved || !mounted) return;
       await _vault.setBackupEnabled(true);
       // setup 完成即解锁，开关打开即满足门控，直接开始首轮同步
+      _reportSyncStatus(true);
       unawaited(SyncScheduler.instance.maybePush());
       if (mounted) {
         setState(() {
@@ -151,6 +162,7 @@ class _BackupScreenState extends State<BackupScreen> {
       final confirmed = await _showDisableConfirm();
       if (confirmed != true || !mounted) return;
       await _vault.setBackupEnabled(false);
+      _reportSyncStatus(false);
       // 关闭动作也必须把 enabled=false 推上云（6.8）：否则重装/换设备
       // 后开关又弹回开启。pushVault 不走业务备份门控，直接推送
       unawaited(VaultSyncService.pushVault());
@@ -252,6 +264,70 @@ class _BackupScreenState extends State<BackupScreen> {
       return null;
     } finally {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
+  /// 家庭互救重置流（8.6）：口令+恢复码双丢时销毁旧 vault、重建新
+  /// 密钥对，seed 云端版本后推送新 vaultDoc + 废弃旧包裹墓碑——
+  /// 任一家庭成员下轮同步检测到墓碑即用新公钥重包裹 F，云端家庭
+  /// 数据随之可恢复。个人旧密文（个人 key 加密的历史）不可恢复，
+  /// 警示框已明确告知。
+  Future<void> _mutualRescueReset() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(l10n.backupRescueWarnTitle),
+            content: Text(l10n.backupRescueWarnMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.confirm),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    final password = await _showPasswordDialog();
+    if (password == null || !mounted) return;
+
+    // 销毁锁死的旧 vault → 重建新密钥对 → 展示新恢复码
+    await _vault.destroyVault();
+    final result = await _runSetup(password);
+    if (result == null || !mounted) return;
+    final saved = await _showRecoveryCodeDialog(result.recoveryCode);
+    if (!saved || !mounted) return;
+    await _vault.setBackupEnabled(true);
+
+    // 互救机制动作（尽力而为，失败由下轮同步重试收敛）：
+    // 旧 vaultDoc 版本 seed → 新文档才能 LWW 胜出；
+    // 旧包裹墓碑 → 老成员探测到即重包裹；新 vault 上云。
+    try {
+      final oldDoc = await VaultSyncService.pullVaultDoc();
+      if (oldDoc != null) {
+        await _vault.seedSyncVersion((oldDoc['syncVersion'] as int?) ?? 1);
+      }
+      await FamilyKeyService.requestRewrapAfterReset();
+      await VaultSyncService.pushVault();
+    } catch (_) {
+      // 网络异常：下轮同步继续（调度器每轮 pushVault + 墓碑重试）
+    }
+    unawaited(SyncScheduler.instance.maybePush());
+    if (mounted) {
+      setState(() {
+        _configured = true;
+        _enabled = true;
+        _vaultUnlocked = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.backupResetDone)),
+      );
     }
   }
 
@@ -472,6 +548,23 @@ class _BackupScreenState extends State<BackupScreen> {
                     }
                     return null;
                   },
+                ),
+                // 8.6 互救入口：口令+恢复码双丢的最后出路
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      _mutualRescueReset();
+                    },
+                    child: Text(
+                      l10n.backupRescueEntry,
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),

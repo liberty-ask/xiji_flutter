@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../crypto/vault_provider.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
@@ -26,6 +27,24 @@ class _ApplyFamilyScreenState extends State<ApplyFamilyScreen> {
   final TextEditingController _noteController = TextEditingController();
   final bool _isLoading = false;
   bool _isSubmitting = false;
+
+  /// 8.3：入伙前置提示——本机云备份开关未开启时警示「无法查看家庭账单」
+  bool _backupDisabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackupState();
+  }
+
+  Future<void> _loadBackupState() async {
+    final enabled = await VaultProvider.vault.isBackupEnabled();
+    if (mounted) {
+      setState(() {
+        _backupDisabled = !enabled;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -160,6 +179,52 @@ class _ApplyFamilyScreenState extends State<ApplyFamilyScreen> {
                         ),
                         textAlign: TextAlign.center,
                       ),
+                      if (_backupDisabled) ...[
+                        SizedBox(
+                            height: ResponsiveHelper.spacing(context,
+                                small: 12, normal: 16)),
+                        Container(
+                          padding: ResponsiveHelper.cardPadding(context),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.orange.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: ResponsiveHelper.iconSize(context,
+                                    defaultSize: 20),
+                                color: Colors.orange,
+                              ),
+                              SizedBox(
+                                  width: ResponsiveHelper.spacing(context,
+                                      small: 8, normal: 12)),
+                              Expanded(
+                                child: ScaledText(
+                                  AppLocalizations.of(context)!
+                                      .joinFamilySyncHint,
+                                  style: ResponsiveHelper.responsiveTextStyle(
+                                    context,
+                                    fontSize: ResponsiveHelper.responsiveValue(
+                                      context,
+                                      small: 11.0,
+                                      normal: 12.0,
+                                      large: 13.0,
+                                    ),
+                                    color:
+                                        Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       SizedBox(
                           height: ResponsiveHelper.spacing(context,
                               small: 32, normal: 40, large: 48)),

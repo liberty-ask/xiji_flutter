@@ -97,6 +97,11 @@ class _MembersScreenState extends State<MembersScreen> {
   }
 
   Widget _buildMemberCard(FamilyMember member) {
+    // 8.2：休眠成员（未开启云备份）灰色标记——其账单不会上云，
+    // 其他成员无法看到其数据，需要视觉上区分数据可见范围
+    final dormant = !member.isSyncing;
+    final nameColor =
+        dormant ? Colors.white.withValues(alpha: 0.4) : Colors.white;
     return Container(
       margin: EdgeInsets.only(bottom: ResponsiveHelper.spacing(context, small: 10, normal: 12)),
       padding: ResponsiveHelper.cardPadding(context),
@@ -123,7 +128,9 @@ class _MembersScreenState extends State<MembersScreen> {
             child: member.avatar == null || member.avatar!.isEmpty
                 ? Icon(
                     Icons.person,
-                    color: ThemeHelper.primary(context),
+                    color: dormant
+                        ? Colors.white.withValues(alpha: 0.4)
+                        : ThemeHelper.primary(context),
                     size: ResponsiveHelper.responsiveValue(
                       context,
                       small: 24.0,
@@ -142,7 +149,7 @@ class _MembersScreenState extends State<MembersScreen> {
                   children: [
                     ScaledText(
                       member.name,
-                      style: ResponsiveHelper.responsiveTitleStyle(context, color: Colors.white),
+                      style: ResponsiveHelper.responsiveTitleStyle(context, color: nameColor),
                     ),
                     if (FamilyMemberRole.isAdmin(member.role)) ...[
                       SizedBox(width: ResponsiveHelper.spacing(context, small: 6, normal: 8)),
@@ -169,9 +176,43 @@ class _MembersScreenState extends State<MembersScreen> {
                         ),
                       ),
                     ],
+                    if (dormant) ...[
+                      SizedBox(width: ResponsiveHelper.spacing(context, small: 6, normal: 8)),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: ResponsiveHelper.spacing(context, small: 6, normal: 8),
+                          vertical: ResponsiveHelper.spacing(context, small: 2, normal: 2),
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: ScaledText(
+                          AppLocalizations.of(context)!.memberSyncDormant,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                if (member.label != null && member.label!.isNotEmpty) ...[
+                if (dormant) ...[
+                  const SizedBox(height: 4),
+                  ScaledText(
+                    AppLocalizations.of(context)!.memberSyncDormantDesc,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ] else if (member.label != null && member.label!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   ScaledText(
                     member.label!,

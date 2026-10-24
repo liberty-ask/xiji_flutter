@@ -220,6 +220,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get admin => 'Admin';
 
   @override
+  String get memberSyncDormant => 'Sync off';
+
+  @override
+  String get memberSyncDormantDesc =>
+      'This member hasn\'t enabled cloud backup; bills won\'t sync to the family';
+
+  @override
+  String get backupRescueEntry => 'Also lost the recovery code?';
+
+  @override
+  String get backupRescueWarnTitle => 'Reset encryption key';
+
+  @override
+  String get backupRescueWarnMessage =>
+      'Both password and recovery code are lost. The encryption key must be reset. After reset:\n\n· A family member must open the app to re-authorize before your cloud family data can be restored\n· Personal cloud ciphertext from before the reset will be undecryptable\n\nContinue?';
+
+  @override
+  String budgetMemberNote(int x, int n) {
+    return 'Budget covers $x/$n members';
+  }
+
+  @override
+  String get joinFamilySyncHint =>
+      'Cloud backup sync is off. You won\'t see family bills after joining. Enable it in Settings → Cloud Backup first.';
+
+  @override
   String get noTrendData => 'No trend data available';
 
   @override

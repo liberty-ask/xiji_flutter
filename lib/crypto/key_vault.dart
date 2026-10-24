@@ -166,6 +166,92 @@ class KeyVault {
   SimpleKeyPair? get unlockedKeyPair => _unlockedKeyPair;
   SimplePublicKey? get unlockedPublicKey => _unlockedPublicKey;
 
+  // ===== 三期：家庭数据密钥 F（design.md D13）=====
+  //
+  // F 按家庭隔离存储（与 vault 文档同库、独立键），与口令无关：
+  // 改口令只重包裹私钥，F 不动；重装后凭恢复的私钥重新解包裹
+  // 得同一把 F，家庭密文全量可解。
+
+  /// 家庭密钥 F 在 secure storage 的键前缀（后缀 @familyId@userId）
+  static const String _familyKeyPrefix = 'xiji_family_key';
+
+  /// 家庭数据密钥的 HKDF info（与个人 dataKey 域分离）
+  static const String kFamilyDataKeyInfo = 'xiji-family-data-key';
+
+  Future<String> _familyKeyStorageKey(String familyId) async =>
+      '$_familyKeyPrefix@$familyId${await _keySuffix()}';
+
+  /// 读取指定家庭的数据密钥 F（base64 32 字节明文，与口令无关）。
+  /// 未获得分发（新成员等老成员包裹）时返回 null。
+  Future<Uint8List?> getFamilyKey(String familyId) async {
+    final raw =
+        await _store.read(await _familyKeyStorageKey(familyId));
+    if (raw == null || raw.isEmpty) return null;
+    return Uint8List.fromList(base64Decode(raw));
+  }
+
+  /// 落库家庭数据密钥 F（拉到自己的包裹份解出后调用）。
+  Future<void> putFamilyKey(String familyId, Uint8List familyKey) async {
+    await _store.write(await _familyKeyStorageKey(familyId),
+        base64Encode(familyKey));
+  }
+
+  /// 生成新的家庭数据密钥 F（创建家庭时创建者执行一次）。
+  static Uint8List generateFamilyKey() => _randomBytes(32);
+
+  /// 当前家庭的业务数据密钥 = HKDF(F)。F 未获得时返回 null
+  /// （调度器按「跳过业务推送、保留拉取」处理）。
+  Future<Uint8List?> familyDataKey(String familyId) async {
+    final f = await getFamilyKey(familyId);
+    if (f == null) return null;
+    return CryptoPrimitives.hkdfSha256(f, info: kFamilyDataKeyInfo);
+  }
+
+  /// 个人数据密钥 = HKDF(个人私钥)（二期原路径，8.4 后作为
+  /// 存量密文回落解密键与 fkey 记录加密键保留）。
+  Future<Uint8List> personalDataKey() async {
+    final pair = _unlockedKeyPair;
+    if (pair == null) {
+      throw StateError('vault 未解锁，无法派生个人数据密钥');
+    }
+    final priv = await pair.extractPrivateKeyBytes();
+    return CryptoPrimitives.hkdfSha256(
+        Uint8List.fromList(priv), info: CryptoPrimitives.kSyncDataKeyInfo);
+  }
+
+  /// 用己方私钥解密封盒得到家庭密钥 F（拉到自己的 fkey 记录时调用）。
+  /// 私钥不匹配抛 SecretBoxAuthenticationError（调用方静默跳过）。
+  Future<Uint8List> openFamilyKeyWrap({
+    required String ephemeralPubKeyBase64,
+    required String wrappedFBase64,
+  }) async {
+    final pair = _unlockedKeyPair;
+    if (pair == null) {
+      throw StateError('vault 未解锁，无法解家庭密钥包裹');
+    }
+    return CryptoPrimitives.openSealedFamilyKey(
+      ephemeralPubKeyBase64: ephemeralPubKeyBase64,
+      wrappedFBase64: wrappedFBase64,
+      ourKeyPair: pair,
+    );
+  }
+
+  /// 用成员公钥密封盒包裹 F（老成员为新成员分发时调用）。
+  static Future<({String ephemeralPubKey, String wrappedF})>
+      sealFamilyKeyFor({
+    required Uint8List familyKey,
+    required SimplePublicKey recipientPublicKey,
+  }) =>
+          CryptoPrimitives.sealFamilyKeyFor(
+              familyKey: familyKey, recipientPublicKey: recipientPublicKey);
+
+  /// 本机公钥（base64），包裹分发时随 fkey 记录自描述可读性用
+  /// （真实公钥源以 vaultDoc 为准）。
+  Future<String?> unlockedPublicKeyBase64() async =>
+      _unlockedPublicKey == null
+          ? null
+          : base64Encode(_unlockedPublicKey!.bytes);
+
   /// 是否已完成口令设置（vault 文档存在且归属当前登录用户）。
   Future<bool> isConfigured() async {
     final raw = await _readVaultRaw();
@@ -423,11 +509,33 @@ class KeyVault {
     await _store.delete(await _biometricKey());
   }
 
+  /// 互救重置流（8.6）：口令+恢复码双丢且 vault 已锁死时，销毁本机
+  /// vault（口令/恢复码包裹、生物包裹、开关状态、syncVersion 全清），
+  /// 供 setup 重建新密钥对。家庭密钥 F 存储独立于 vault 文档键，不受
+  /// 影响（本机家庭数据继续可用）。调用方必须走完整互救流程：新
+  /// vault 上云 + 旧包裹墓碑废弃，老成员重包裹后新设备链路才完整。
+  Future<void> destroyVault() async {
+    await _store.delete(await _vaultKey());
+    await _store.delete(await _biometricKey());
+  }
+
   /// vault 文档统一写入口：每次变更递增 syncVersion（vault 云端
   /// 托管记录的 LWW 版本），由 VaultSyncService 随同步推上云。
   Future<void> _writeVault(Map<String, dynamic> vault) async {
     vault['syncVersion'] = (vault['syncVersion'] as int? ?? 0) + 1;
     await _store.write(await _vaultKey(), jsonEncode(vault));
+  }
+
+  /// 互救重置流（8.6）：本机新 setup 的 vault 推送前，用云端旧
+  /// vaultDoc 的 syncVersion 抬高本地（否则版本 1 被 LWW 拒绝，
+  /// 新公钥永远推不上云）。种子后经 [_writeVault] 递增即严格高于
+  /// 云端旧记录（平局也不覆盖——LWW 语义）。本地已严格更高时 no-op。
+  Future<void> seedSyncVersion(int cloudSyncVersion) async {
+    final vault = await _readVault();
+    final local = vault['syncVersion'] as int? ?? 0;
+    if (cloudSyncVersion < local) return;
+    vault['syncVersion'] = cloudSyncVersion;
+    await _writeVault(vault);
   }
 
   /// 云备份开关（6.8 修订）：开关真值源在 vault 文档内（enabled 字段），
@@ -568,7 +676,7 @@ class KeyVault {
     };
   }
 
-  Uint8List _randomBytes(int length) {
+  static Uint8List _randomBytes(int length) {
     final rng = Random.secure();
     return Uint8List.fromList(
         List<int>.generate(length, (_) => rng.nextInt(256)));

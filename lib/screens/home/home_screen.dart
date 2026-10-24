@@ -874,6 +874,30 @@ class _HomeScreenState extends State<HomeScreen> {
                                           minHeight: 6,
                                         ),
                                       ),
+                                      // 8.5：预算口径标注——预算与支出同为
+                                      // 「已设预算成员」口径，X/N 提示覆盖范围；
+                                      // 单人家庭（N<=1）不显示避免噪音
+                                      Builder(builder: (context) {
+                                        final memberCount =
+                                            (budget['memberCount'] as num?)?.toInt() ?? 0;
+                                        final syncingCount = _members
+                                            .where((m) => m.isSyncing)
+                                            .length;
+                                        if (syncingCount <= 1) return const SizedBox.shrink();
+                                        return Padding(
+                                          padding: const EdgeInsets.only(top: 8),
+                                          child: ScaledText(
+                                            AppLocalizations.of(context)!
+                                                .budgetMemberNote(memberCount, syncingCount),
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              color: Colors.white.withValues(alpha: 0.4),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }),
                                     ],
                                   ),
                                 ),

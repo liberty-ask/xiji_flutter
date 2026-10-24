@@ -68,6 +68,7 @@ void main() {
       vault: vault..setup('pw123456'),
       isSignedIn: () async => true,
       currentFamilyId: () async => 'f1',
+      membersProvider: () async => const [],
     );
   }
 
