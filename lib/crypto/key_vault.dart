@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 
 import 'crypto_primitives.dart';
+import '../data/local/local_user.dart';
 import 'vault_store.dart';
 
 /// Argon2id 派生参数。随包裹物持久化——解包按持久化值执行（参数升级后旧包裹
@@ -81,12 +82,60 @@ class KeyVault {
   KeyVault(this._store, {Argon2Profile? profile})
       : _defaultProfile = profile ?? Argon2Profile.production();
 
-  /// secure storage 中的 vault 文档 key。
-  static const String storageKey = 'xiji_key_vault';
+  /// 老版本全局键（无账号隔离）：账号化升级的认领迁移源。
+  /// vault 文档与生物 KEK 均按当前登录用户账号化存储——同机多账号
+  /// 各自独立密钥体系，B 开关/解锁不得读到 A 的 vault（否则 B 的
+  /// 数据被 A 密钥加密推云后永久失解）。
+  static const String _legacyStorageKey = 'xiji_key_vault';
+  static const String _legacyBiometricKey = 'xiji_biometric_kek';
 
   /// 生物识别 KEK 在 secure storage 中的独立 key（与 vault 文档分开存，
   /// 日常解锁先过生物识别提示，通过后才读取本 key）。
-  static const String _biometricKekStorageKey = 'xiji_biometric_kek';
+  Future<String> _biometricKey() async =>
+      '$_legacyBiometricKey${await _keySuffix()}';
+
+  Future<String> _vaultKey() async =>
+      '$_legacyStorageKey${await _keySuffix()}';
+
+  Future<String> _keySuffix() async {
+    final user = await LocalUser.load();
+    return '@${user?.id ?? 'anonymous'}';
+  }
+
+  Future<String?> _currentUserId() async => (await LocalUser.load())?.id;
+
+  /// 账号化读取：新键 miss 且老全局键存在时，将老 vault 认领给当前
+  /// 登录用户（补 userId 字段写新键、删老键，生物 KEK 键同步迁移）。
+  /// 认领规则：老 vault 归「升级后首个登录读到它的用户」——升级后请
+  /// 先用原配置账号登录一次再切换其他账号。
+  Future<String?> _readVaultRaw() async {
+    final key = await _vaultKey();
+    final raw = await _store.read(key);
+    if (raw != null) return raw;
+    final legacy = await _store.read(_legacyStorageKey);
+    if (legacy == null) return null;
+    final decoded = jsonDecode(legacy);
+    if (decoded is Map<String, dynamic>) {
+      decoded['userId'] = await _currentUserId();
+      await _store.write(key, jsonEncode(decoded));
+    }
+    await _store.delete(_legacyStorageKey);
+    final legacyBio = await _store.read(_legacyBiometricKey);
+    if (legacyBio != null) {
+      await _store.write(await _biometricKey(), legacyBio);
+      await _store.delete(_legacyBiometricKey);
+    }
+    return await _store.read(key);
+  }
+
+  /// vault 归属校验：文档 userId 与当前登录用户不符视为非本账号
+  /// 配置（isConfigured 返回 false，读写口令流抛 StateError 拦截）。
+  Future<bool> _vaultBelongsToCurrentUser(
+      Map<String, dynamic> vault) async {
+    final vaultUserId = vault['userId'] as String?;
+    if (vaultUserId == null) return true;
+    return vaultUserId == await _currentUserId();
+  }
 
   /// vault 文档结构版本（向后兼容扩展预留）。
   static const int _kVaultVersion = 1;
@@ -108,8 +157,18 @@ class KeyVault {
   SimpleKeyPair? get unlockedKeyPair => _unlockedKeyPair;
   SimplePublicKey? get unlockedPublicKey => _unlockedPublicKey;
 
-  /// 是否已完成口令设置（vault 文档存在）。
-  Future<bool> isConfigured() async => await _store.read(storageKey) != null;
+  /// 是否已完成口令设置（vault 文档存在且归属当前登录用户）。
+  Future<bool> isConfigured() async {
+    final raw = await _readVaultRaw();
+    if (raw == null) return false;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return false;
+    return _vaultBelongsToCurrentUser(decoded);
+  }
+
+  /// 测试用：当前账号的 vault 文档键（账号化后无静态常量）。
+  @visibleForTesting
+  Future<String> get vaultKeyForTesting => _vaultKey();
 
   /// 首次设置口令：生成 X25519 密钥对，私钥分别用口令与恢复码各自派生的
   /// KEK 包裹落库（两个包裹份同一把私钥；恢复码明文不落盘、仅本次返回，
@@ -143,11 +202,12 @@ class KeyVault {
 
     final vault = <String, dynamic>{
       'version': _kVaultVersion,
+      'userId': await _currentUserId(),
       'publicKey': base64Encode(publicKey.bytes),
       'passwordWrap': _wrapJson(salt, _defaultProfile, box),
       'recoveryWrap': _wrapJson(recoverySalt, _defaultProfile, recoveryBox),
     };
-    await _store.write(storageKey, jsonEncode(vault));
+    await _store.write(await _vaultKey(), jsonEncode(vault));
 
     _unlockedKeyPair = keyPair;
     _unlockedPublicKey = publicKey;
@@ -188,7 +248,7 @@ class KeyVault {
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKeyBytes);
     vault['passwordWrap'] = _wrapJson(salt, _defaultProfile, box);
-    await _store.write(storageKey, jsonEncode(vault));
+    await _store.write(await _vaultKey(), jsonEncode(vault));
   }
 
   /// 凭恢复码重置口令（6.5）：恢复码解开私钥，新口令仅重包裹
@@ -214,7 +274,7 @@ class KeyVault {
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKeyBytes);
     vault['passwordWrap'] = _wrapJson(salt, _defaultProfile, box);
-    await _store.write(storageKey, jsonEncode(vault));
+    await _store.write(await _vaultKey(), jsonEncode(vault));
 
     final publicKey =
         SimplePublicKey(publicKeyBytes, type: KeyPairType.x25519);
@@ -225,14 +285,15 @@ class KeyVault {
 
   /// 是否已开启生物识别解锁（biometricWrap 与 KEK 双存才视为开启）。
   Future<bool> isBiometricEnabled() async {
-    final raw = await _store.read(storageKey);
+    final raw = await _readVaultRaw();
     if (raw == null) return false;
     final decoded = jsonDecode(raw);
     if (decoded is! Map<String, dynamic> ||
-        decoded['biometricWrap'] == null) {
+        decoded['biometricWrap'] == null ||
+        !await _vaultBelongsToCurrentUser(decoded)) {
       return false;
     }
-    return await _store.read(_biometricKekStorageKey) != null;
+    return await _store.read(await _biometricKey()) != null;
   }
 
   /// 开启生物识别解锁（6.6）：生成随机 KEK 包裹当前已解锁的私钥，
@@ -252,8 +313,8 @@ class KeyVault {
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKey.bytes);
     vault['biometricWrap'] = _boxJson(box);
-    await _store.write(storageKey, jsonEncode(vault));
-    await _store.write(_biometricKekStorageKey, base64Encode(kek));
+    await _store.write(await _vaultKey(), jsonEncode(vault));
+    await _store.write(await _biometricKey(), base64Encode(kek));
   }
 
   /// 生物识别提示通过后调用：用 KEK 解开私钥并缓存于内存。
@@ -261,7 +322,7 @@ class KeyVault {
   Future<SimpleKeyPair> unlockWithBiometric() async {
     final vault = await _readVault();
     final wrap = vault['biometricWrap'];
-    final kekRaw = await _store.read(_biometricKekStorageKey);
+    final kekRaw = await _store.read(await _biometricKey());
     if (wrap == null || kekRaw == null) {
       throw StateError('Biometric unlock not enabled');
     }
@@ -289,15 +350,15 @@ class KeyVault {
 
   /// 关闭生物识别解锁：删除包裹份与 KEK（口令/恢复码包裹份不受影响）。
   Future<void> disableBiometric() async {
-    final raw = await _store.read(storageKey);
+    final raw = await _readVaultRaw();
     if (raw == null) return;
     final decoded = jsonDecode(raw);
     if (decoded is Map<String, dynamic> &&
         decoded['biometricWrap'] != null) {
       decoded.remove('biometricWrap');
-      await _store.write(storageKey, jsonEncode(decoded));
+      await _store.write(await _vaultKey(), jsonEncode(decoded));
     }
-    await _store.delete(_biometricKekStorageKey);
+    await _store.delete(await _biometricKey());
   }
 
   /// 清除内存中的解锁缓存（App 退后台超时/登出时调用；不动物理包裹物）。
@@ -307,13 +368,16 @@ class KeyVault {
   }
 
   Future<Map<String, dynamic>> _readVault() async {
-    final raw = await _store.read(storageKey);
+    final raw = await _readVaultRaw();
     if (raw == null) {
       throw StateError('KeyVault not configured');
     }
     final decoded = jsonDecode(raw);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('vault document corrupted');
+    }
+    if (!await _vaultBelongsToCurrentUser(decoded)) {
+      throw StateError('KeyVault belongs to another account');
     }
     return decoded;
   }

@@ -1,12 +1,24 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
+import 'package:xiji_flutter/data/local/local_user.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+
   KeyVault newVault(InMemoryVaultStore store) =>
       KeyVault(store, profile: Argon2Profile.fast());
+
+  /// 模拟登录指定账号（LocalUser 直接读 SharedPreferences mock）
+  Future<void> loginAs(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(LocalUser.profileKey,
+        jsonEncode({'id': id, 'nickname': 'u-$id', 'phone': '13800000000'}));
+  }
 
   group('KeyVault 信封加密（私钥层）', () {
     test('setup 后已配置，未 setup 前未配置', () async {
@@ -62,11 +74,11 @@ void main() {
       final vault = newVault(store);
       final setupResult = await vault.setup('my-password-123');
 
-      final raw = (await store.read(KeyVault.storageKey))!;
+      final raw = (await store.read(await vault.vaultKeyForTesting))!;
       final doc = jsonDecode(raw) as Map<String, dynamic>;
       // 结构白名单：密钥本体与 KEK 绝不落盘
       expect(doc.keys, unorderedEquals(
-          ['version', 'publicKey', 'passwordWrap', 'recoveryWrap']));
+          ['version', 'userId', 'publicKey', 'passwordWrap', 'recoveryWrap']));
       expect(doc['passwordWrap'] is Map<String, dynamic>, isTrue);
       expect(doc['recoveryWrap'] is Map<String, dynamic>, isTrue);
 
@@ -90,13 +102,13 @@ void main() {
       final vault = newVault(store);
       final originalPublicKey = (await vault.setup('old-password')).publicKey;
 
-      final rawBefore = (await store.read(KeyVault.storageKey))!;
+      final rawBefore = (await store.read(await vault.vaultKeyForTesting))!;
       final docBefore = jsonDecode(rawBefore) as Map<String, dynamic>;
       final wrapBefore = docBefore['passwordWrap'] as Map<String, dynamic>;
 
       await vault.changePassword('old-password', 'new-password');
 
-      final rawAfter = (await store.read(KeyVault.storageKey))!;
+      final rawAfter = (await store.read(await vault.vaultKeyForTesting))!;
       final docAfter = jsonDecode(rawAfter) as Map<String, dynamic>;
       final wrapAfter = docAfter['passwordWrap'] as Map<String, dynamic>;
 
@@ -123,13 +135,13 @@ void main() {
       final store = InMemoryVaultStore();
       final vault = newVault(store);
       await vault.setup('real-password');
-      final rawBefore = (await store.read(KeyVault.storageKey))!;
+      final rawBefore = (await store.read(await vault.vaultKeyForTesting))!;
 
       expect(
         () => vault.changePassword('typo-password', 'new-password'),
         throwsA(isA<KeyVaultUnlockException>()),
       );
-      expect(await store.read(KeyVault.storageKey), equals(rawBefore));
+      expect(await store.read(await vault.vaultKeyForTesting), equals(rawBefore));
     });
 
     test('lock 清除内存解锁缓存，物理包裹物保留', () async {
@@ -178,7 +190,7 @@ void main() {
       final store = InMemoryVaultStore();
       final vault = newVault(store);
       final setupResult = await vault.setup('old-password');
-      final rawBefore = (await store.read(KeyVault.storageKey))!;
+      final rawBefore = (await store.read(await vault.vaultKeyForTesting))!;
       final docBefore = jsonDecode(rawBefore) as Map<String, dynamic>;
       vault.lock();
 
@@ -187,7 +199,7 @@ void main() {
           KeyVault.formatRecoveryCode(setupResult.recoveryCode).toLowerCase();
       await vault.resetPasswordWithRecoveryCode(formattedInput, 'new-pass-9');
 
-      final rawAfter = (await store.read(KeyVault.storageKey))!;
+      final rawAfter = (await store.read(await vault.vaultKeyForTesting))!;
       final docAfter = jsonDecode(rawAfter) as Map<String, dynamic>;
       expect(docAfter['publicKey'], equals(docBefore['publicKey']));
       expect(docAfter['recoveryWrap'], equals(docBefore['recoveryWrap']));
@@ -218,7 +230,7 @@ void main() {
       final store = InMemoryVaultStore();
       final vault = newVault(store);
       await vault.setup('old-password');
-      final rawBefore = (await store.read(KeyVault.storageKey))!;
+      final rawBefore = (await store.read(await vault.vaultKeyForTesting))!;
 
       final wrongCode = List.generate(24, (_) => 'X').join();
       expect(
@@ -226,7 +238,7 @@ void main() {
         throwsA(isA<KeyVaultUnlockException>()),
       );
 
-      expect(await store.read(KeyVault.storageKey), equals(rawBefore));
+      expect(await store.read(await vault.vaultKeyForTesting), equals(rawBefore));
       final fresh = newVault(store);
       await fresh.unlock('old-password'); // 旧口令仍有效
     });
@@ -237,9 +249,9 @@ void main() {
       final vault = newVault(store);
       await vault.setup('old-password');
       final doc =
-          jsonDecode((await store.read(KeyVault.storageKey))!) as Map<String, dynamic>;
+          jsonDecode((await store.read(await vault.vaultKeyForTesting))!) as Map<String, dynamic>;
       doc.remove('recoveryWrap');
-      await store.write(KeyVault.storageKey, jsonEncode(doc));
+      await store.write(await vault.vaultKeyForTesting, jsonEncode(doc));
 
       expect(
         () => vault.resetPasswordWithRecoveryCode('ABCDEFGHJKLMNPQRSTUVWXY2', 'n1'),
@@ -269,7 +281,7 @@ void main() {
       expect(vault.isUnlocked, isTrue);
 
       // KEK 独立存储：vault 文档与 KEK 都不含私钥明文
-      final raw = (await store.read(KeyVault.storageKey))!;
+      final raw = (await store.read(await vault.vaultKeyForTesting))!;
       expect(raw.contains('my-password-123'), isFalse);
     });
 
@@ -302,6 +314,88 @@ void main() {
       expect(() => vault.unlockWithBiometric(), throwsA(isA<StateError>()));
       await vault.unlock('third-pass-1');
       expect(vault.isUnlocked, isTrue);
+    });
+  });
+
+  group('vault 账号隔离（同机多账号硬约束）', () {
+    test('A 的开关/vault 不串到 B：B 全新配置，A 回登数据完好', () async {
+      final store = InMemoryVaultStore();
+      await loginAs('user-a');
+      final vaultA = newVault(store);
+      final setupA = await vaultA.setup('password-a-123');
+      await vaultA.enableBiometric();
+
+      // 切换账号 B（同手机另一账号登录）
+      await loginAs('user-b');
+      final vaultB = newVault(store);
+      expect(await vaultB.isConfigured(), isFalse,
+          reason: 'B 读不到 A 的 vault（键已账号化）');
+      expect(await vaultB.isBiometricEnabled(), isFalse);
+      expect(() => vaultB.unlock('password-a-123'), throwsStateError,
+          reason: 'B 输 A 的口令不可能解锁——vault 都不存在');
+
+      // B 独立 setup 自己的口令（不覆盖 A 的云端加密身份）
+      final setupB = await vaultB.setup('password-b-456');
+      expect(setupB.publicKey.bytes, isNot(equals(setupA.publicKey.bytes)),
+          reason: 'B 有独立密钥对，不是复用 A 的');
+
+      // A 回登：vault 完好，口令解锁如初（同 store 双键并存互不干扰）
+      await loginAs('user-a');
+      final vaultA2 = newVault(store);
+      expect(await vaultA2.isConfigured(), isTrue);
+      expect(await vaultA2.isBiometricEnabled(), isTrue);
+      vaultA2.lock();
+      final pair = await vaultA2.unlock('password-a-123');
+      final pub = await pair.extractPublicKey();
+      expect(pub.bytes, equals(setupA.publicKey.bytes),
+          reason: 'A 的私钥与解锁路径未被 B 的 setup 破坏');
+    });
+
+    test('老全局键认领迁移：归升级后首个登录读到它的用户', () async {
+      final store = InMemoryVaultStore();
+      // 模拟升级前的老版 vault（全局键、无 userId 字段）
+      await store.write('xiji_key_vault',
+          jsonEncode({'version': 1, 'publicKey': 'aGk=', 'passwordWrap': {}}));
+      await store.write('xiji_biometric_kek', 'b2xkS0VL');
+
+      await loginAs('user-a');
+      final vault = newVault(store);
+      expect(await vault.isConfigured(), isTrue, reason: '老 vault 被当前用户认领');
+
+      // 迁移落位：新账号键有文档且归属 A，老键清空
+      final raw = (await store.read(await vault.vaultKeyForTesting))!;
+      final doc = jsonDecode(raw) as Map<String, dynamic>;
+      expect(doc['userId'], 'user-a');
+      expect(await store.read('xiji_key_vault'), isNull);
+      expect(await store.read((await vault.vaultKeyForTesting)
+          .replaceFirst(RegExp(r'@.*$'), '@user-b')), isNull,
+          reason: '认领只写给当前用户，不复制给其他账号键');
+      final bioKey =
+          (await vault.vaultKeyForTesting).replaceFirst('xiji_key_vault', 'xiji_biometric_kek');
+      expect(await store.read(bioKey), 'b2xkS0VL',
+          reason: '生物 KEK 老键同步迁移到账号键');
+
+      // 认领后切 B：B 不认领（老键已删），B 未配置
+      await loginAs('user-b');
+      final vaultB = newVault(store);
+      expect(await vaultB.isConfigured(), isFalse);
+    });
+
+    test('防御纵深：A 的文档被挪到 B 的键下，归属校验拦截', () async {
+      final store = InMemoryVaultStore();
+      await loginAs('user-a');
+      final vaultA = newVault(store);
+      await vaultA.setup('password-a-123');
+      final rawA = (await store.read(await vaultA.vaultKeyForTesting))!;
+
+      // 异常场景：A 的文档被手工写到 B 的键下（存储串库/备份恢复错位）
+      await loginAs('user-b');
+      await store.write('xiji_key_vault@user-b', rawA);
+      final vaultB = newVault(store);
+      expect(await vaultB.isConfigured(), isFalse,
+          reason: '文档 userId 与当前用户不符，视为非本账号配置');
+      expect(() => vaultB.unlock('password-a-123'), throwsStateError,
+          reason: '解锁路径同样被归属校验拦截');
     });
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../crypto/vault_provider.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
 import '../data/local/local_family_cache.dart';
@@ -46,6 +47,7 @@ class AuthProvider with ChangeNotifier {
     await LocalUser.clear();
     await LocalFamilyCache.clear();
     await CurrentFamilyStore.clear();
+    VaultProvider.vault.lock(); // 清密钥解锁内存态：防切账号串用上一账号私钥
     await Db.close(); // 关账号库清单例，文件保留（回登复用）
     _hasToken = false;
     _user = null;
