@@ -40,11 +40,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _lastUserId = context.read<AuthProvider>().user?.id;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<HomeProvider>().fetchHomeData();
-      _loadFamilies();
-      _loadMembers();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  /// 首页数据引导：先回填当前家庭再拉数据。
+  /// fetchHomeData 按家庭 ID 过滤查询，登出会清空 CurrentFamilyStore，
+  /// ID 未回填时 SQL family_id = null 必然空集——登录后首页空、
+  /// 切页返回才恢复的根因。_loadFamilies 缓存分支毫秒级回填，
+  /// 网络分支失败也不影响（catch 内，store 已有缓存值）。
+  Future<void> _bootstrap() async {
+    await _loadFamilies();
+    if (!mounted) return;
+    await context.read<HomeProvider>().fetchHomeData();
+    _loadMembers();
   }
   
   Future<void> _loadMembers() async {
@@ -126,18 +134,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 监听登录用户变化：HomeScreen 不重建（shell 保活），登出再
-    // 登录后 initState 不会重跑，这里在 build 中检测账号变化补拉
-    //（否则首页停留在登出时的空数据，切页返回才恢复）
+    // 监听登录用户变化：HomeScreen 未销毁时（同路径 go 不重建等场景）
+    // 检测账号变化走统一引导——与 initState 相同的「先家庭后数据」
+    // 顺序，防止 fetch 先于家庭回填跑空查询
     final currentUser = context.watch<AuthProvider>().user;
     if (currentUser?.id != _lastUserId) {
       _lastUserId = currentUser?.id;
       if (currentUser != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
-          context.read<HomeProvider>().fetchHomeData();
-          _loadFamilies();
-          _loadMembers();
+          await _bootstrap();
         });
       }
     }
