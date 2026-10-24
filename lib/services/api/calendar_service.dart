@@ -21,6 +21,7 @@ import '../../utils/money.dart';
 class CalendarService {
   // 单例实例
   static CalendarService? _instance;
+  static int _generation = -1;
 
   final TransactionRepository _transactions;
   final CategoryRepository _categories;
@@ -29,13 +30,19 @@ class CalendarService {
   // 私有构造函数
   CalendarService._internal(this._transactions, this._categories, this._stats);
 
-  // 获取单例实例（本地库应用级唯一实例）
+  // 获取单例实例（本地库应用级唯一实例）。
+  // 随库世代自动重绑：Db.close() 后（登出/账号切换）重开新库时
+  // 重建实例，防止持有已关闭旧库的引用。
   factory CalendarService() {
-    _instance ??= CalendarService._internal(
-      Db.transactions,
-      Db.categories,
-      Db.statistics,
-    );
+    final g = Db.generation;
+    if (_instance == null || _generation != g) {
+      _instance = CalendarService._internal(
+        Db.transactions,
+        Db.categories,
+        Db.statistics,
+      );
+      _generation = g;
+    }
     return _instance!;
   }
 

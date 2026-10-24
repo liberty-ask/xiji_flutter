@@ -58,6 +58,7 @@ class BillImportOutcome {
 /// 不猜测填充（spec：不得猜测填充未经确认的具体分类）。
 class BillImportService {
   static BillImportService? _instance;
+  static int _generation = -1;
 
   final TransactionRepository _transactions;
   final CategoryRuleRepository _rules;
@@ -69,13 +70,19 @@ class BillImportService {
     this._engine,
   );
 
-  /// 应用内单例：Db 单例仓储 + 内置规则加载的分类引擎
+  /// 应用内单例：Db 单例仓储 + 内置规则加载的分类引擎。
+  /// 随库世代自动重绑：Db.close() 后（登出/账号切换）重开新库时
+  /// 重建实例，防止持有已关闭旧库的引用。
   static Future<BillImportService> instance() async {
-    _instance ??= BillImportService.withRepos(
-      Db.transactions,
-      Db.categoryRules,
-      await CategoryRuleLoader.loadDefaultEngine(),
-    );
+    final g = Db.generation;
+    if (_instance == null || _generation != g) {
+      _instance = BillImportService.withRepos(
+        Db.transactions,
+        Db.categoryRules,
+        await CategoryRuleLoader.loadDefaultEngine(),
+      );
+      _generation = g;
+    }
     return _instance!;
   }
 

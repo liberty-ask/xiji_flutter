@@ -17,14 +17,21 @@ import '../../utils/money.dart';
 class BudgetService {
   // 单例实例
   static BudgetService? _instance;
+  static int _generation = -1;
 
   final BudgetRepository _budgets;
 
   BudgetService._internal(this._budgets);
 
-  // 获取单例实例（本地库应用级唯一实例）
+  // 获取单例实例（本地库应用级唯一实例）。
+  // 随库世代自动重绑：Db.close() 后（登出/账号切换）重开新库时
+  // 重建实例，防止持有已关闭旧库的引用。
   factory BudgetService() {
-    _instance ??= BudgetService._internal(Db.budgets);
+    final g = Db.generation;
+    if (_instance == null || _generation != g) {
+      _instance = BudgetService._internal(Db.budgets);
+      _generation = g;
+    }
     return _instance!;
   }
 

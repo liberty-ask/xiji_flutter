@@ -18,14 +18,21 @@ import '../../sync/sync_scheduler.dart';
 /// - 同类型下分类名称不可重复（含与内置分类重名）
 class CategoryService {
   static CategoryService? _instance;
+  static int _generation = -1;
 
   final CategoryRepository _categories;
 
   CategoryService._(this._categories);
 
-  /// 应用内单例（本地库应用级唯一实例）
+  /// 应用内单例（本地库应用级唯一实例）。
+  /// 随库世代自动重绑：Db.close() 后（登出/账号切换）重开新库时
+  /// 重建实例，防止持有已关闭旧库的引用。
   factory CategoryService() {
-    _instance ??= CategoryService._(Db.categories);
+    final g = Db.generation;
+    if (_instance == null || _generation != g) {
+      _instance = CategoryService._(Db.categories);
+      _generation = g;
+    }
     return _instance!;
   }
 

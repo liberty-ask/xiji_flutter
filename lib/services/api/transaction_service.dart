@@ -22,6 +22,7 @@ import '../../utils/money.dart';
 /// 解析为分类 ID 落库（与服务端行为一致，findFirst）。
 class TransactionService {
   static TransactionService? _instance;
+  static int _generation = -1;
 
   final TransactionRepository _transactions;
   final CategoryRepository _categories;
@@ -33,13 +34,19 @@ class TransactionService {
     this._stats,
   );
 
-  /// 应用内单例（本地库应用级唯一实例）
+  /// 应用内单例（本地库应用级唯一实例）。
+  /// 随库世代自动重绑：Db.close() 后（登出/账号切换）重开新库时
+  /// 重建实例，防止持有已关闭旧库的引用。
   factory TransactionService() {
-    _instance ??= TransactionService._(
-      Db.transactions,
-      Db.categories,
-      Db.statistics,
-    );
+    final g = Db.generation;
+    if (_instance == null || _generation != g) {
+      _instance = TransactionService._(
+        Db.transactions,
+        Db.categories,
+        Db.statistics,
+      );
+      _generation = g;
+    }
     return _instance!;
   }
 

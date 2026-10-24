@@ -70,17 +70,13 @@ class SyncScheduler {
     Future<String?> Function()? currentFamilyId,
     SyncPuller? puller,
     this.batchSize = 500,
-  })  : _db = db ?? Db.database,
+  })  : _injectedDb = db,
+        _injectedPuller = puller,
+        _pullPort = pullPort,
         _port = port ?? ApiSyncPushPort(),
         _vault = vault ?? VaultProvider.vault,
         _isSignedIn = isSignedIn ?? _defaultSignedIn,
-        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get,
-        _puller = puller ??
-            SyncPuller(
-              db: db ?? Db.database,
-              port: pullPort,
-              currentFamilyId: currentFamilyId,
-            );
+        _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get;
 
   static Future<bool> _defaultSignedIn() async =>
       await ApiClient().getToken() != null;
@@ -90,13 +86,28 @@ class SyncScheduler {
   /// 应用级单例：门面写路径统一经此触发
   static SyncScheduler get instance => _instance ??= SyncScheduler();
 
-  final AppDatabase _db;
+  final AppDatabase? _injectedDb;
+  final SyncPuller? _injectedPuller;
+  final SyncPullPort? _pullPort;
   final SyncPushPort _port;
   final KeyVault _vault;
   final Future<bool> Function() _isSignedIn;
   final Future<String?> Function() _currentFamilyId;
-  final SyncPuller _puller;
   final int batchSize;
+
+  /// 当前库：注入（测试）优先；默认随 Db 单例动态取——Db.close()
+  /// 重开新库后（登出/账号切换）自动指向新库，防止持有已关闭
+  /// 旧库的引用导致同步静默失效。
+  AppDatabase get _db => _injectedDb ?? Db.database;
+
+  /// 拉取器：注入（测试）优先；否则每轮基于当前库新建（薄对象，
+  /// 天然跟随 _db 动态指向，不缓存旧库引用）。
+  SyncPuller get _puller => _injectedPuller ??
+      SyncPuller(
+        db: _db,
+        port: _pullPort,
+        currentFamilyId: _currentFamilyId,
+      );
 
   bool _running = false;
   bool _rerun = false;

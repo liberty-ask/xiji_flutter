@@ -14,15 +14,22 @@ import '../../data/local/statistics_repository.dart';
 class StatisticsService {
   // 单例实例
   static StatisticsService? _instance;
+  static int _generation = -1;
 
   final StatisticsRepository _stats;
 
   // 私有构造函数
   StatisticsService._internal(this._stats);
 
-  // 获取单例实例（本地库应用级唯一实例）
+  // 获取单例实例（本地库应用级唯一实例）。
+  // 随库世代自动重绑：Db.close() 后（登出/账号切换）重开新库时
+  // 重建实例，防止持有已关闭旧库的引用。
   factory StatisticsService() {
-    _instance ??= StatisticsService._internal(Db.statistics);
+    final g = Db.generation;
+    if (_instance == null || _generation != g) {
+      _instance = StatisticsService._internal(Db.statistics);
+      _generation = g;
+    }
     return _instance!;
   }
 

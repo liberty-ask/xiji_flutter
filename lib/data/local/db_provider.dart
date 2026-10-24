@@ -41,6 +41,7 @@ class Db {
 
   static AppDatabase? _db;
   static String? _accountUserId;
+  static int _generation = 0;
   static TransactionRepository? _transactions;
   static CategoryRepository? _categories;
   static CategoryRuleRepository? _categoryRules;
@@ -48,8 +49,14 @@ class Db {
   static BudgetRepository? _budgets;
 
   /// 当前账号锚点：登录成功时由 [switchAccount] 设置；
-  /// 未设置时（冷启动 UI 先行）打开路径回退读本地缓存的用户。
+  /// 未设置时（冷启动 UI 先行）打开路径回退读本地缓存的用户，
+  /// 打开成功后同样锚定（避免冷启动 refreshUser 确认同账号时误关库）。
   static String? get accountUserId => _accountUserId;
+
+  /// 库世代号：close() 真正关库时递增。持有本库实例的门面单例
+  /// （TransactionService 等）比对世代发现变化即自动重绑新库，
+  /// 防止账号切换后继续持有已关闭的旧库引用。
+  static int get generation => _generation;
 
   static AppDatabase get database {
     if (_db == null) {
@@ -108,6 +115,10 @@ class Db {
         return NativeDatabase.createInBackground(
             File('${dir.path}/xiji.sqlite'));
       }
+      // 锚定实际打开的账号：冷启动按 LocalUser 缓存打开后，
+      // refreshUser 确认为同一账号时 switchAccount 不再关库
+      //（修复：关库与门面旧引用叠加导致 connection was closed 崩溃）
+      _accountUserId ??= userId;
       await claimLegacyDb(dir: dir, userId: userId);
       return NativeDatabase.createInBackground(
           File('${dir.path}/${dbFileNameFor(userId)}'));
@@ -115,10 +126,13 @@ class Db {
   }
 
   /// 关闭并重置单例：登出/会话过期（文件保留，回登复用）、
-  /// 账号切换、测试/迁移后全量核对时调用。
+  /// 账号切换、测试/迁移后全量核对时调用。库未打开时为 no-op
+  ///（不递增世代，避免无谓触发门面单例重绑）。
   static Future<void> close() async {
-    await _db?.close();
+    if (_db == null) return;
+    await _db!.close();
     _db = null;
+    _generation++;
     _transactions = null;
     _categories = null;
     _categoryRules = null;
