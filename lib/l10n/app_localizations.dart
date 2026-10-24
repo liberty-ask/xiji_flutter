@@ -1055,6 +1055,12 @@ abstract class AppLocalizations {
   /// **'Unlock failed, please try again'**
   String get backupVaultUnlockFailed;
 
+  /// No description provided for @backupCheckingCloudVault.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking cloud backup…'**
+  String get backupCheckingCloudVault;
+
   /// No description provided for @backupUnlockWithPassword.
   ///
   /// In en, this message translates to:

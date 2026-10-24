@@ -493,6 +493,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupVaultUnlockFailed => '解锁失败，请重试';
 
   @override
+  String get backupCheckingCloudVault => '正在检查云端备份…';
+
+  @override
   String get backupUnlockWithPassword => '使用口令';
 
   @override
@@ -1840,6 +1843,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupVaultUnlockFailed => '解锁失败，请重试';
 
   @override
+  String get backupCheckingCloudVault => '正在检查云端备份…';
+
+  @override
   String get backupUnlockWithPassword => '使用口令';
 
   @override
@@ -3181,6 +3187,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get backupVaultUnlockFailed => '解鎖失敗，請重試';
+
+  @override
+  String get backupCheckingCloudVault => '正在檢查雲端備份…';
 
   @override
   String get backupUnlockWithPassword => '使用口令';

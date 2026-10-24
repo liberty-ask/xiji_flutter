@@ -207,7 +207,7 @@ class KeyVault {
       'passwordWrap': _wrapJson(salt, _defaultProfile, box),
       'recoveryWrap': _wrapJson(recoverySalt, _defaultProfile, recoveryBox),
     };
-    await _store.write(await _vaultKey(), jsonEncode(vault));
+    await _writeVault(vault);
 
     _unlockedKeyPair = keyPair;
     _unlockedPublicKey = publicKey;
@@ -248,7 +248,7 @@ class KeyVault {
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKeyBytes);
     vault['passwordWrap'] = _wrapJson(salt, _defaultProfile, box);
-    await _store.write(await _vaultKey(), jsonEncode(vault));
+    await _writeVault(vault);
   }
 
   /// 凭恢复码重置口令（6.5）：恢复码解开私钥，新口令仅重包裹
@@ -274,7 +274,7 @@ class KeyVault {
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKeyBytes);
     vault['passwordWrap'] = _wrapJson(salt, _defaultProfile, box);
-    await _store.write(await _vaultKey(), jsonEncode(vault));
+    await _writeVault(vault);
 
     final publicKey =
         SimplePublicKey(publicKeyBytes, type: KeyPairType.x25519);
@@ -313,7 +313,7 @@ class KeyVault {
     final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
         aad: publicKey.bytes);
     vault['biometricWrap'] = _boxJson(box);
-    await _store.write(await _vaultKey(), jsonEncode(vault));
+    await _writeVault(vault);
     await _store.write(await _biometricKey(), base64Encode(kek));
   }
 
@@ -356,9 +356,64 @@ class KeyVault {
     if (decoded is Map<String, dynamic> &&
         decoded['biometricWrap'] != null) {
       decoded.remove('biometricWrap');
-      await _store.write(await _vaultKey(), jsonEncode(decoded));
+      await _writeVault(decoded);
     }
     await _store.delete(await _biometricKey());
+  }
+
+  /// vault 文档统一写入口：每次变更递增 syncVersion（vault 云端
+  /// 托管记录的 LWW 版本），由 VaultSyncService 随同步推上云。
+  Future<void> _writeVault(Map<String, dynamic> vault) async {
+    vault['syncVersion'] = (vault['syncVersion'] as int? ?? 0) + 1;
+    await _store.write(await _vaultKey(), jsonEncode(vault));
+  }
+
+  /// 导出 vault 文档（口令包裹的密文，无私钥明文），
+  /// 供云端托管记录构造使用。未配置抛 StateError。
+  Future<Map<String, dynamic>> exportVaultDoc() async => await _readVault();
+
+  /// vault 托管记录的传输密钥 = HKDF(userId)。
+  /// 这层加密仅为 sync_records 密文格式统一（GCM + AAD 绑记录 ID）
+  /// 与「服务端零明文」一致性；vault 自身保密性由 Argon2id 口令包裹
+  /// 保证——文档暴露给任何人，口令不泄露即安全（零信任兼容）。
+  /// 用 userId 派生而非公钥：新设备无私钥也不知公钥（在密文内），
+  /// userId 是登录即得的机制字段，跨设备一致。
+  static Uint8List vaultTransportKey(String userId) =>
+      CryptoPrimitives.hkdfSha256(utf8.encode(userId),
+          info: _kVaultTransportInfo);
+
+  static const String _kVaultTransportInfo = 'xiji-vault-transport';
+
+  /// 导入云端托管 vault 文档（新设备恢复 / 多设备口令变更同步）。
+  /// LWW：云端 syncVersion 不高于本地时忽略（幂等）；归属校验与
+  /// 本地写入同键。导入后需口令解锁，不解锁不产生任何明文。
+  /// 返回是否采纳（false = 本地已同版或更新）。
+  Future<bool> importVaultDoc(Map<String, dynamic> cloudDoc) async {
+    final cloudUserId = cloudDoc['userId'] as String?;
+    final currentId = await _currentUserId();
+    if (cloudUserId != null && currentId != null && cloudUserId != currentId) {
+      return false; // 他人的 vault 记录，拒收
+    }
+    if (cloudDoc['publicKey'] == null ||
+        cloudDoc['passwordWrap'] == null) {
+      return false; // 结构不完整，拒收
+    }
+    final raw = await _readVaultRaw();
+    if (raw != null) {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        final localVer = decoded['syncVersion'] as int? ?? 0;
+        final cloudVer = cloudDoc['syncVersion'] as int? ?? 0;
+        if (cloudVer <= localVer) return false; // 本地同版或更新
+        final localUser = decoded['userId'] as String?;
+        if (localUser != null && cloudUserId != null &&
+            localUser != cloudUserId) {
+          return false; // 公钥体系不同的 vault，拒收（防跨账号覆盖）
+        }
+      }
+    }
+    await _store.write(await _vaultKey(), jsonEncode(cloudDoc));
+    return true;
   }
 
   /// 清除内存中的解锁缓存（App 退后台超时/登出时调用；不动物理包裹物）。

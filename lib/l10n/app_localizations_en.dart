@@ -507,6 +507,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupVaultUnlockFailed => 'Unlock failed, please try again';
 
   @override
+  String get backupCheckingCloudVault => 'Checking cloud backup…';
+
+  @override
   String get backupUnlockWithPassword => 'Use password';
 
   @override

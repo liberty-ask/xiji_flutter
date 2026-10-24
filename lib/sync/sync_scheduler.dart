@@ -12,6 +12,7 @@ import '../data/local/db_provider.dart';
 import '../services/api/api_client.dart';
 import 'sync_outbox.dart';
 import 'sync_puller.dart';
+import 'vault_sync_service.dart';
 
 /// 推送端口：按家庭推送一批记录，返回「使命完成」的记录 ID 集合
 /// （accepted 与 rejected 均含——rejected 即服务端 LWW 仲裁已有更高
@@ -143,6 +144,10 @@ class SyncScheduler {
       return;
     }
     debugPrint('[SyncScheduler] 门控通过，开始同步');
+    // vault 托管补位（6.7）：每轮幂等推送最新 vault 到当前家庭通道，
+    // 云端 upsert 覆盖——改口令/重置后下轮同步自动更新云端副本；
+    // 新开启用户首轮同步即补上云端 vault。内部自吞异常，失败下轮重试
+    await VaultSyncService.pushVault();
     await _pushAll(dataKey);
     await _puller.pullAll(dataKey);
     // 对账补推：拉取仲裁跳过的本地高版本记录（或推送环节部分

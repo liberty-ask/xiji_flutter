@@ -12,6 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
 import '../../sync/sync_scheduler.dart';
+import '../../sync/vault_sync_service.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 
@@ -82,6 +83,23 @@ class _BackupScreenState extends State<BackupScreen> {
   /// （密钥未解锁等门控不满足时静默跳过，待下次触发补推）。
   Future<void> _onSwitchChanged(bool value) async {
     if (value) {
+      // 重装/换设备恢复（6.7）：本机未配置但云端可能有托管 vault，
+      // 先探测拉取（口令包裹的密文，导入后仍需口令解锁才可用）
+      if (!await _vault.isConfigured()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(AppLocalizations.of(context)!
+                  .backupCheckingCloudVault)));
+        }
+        try {
+          final cloudDoc = await VaultSyncService.pullVaultDoc();
+          if (cloudDoc != null) {
+            await _vault.importVaultDoc(cloudDoc);
+          }
+        } catch (_) {
+          // 网络失败按无云端处理，走下方设置流
+        }
+      }
       if (await _vault.isConfigured()) {
         // 之前设置过口令：重开即恢复，无需再走设置流。
         // 冷启动后密钥为锁定态——未解锁时先口令解锁再开开关，

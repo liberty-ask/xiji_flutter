@@ -1,7 +1,12 @@
+import 'package:cryptography/cryptography.dart'
+    show SecretBoxAuthenticationError;
 import 'package:drift/drift.dart';
 
+import '../crypto/key_vault.dart';
+import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
 import 'sync_outbox.dart';
+import 'vault_sync_service.dart';
 
 /// 单条云端记录的入库仲裁结果
 enum IngestResult { inserted, updated, skipped }
@@ -17,24 +22,52 @@ enum IngestResult { inserted, updated, skipped }
 ///   不复活（只有更高 version 才能翻案）
 /// - 云端覆盖写入的行 syncPending=false（云端权威数据无需回推）
 class SyncIngest {
-  SyncIngest(this._db);
+  SyncIngest(this._db, {KeyVault? vault, Future<String?> Function()? userId})
+      : _vault = vault,
+        _userId = userId;
 
   final AppDatabase _db;
+  final KeyVault? _vault;
+
+  /// vault 记录归属用户 ID 的惰性来源（生产走 LocalUser）。
+  /// 拉到 vault 记录时用于派生传输密钥；null 则跳过该记录。
+  final Future<String?> Function()? _userId;
 
   /// 解密并仲裁入库单条拉取记录。
   /// 解密失败（密钥不对/密文损坏/AAD 不匹配）抛原异常，由拉取循环
   /// 终止本轮、游标不推进（重试无害；密钥错=全量失败不会推进任何游标）。
+  ///
+  /// vault 托管记录（6.7）特判：dataKey 解不开（传输密钥不同），
+  /// 按 id 前缀识别后用 vault 传输密钥解，importVaultDoc LWW 落地；
+  /// 解不开的 vault 记录静默跳过（跨账号 vault 无害：归属校验拒收）。
   Future<IngestResult> applyRecord(
     Uint8List dataKey,
     Map<String, dynamic> record,
   ) async {
-    final payload = await SyncOutbox.decryptRecord(dataKey, record);
+    final id = record['id'] as String;
+    Map<String, dynamic> payload;
+    try {
+      payload = await SyncOutbox.decryptRecord(dataKey, record);
+    } on SecretBoxAuthenticationError {
+      if (id.startsWith('vault-')) {
+        final userId = await (_userId?.call());
+        if (userId == null) return IngestResult.skipped;
+        final vaultPayload = await SyncOutbox.decryptRecord(
+            KeyVault.vaultTransportKey(userId), record);
+        final adopted = await (_vault ?? VaultProvider.vault)
+            .importVaultDoc(vaultPayload);
+        return adopted ? IngestResult.updated : IngestResult.skipped;
+      }
+      rethrow;
+    }
     final recordType = payload['recordType'] as String;
     return switch (recordType) {
       SyncOutbox.kTypeTransaction => _applyTransaction(record, payload),
       SyncOutbox.kTypeCategory => _applyCategory(record, payload),
       SyncOutbox.kTypeBudget => _applyBudget(record, payload),
       SyncOutbox.kTypeCategoryRule => _applyCategoryRule(record, payload),
+      VaultSyncService.kRecordType => Future<IngestResult>.value(
+          IngestResult.skipped),
       _ => throw ArgumentError('未知的同步记录类型: $recordType'),
     };
   }

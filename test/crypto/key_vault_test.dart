@@ -76,9 +76,10 @@ void main() {
 
       final raw = (await store.read(await vault.vaultKeyForTesting))!;
       final doc = jsonDecode(raw) as Map<String, dynamic>;
-      // 结构白名单：密钥本体与 KEK 绝不落盘
-      expect(doc.keys, unorderedEquals(
-          ['version', 'userId', 'publicKey', 'passwordWrap', 'recoveryWrap']));
+      // 结构白名单：密钥本体与 KEK 绝不落盘（syncVersion 是 6.7
+      // 云端托管记录的 LWW 版本，机制字段）
+      expect(doc.keys, unorderedEquals(['version', 'userId', 'publicKey',
+          'passwordWrap', 'recoveryWrap', 'syncVersion']));
       expect(doc['passwordWrap'] is Map<String, dynamic>, isTrue);
       expect(doc['recoveryWrap'] is Map<String, dynamic>, isTrue);
 

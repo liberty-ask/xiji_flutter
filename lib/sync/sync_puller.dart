@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../data/local/app_database.dart';
 import '../data/local/current_family_store.dart';
+import '../data/local/local_user.dart';
 import '../services/api/api_client.dart';
 import 'sync_cursor_store.dart';
 import 'sync_ingest.dart';
@@ -64,7 +65,10 @@ class SyncPuller {
     final familyId = await _currentFamilyId();
     if (familyId == null) return;
 
-    final ingest = SyncIngest(_db);
+    final ingest = SyncIngest(
+      _db,
+      userId: () => LocalUser.load().then((u) => u?.id),
+    );
     var cursor = await SyncCursorStore.load(familyId);
 
     while (true) {

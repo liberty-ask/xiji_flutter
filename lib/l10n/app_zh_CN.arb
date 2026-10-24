@@ -167,6 +167,7 @@
   "backupVaultUnlock": "解锁",
   "backupVaultUnlocked": "已解锁，密钥就绪",
   "backupVaultUnlockFailed": "解锁失败，请重试",
+  "backupCheckingCloudVault": "正在检查云端备份…",
   "backupUnlockWithPassword": "使用口令",
   "biometricUnlockTitle": "生物识别保护",
   "biometricUnlockSubtitle": "开启后凭指纹/面容解锁，无需再输入加密口令",

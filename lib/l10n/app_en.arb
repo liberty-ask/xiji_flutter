@@ -168,6 +168,7 @@
   "backupVaultUnlock": "Unlock",
   "backupVaultUnlocked": "Unlocked, key ready",
   "backupVaultUnlockFailed": "Unlock failed, please try again",
+  "backupCheckingCloudVault": "Checking cloud backup…",
   "backupUnlockWithPassword": "Use password",
   "biometricUnlockTitle": "Biometric Protection",
   "biometricUnlockSubtitle": "Unlock with fingerprint/face, no password needed",
