@@ -44,12 +44,28 @@ class _HomeScreenState extends State<HomeScreen> {
   // 重装恢复口令框会话内只弹一次（取消/输错关闭后不再打扰，
   // 下次启动再提示）
   bool _restorePromptShown = false;
+  // 同步轮完成订阅：恢复/增量同步落库后停留页主动重拉
+  StreamSubscription<void>? _syncRoundSub;
 
   @override
   void initState() {
     super.initState();
     _lastUserId = context.read<AuthProvider>().user?.id;
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    // 恢复完成时用户通常停在首页盯着看：拉取模式 Provider 不感知
+    // 本地库逐页入库，须靠同步完成事件刷新停留页（否则恢复完
+    // 数据仍空，要切页面才显示）
+    _syncRoundSub = SyncScheduler.instance.onRoundCompleted.listen((_) {
+      if (mounted) {
+        context.read<HomeProvider>().fetchHomeData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncRoundSub?.cancel();
+    super.dispose();
   }
 
   /// 首页数据引导：先回填当前家庭再拉数据。

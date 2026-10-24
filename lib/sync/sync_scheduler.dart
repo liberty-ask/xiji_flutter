@@ -112,6 +112,17 @@ class SyncScheduler {
   bool _running = false;
   bool _rerun = false;
 
+  /// 同步轮完成广播：门控通过且整轮成功（含拉取入库）后触发一次；
+  /// 门控跳过/失败不触发。页面 Provider 是拉取一次模式（非响应式
+  /// watch 本地库），恢复/增量同步落库后须靠此事件主动重拉——
+  /// 典型场景：重装恢复时用户停在首页，数据逐页入库但首页无感，
+  /// 恢复完成后停留页仍是空的，需切页面才显示。
+  final StreamController<void> _roundCompletedController =
+      StreamController<void>.broadcast();
+
+  /// 订阅同步完成（广播流，多页面可同时订阅）
+  Stream<void> get onRoundCompleted => _roundCompletedController.stream;
+
   /// 尽力而为同步：调用方一律 fire-and-forget（unawaited），
   /// 任何异常不出函数边界（后台任务的既定语义，真机日志可查
   /// debugPrint 输出）。
@@ -153,6 +164,8 @@ class SyncScheduler {
     // 失败遗留）推上去，一轮收敛；已推净则空转返回
     await _pushAll(dataKey);
     debugPrint('[SyncScheduler] 一轮同步完成');
+    // 通知停留页面重拉数据（拉取模式 Provider 不感知本地库变更）
+    _roundCompletedController.add(null);
   }
 
   /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生数据密钥。

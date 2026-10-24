@@ -135,6 +135,50 @@ void main() {
     });
   });
 
+  group('任务 7.10：同步轮完成事件（停留页刷新）', () {
+    test('同步成功后触发一次完成事件', () async {
+      var fired = 0;
+      final sub = scheduler.onRoundCompleted.listen((_) => fired++);
+
+      await insertTx('tx-1');
+      await scheduler.maybePush();
+      // broadcast 流事件分发为微任务：pumpEventQueue 排空后再断言
+      await pumpEventQueue();
+
+      expect(fired, 1);
+      await sub.cancel();
+    });
+
+    test('门控跳过（密钥锁定）不触发完成事件', () async {
+      vault.lock();
+      var fired = 0;
+      final sub = scheduler.onRoundCompleted.listen((_) => fired++);
+
+      await insertTx('tx-1');
+      await scheduler.maybePush();
+      await pumpEventQueue();
+      expect(port.calls, isEmpty);
+      expect(fired, 0);
+
+      await sub.cancel();
+    });
+
+    test('推送网络失败不触发完成事件（标记保留待重试）', () async {
+      port.handler = (familyId, records) => throw Exception('网络不可达');
+      var fired = 0;
+      final sub = scheduler.onRoundCompleted.listen((_) => fired++);
+
+      await insertTx('tx-1');
+      // 推送失败由调度器内部消化（fire-and-forget：标记保留待重试）
+      await scheduler.maybePush();
+      await pumpEventQueue();
+
+      expect(fired, 0);
+      expect(await pendingCount('transactions'), 1);
+      await sub.cancel();
+    });
+  });
+
   group('任务 7.3：推送与标记清理', () {
     test('三表混合收集推送成功全清；无变更不重复推', () async {
       await insertTx('tx-1');
