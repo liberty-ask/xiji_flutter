@@ -21,17 +21,30 @@ class FakeSyncServer {
           (r['version'] as int) > (existing['version'] as int) ||
           ((r['version'] as int) == (existing['version'] as int) &&
               (r['updatedAt'] as int) > (existing['updatedAt'] as int))) {
-        _byId[id] = Map<String, dynamic>.of(r);
+        // 落库副本带家庭归属（recordId 精确拉取按它过滤）
+        final stored = Map<String, dynamic>.of(r);
+        stored['familyId'] = familyId;
+        _byId[id] = stored;
         accepted.add(id);
       }
     }
     return accepted;
   }
 
-  /// 服务端 pull 分页（排序 + 游标过滤 + limit+1 探测）
+  /// 服务端 pull 分页（排序 + 游标过滤 + limit+1 探测）；
+  /// recordId 非空时精确拉取该单条（家庭归属不匹配返回空，对齐 7.10
+  /// 服务端实现）
   Map<String, dynamic> pull(
-      String familyId, int? cursorTime, String? cursorId) {
+      String familyId, int? cursorTime, String? cursorId,
+      {String? recordId, int? limit}) {
     requests.add((cursorTime: cursorTime, cursorId: cursorId));
+    if (recordId != null) {
+      final hit = _byId[recordId];
+      final mine = (hit != null && hit['familyId'] == familyId)
+          ? [Map<String, dynamic>.of(hit)]
+          : <Map<String, dynamic>>[];
+      return <String, dynamic>{'records': mine, 'hasMore': false};
+    }
     final sorted = _byId.values.toList()
       ..sort((a, b) {
         final at = (a['updatedAt'] as int).compareTo(b['updatedAt'] as int);
@@ -46,8 +59,11 @@ class FakeSyncServer {
       return (r['id'] as String).compareTo(cursorId) > 0;
     }).toList();
 
-    final probe = remaining.take(pageSize + 1).toList();
-    final hasMore = probe.length > pageSize;
+    final effectivePageSize = limit != null && limit > 0
+        ? (limit < pageSize ? limit : pageSize)
+        : pageSize;
+    final probe = remaining.take(effectivePageSize + 1).toList();
+    final hasMore = probe.length > effectivePageSize;
     if (hasMore) probe.removeLast();
     return <String, dynamic>{
       // 拷贝返回（调用方篡改不得污染服务端存储）
@@ -70,7 +86,13 @@ class FakeServerPullPort implements SyncPullPort {
 
   @override
   Future<Map<String, dynamic>> pull(
-      String familyId, int? cursorTime, String? cursorId) async {
-    return _server.pull(familyId, cursorTime, cursorId);
+    String familyId,
+    int? cursorTime,
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  }) async {
+    return _server.pull(familyId, cursorTime, cursorId,
+        recordId: recordId, limit: limit);
   }
 }

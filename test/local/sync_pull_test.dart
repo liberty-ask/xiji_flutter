@@ -241,8 +241,14 @@ class _CorruptingServerPort implements SyncPullPort {
 
   @override
   Future<Map<String, dynamic>> pull(
-      String familyId, int? cursorTime, String? cursorId) async {
-    final page = _server.pull(familyId, cursorTime, cursorId);
+    String familyId,
+    int? cursorTime,
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  }) async {
+    final page = _server.pull(familyId, cursorTime, cursorId,
+        recordId: recordId, limit: limit);
     _pulled++;
     if (_pulled == 2) {
       final records = (page['records'] as List).cast<Map<String, dynamic>>();

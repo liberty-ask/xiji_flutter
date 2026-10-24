@@ -142,7 +142,12 @@ class _ServerErrorPort implements SyncPushPort {
 class _ThrowingPullPort implements SyncPullPort {
   @override
   Future<Map<String, dynamic>> pull(
-      String familyId, int? cursorTime, String? cursorId) async {
+    String familyId,
+    int? cursorTime,
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  }) async {
     throw DioException.connectionError(
       requestOptions: RequestOptions(path: '/v1/sync/pull'),
       reason: 'Connection refused',

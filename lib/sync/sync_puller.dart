@@ -11,12 +11,16 @@ import 'sync_ingest.dart';
 /// 响应结构与服务端 SyncPullResponse 一致：
 /// {records: [{id, version, updatedAt, deleted, nonce, ciphertext}],
 ///  hasMore, nextCursorTime, nextCursorId}
+/// [recordId] 非空时精确拉取该单条（vault 探测，忽略游标与分页）；
+/// [limit] 每页条数（服务端默认 200、上限 2000 截断）。
 abstract class SyncPullPort {
   Future<Map<String, dynamic>> pull(
     String familyId,
     int? cursorTime,
-    String? cursorId,
-  );
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  });
 }
 
 /// 生产端口：走 ApiClient 调用 GET /v1/sync/pull。
@@ -25,14 +29,18 @@ class ApiSyncPullPort implements SyncPullPort {
   Future<Map<String, dynamic>> pull(
     String familyId,
     int? cursorTime,
-    String? cursorId,
-  ) async {
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  }) async {
     return await ApiClient().get<Map<String, dynamic>>(
       '/v1/sync/pull',
       queryParameters: <String, dynamic>{
         'familyId': familyId,
         if (cursorTime != null) 'cursorTime': cursorTime,
         if (cursorId != null) 'cursorId': cursorId,
+        if (recordId != null) 'recordId': recordId,
+        if (limit != null) 'limit': limit,
       },
     );
   }
@@ -72,14 +80,17 @@ class SyncPuller {
     var cursor = await SyncCursorStore.load(familyId);
 
     while (true) {
+      // 每页 2000 条（服务端上限）：万条数据 18 页（200/页时 45 页）
+      // 降至 5 页，全量恢复的网络往返大幅缩短（7.10，配合页级事务）
       final page = await _port.pull(
         familyId,
         cursor?.time,
         cursor?.id,
+        limit: 2000,
       );
       final records =
           (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
-      // 页级事务（全量恢复性能优化）：每页 500 条包一个事务提交，
+      // 页级事务（全量恢复性能优化）：每页（2000 条）包一个事务提交，
       // 避免逐条独立提交的 journal fsync（万条数据恢复从几十秒降到
       // 秒级）。页内任一条失败整页回滚、游标不推进，与页级断点续拉
       // 语义完全一致（LWW 幂等，重拉无害）。首页 watch 流在提交后

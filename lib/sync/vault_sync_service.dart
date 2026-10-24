@@ -46,13 +46,13 @@ class VaultSyncService {
         recordType: kRecordType,
         id: vaultRecordId(userId.id),
         version: (doc['syncVersion'] as int? ?? 1),
-        // vault 记录固定极老 updated_at：服务端按 updated_at ASC 分页，
-        // vault 永远排第一页——新设备探测（pullVaultDoc）1 页即命中，
-        // 不必扫完全量业务数据（万条数据 18 页约 5-10 秒纯网络往返，
-        // 重装后开关状态恢复慢的根因）。LWW 安全：version=syncVersion
-        // 严格递增，云端仲裁 version 不同时只比 version，updated_at
-        // 不参与 vault 仲裁（仅剩游标定位用途）；云端现存真实时间戳
-        // 的旧记录在下次推送 version 递增时自动覆盖，迁移自愈。
+        // vault 记录固定极老 updated_at（epoch=1ms）：游标分页中永远
+        // 排最前，对业务数据全量拉取无干扰。注：探测已改走 recordId
+        // 精确拉取（7.10），不再依赖排序位置；LWW 仲裁 version 不同时
+        // 只比 version（syncVersion 严格递增），updated_at 不参与仲裁。
+        // 注意同 version 的 epoch 推送会被服务端「updated_at 新者胜」
+        // 拒绝覆盖存量记录——存量真实时间戳记录需等 syncVersion 递增
+        // 的下一次推送才会收敛为 epoch 值。
         updatedAt: DateTime.fromMillisecondsSinceEpoch(1),
         deleted: false,
         familyId: familyId,
@@ -102,12 +102,12 @@ class VaultSyncService {
     }
   }
 
-  /// 专项拉取云端 vault 文档（新设备恢复流）：逐页拉取、只处理 vault
-  /// 记录（按 userId 派生传输密钥解密；业务记录密钥不同天然解不开，
-  /// 静默跳过）、找到即返回明文 vault JSON。游标现算不落盘（不动
-  /// SyncCursorStore——业务数据的增量游标由恢复完成后的全量同步管理）。
+  /// 专项拉取云端 vault 文档（新设备恢复流）：recordId 精确拉取
+  /// vault-<userId> 单条记录（服务端 7.10 扩展，1 次 RTT——旧方案按
+  /// updated_at ASC 逐页扫全量业务数据，万条数据数十页、重装后开关
+  /// 状态恢复慢的根因），按 userId 派生传输密钥解密返回明文 vault JSON。
   ///
-  /// 返回 null：云端无本账号 vault（从未开启过备份）。
+  /// 返回 null：云端无本账号 vault（从未开启过备份）/ 解密失败。
   static Future<Map<String, dynamic>?> pullVaultDoc({
     SyncPullPort? port,
     String? userId,
@@ -120,27 +120,21 @@ class VaultSyncService {
 
     final transportKey = KeyVault.vaultTransportKey(id);
     final pullPort = port ?? ApiSyncPullPort();
-    int? cursorTime;
-    String? cursorId;
-    while (true) {
-      final page = await pullPort.pull(family, cursorTime, cursorId);
-      final records =
-          (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
-      for (final record in records) {
-        if (record['id'] != vaultRecordId(id)) continue;
-        try {
-          final payload =
-              await SyncOutbox.decryptRecord(transportKey, record);
-          if (payload['recordType'] == kRecordType) {
-            return payload;
-          }
-        } catch (_) {
-          // AAD/密钥不匹配（历史版本或异常数据）跳过
+    final page = await pullPort.pull(family, null, null,
+        recordId: vaultRecordId(id));
+    final records =
+        (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
+    for (final record in records) {
+      if (record['id'] != vaultRecordId(id)) continue;
+      try {
+        final payload = await SyncOutbox.decryptRecord(transportKey, record);
+        if (payload['recordType'] == kRecordType) {
+          return payload;
         }
+      } catch (_) {
+        // AAD/密钥不匹配（历史版本或异常数据）视为无 vault
       }
-      if (page['hasMore'] != true) return null;
-      cursorTime = page['nextCursorTime'] as int;
-      cursorId = page['nextCursorId'] as String;
     }
+    return null;
   }
 }

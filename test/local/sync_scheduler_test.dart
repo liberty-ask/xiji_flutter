@@ -39,8 +39,10 @@ class NoopPullPort implements SyncPullPort {
   Future<Map<String, dynamic>> pull(
     String familyId,
     int? cursorTime,
-    String? cursorId,
-  ) async =>
+    String? cursorId, {
+    String? recordId,
+    int? limit,
+  }) async =>
       <String, dynamic>{
         'records': <Map<String, dynamic>>[],
         'hasMore': false,
