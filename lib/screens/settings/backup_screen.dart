@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,7 @@ import '../../services/local/biometric_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
+import '../../sync/sync_scheduler.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 
@@ -75,12 +78,14 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   /// 开关切换入口：开启走口令设置流（已配置过口令的直接恢复），
-  /// 关闭需二次确认。
+  /// 关闭需二次确认。开启成功即触发一轮同步：存量数据立即上云
+  /// （密钥未解锁等门控不满足时静默跳过，待下次触发补推）。
   Future<void> _onSwitchChanged(bool value) async {
     if (value) {
       if (await _vault.isConfigured()) {
         // 之前设置过口令：重开即恢复，无需再走设置流
         await BackupFlagStore.setEnabled(true);
+        unawaited(SyncScheduler.instance.maybePush());
         if (mounted) setState(() => _enabled = true);
         return;
       }
@@ -91,6 +96,8 @@ class _BackupScreenState extends State<BackupScreen> {
       final saved = await _showRecoveryCodeDialog(result.recoveryCode);
       if (!saved || !mounted) return;
       await BackupFlagStore.setEnabled(true);
+      // setup 完成即解锁，开关打开即满足门控，直接开始首轮同步
+      unawaited(SyncScheduler.instance.maybePush());
       if (mounted) {
         setState(() {
           _enabled = true;
