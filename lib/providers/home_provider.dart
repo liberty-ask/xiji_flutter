@@ -7,7 +7,10 @@ class HomeProvider with ChangeNotifier {
   TransactionService get _transactionService => TransactionService();
   
   Map<String, dynamic>? _homeData;
-  bool _isLoading = false;
+  // 初始即加载中：首页首帧渲染 LoadingIndicator 而非「无数据」
+  // 错误页（_bootstrap 先回填家庭再 fetch，存在数百毫秒空窗，
+  // 此前空窗期错误占位页闪现后被数据替换，观感为报错一闪而过）
+  bool _isLoading = true;
   String? _error;
 
   Map<String, dynamic>? get homeData => _homeData;
