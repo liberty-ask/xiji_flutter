@@ -46,7 +46,14 @@ class VaultSyncService {
         recordType: kRecordType,
         id: vaultRecordId(userId.id),
         version: (doc['syncVersion'] as int? ?? 1),
-        updatedAt: DateTime.now(),
+        // vault 记录固定极老 updated_at：服务端按 updated_at ASC 分页，
+        // vault 永远排第一页——新设备探测（pullVaultDoc）1 页即命中，
+        // 不必扫完全量业务数据（万条数据 18 页约 5-10 秒纯网络往返，
+        // 重装后开关状态恢复慢的根因）。LWW 安全：version=syncVersion
+        // 严格递增，云端仲裁 version 不同时只比 version，updated_at
+        // 不参与 vault 仲裁（仅剩游标定位用途）；云端现存真实时间戳
+        // 的旧记录在下次推送 version 递增时自动覆盖，迁移自愈。
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(1),
         deleted: false,
         familyId: familyId,
         payload: <String, dynamic>{...doc, 'recordType': kRecordType},
