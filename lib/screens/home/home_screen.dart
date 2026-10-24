@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/home_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -32,10 +33,13 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Family> _families = [];
   Family? _currentFamily;
   List<FamilyMember> _members = [];
+  // 上次见到的登录用户：检测「登出再登录」后账号变化重拉首页数据
+  String? _lastUserId;
 
   @override
   void initState() {
     super.initState();
+    _lastUserId = context.read<AuthProvider>().user?.id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<HomeProvider>().fetchHomeData();
       _loadFamilies();
@@ -122,6 +126,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 监听登录用户变化：HomeScreen 不重建（shell 保活），登出再
+    // 登录后 initState 不会重跑，这里在 build 中检测账号变化补拉
+    //（否则首页停留在登出时的空数据，切页返回才恢复）
+    final currentUser = context.watch<AuthProvider>().user;
+    if (currentUser?.id != _lastUserId) {
+      _lastUserId = currentUser?.id;
+      if (currentUser != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          context.read<HomeProvider>().fetchHomeData();
+          _loadFamilies();
+          _loadMembers();
+        });
+      }
+    }
     return Scaffold(
       body: Consumer<HomeProvider>(
         builder: (context, provider, _) {
