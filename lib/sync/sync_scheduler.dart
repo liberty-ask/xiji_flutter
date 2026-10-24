@@ -138,22 +138,35 @@ class SyncScheduler {
 
   Future<void> _syncOnce() async {
     final dataKey = await _gate();
-    if (dataKey == null) return;
-
+    if (dataKey == null) {
+      debugPrint('[SyncScheduler] 门控未通过，本轮跳过');
+      return;
+    }
+    debugPrint('[SyncScheduler] 门控通过，开始同步');
     await _pushAll(dataKey);
     await _puller.pullAll(dataKey);
     // 对账补推：拉取仲裁跳过的本地高版本记录（或推送环节部分
     // 失败遗留）推上去，一轮收敛；已推净则空转返回
     await _pushAll(dataKey);
+    debugPrint('[SyncScheduler] 一轮同步完成');
   }
 
   /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生数据密钥。
   /// 任一不满足返回 null（静默跳过，标记与游标保留）。
   Future<Uint8List?> _gate() async {
-    if (!await BackupFlagStore.isEnabled()) return null;
-    if (!await _isSignedIn()) return null;
+    if (!await BackupFlagStore.isEnabled()) {
+      debugPrint('[SyncScheduler] 门控跳过：备份开关未开');
+      return null;
+    }
+    if (!await _isSignedIn()) {
+      debugPrint('[SyncScheduler] 门控跳过：未登录');
+      return null;
+    }
     final keyPair = _vault.unlockedKeyPair;
-    if (keyPair == null) return null;
+    if (keyPair == null) {
+      debugPrint('[SyncScheduler] 门控跳过：密钥未解锁');
+      return null;
+    }
     final privateKey = Uint8List.fromList(await keyPair.extractPrivateKeyBytes());
     return CryptoPrimitives.hkdfSha256(privateKey,
         info: CryptoPrimitives.kSyncDataKeyInfo);
@@ -161,7 +174,10 @@ class SyncScheduler {
 
   Future<void> _pushAll(Uint8List dataKey) async {
     final rows = await SyncOutbox.collectAll(_db, await _currentFamilyId());
-    if (rows.isEmpty) return;
+    if (rows.isEmpty) {
+      debugPrint('[SyncScheduler] 发件箱为空，无需推送');
+      return;
+    }
 
     // 按家庭分组推送（服务端按家庭整批校验，跨家庭不能同批）
     final byFamily = <String, List<SyncPendingRow>>{};
@@ -178,7 +194,10 @@ class SyncScheduler {
         for (final row in batch) {
           records.add(await SyncOutbox.encryptRecord(dataKey, row));
         }
+        debugPrint('[SyncScheduler] 推送家庭 ${entry.key} '
+            '批次 ${start ~/ batchSize + 1}：${records.length} 条');
         final done = await _port.push(entry.key, records);
+        debugPrint('[SyncScheduler] 服务端回执：${done.length} 条完成');
         final cleared =
             batch.where((row) => done.contains(row.id)).toList();
         if (cleared.isNotEmpty) {
