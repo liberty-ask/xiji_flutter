@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +20,8 @@ import '../../data/local/current_family_store.dart';
 import '../../data/local/local_family_cache.dart';
 import '../../models/family.dart';
 import '../../models/family_member.dart';
+import '../../sync/sync_scheduler.dart';
+import '../../sync/vault_sync_service.dart';
 import '../../l10n/app_localizations.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -68,6 +72,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// 家庭上下文就绪后的 vault 探测恢复（6.8）：本机未配置时从云端
+  /// 拉取 vault 导入（免口令，开关状态随 vault 恢复——重装/换设备
+  /// 后开关不再显示关闭）；已配置时探测内部直接跳过（幂等）。
+  /// 恢复后触发一轮同步：开关已开但密钥锁定时门控静默跳过，
+  /// 待用户在备份页输口令解锁后的下轮触发补上。
+  Future<void> _restoreVaultThenSync() async {
+    try {
+      final restored = await VaultSyncService.restoreFromCloud();
+      if (restored) {
+        await SyncScheduler.instance.maybePush();
+      }
+    } catch (_) {
+      // 探测失败静默：下次家庭上下文就绪再试
+    }
+  }
+
   Future<void> _loadFamilies() async {
     // 先用本地缓存渲染（离线优先，无网络也显示上次家庭信息）
     final cached = await LocalFamilyCache.load();
@@ -78,6 +98,10 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       // 同步当前家庭到路由源（本地库家庭维度的写入依据）
       await CurrentFamilyStore.set(current.id);
+      // 家庭上下文就绪：云端探测 vault 恢复（6.8——重装/换设备后
+      // 登录瞬间 CurrentFamilyStore 尚空，探测需等家庭就绪；免口令，
+      // 开关状态随 vault 恢复），恢复成功且已开启则触发一轮同步
+      unawaited(_restoreVaultThenSync());
       setState(() {
         _families = cached;
         _currentFamily = current;
@@ -93,6 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
             orElse: () => families.first,
           ).id,
         );
+        // 同步当前家庭到路由源（本地库家庭维度的写入依据）
+        unawaited(_restoreVaultThenSync());
       }
       setState(() {
         _families = families;
