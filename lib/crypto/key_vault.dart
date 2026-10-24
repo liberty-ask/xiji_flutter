@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 
 import 'crypto_primitives.dart';
+import '../data/local/backup_flag_store.dart';
 import '../data/local/local_user.dart';
 import 'vault_store.dart';
 
@@ -366,6 +367,35 @@ class KeyVault {
   Future<void> _writeVault(Map<String, dynamic> vault) async {
     vault['syncVersion'] = (vault['syncVersion'] as int? ?? 0) + 1;
     await _store.write(await _vaultKey(), jsonEncode(vault));
+  }
+
+  /// 云备份开关（6.8 修订）：开关真值源在 vault 文档内（enabled 字段），
+  /// 随 vault 云端托管漫游——重装/换设备登录后开关状态自动恢复，
+  /// 不再出现「明明开了怎么又关了」。未配置 vault 时恒为 false。
+  Future<bool> isBackupEnabled() async {
+    final raw = await _readVaultRaw();
+    if (raw == null) return false;
+    final doc = jsonDecode(raw);
+    if (doc is! Map<String, dynamic>) return false;
+    final enabled = doc['enabled'];
+    if (enabled is bool) return enabled;
+    // 一次性迁移：老 vault 文档无 enabled 字段，映射旧 BackupFlagStore
+    // 本地缓存（曾开启过备份的忠实迁移），回填落盘
+    final migrated = await BackupFlagStore.isEnabled();
+    doc['enabled'] = migrated;
+    await _writeVault(doc);
+    return migrated;
+  }
+
+  /// 写云备份开关并落盘（经 _writeVault 递增 syncVersion，随下轮
+  /// vault 推送漫游到云端——关闭动作也必须推：否则重装后弹回开启）。
+  Future<void> setBackupEnabled(bool value) async {
+    final raw = await _readVaultRaw();
+    if (raw == null) return; // vault 未配置：无开关可言（UI 层不应到达）
+    final doc = jsonDecode(raw);
+    if (doc is! Map<String, dynamic>) return;
+    doc['enabled'] = value;
+    await _writeVault(doc);
   }
 
   /// 导出 vault 文档（口令包裹的密文，无私钥明文），

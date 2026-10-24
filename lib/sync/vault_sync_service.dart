@@ -61,6 +61,29 @@ class VaultSyncService {
     }
   }
 
+  /// 登录后自动探测恢复（6.8）：本机未配置时从云端拉取 vault 导入。
+  /// 返回是否拉到并导入（false = 云端无 vault / 已配置 / 失败静默）。
+  /// 免口令：传输密钥 = HKDF(userId)，登录即得——重装/换设备后
+  /// 开关状态（enabled 字段随 vault 漫游）在登录瞬间即恢复。
+  static Future<bool> restoreFromCloud({
+    SyncPullPort? port,
+    KeyVault? vault,
+    String? userId,
+    String? familyId,
+  }) async {
+    final vault_ = vault ?? VaultProvider.vault;
+    try {
+      if (await vault_.isConfigured()) return false;
+      final cloudDoc = await pullVaultDoc(
+          port: port, userId: userId, familyId: familyId);
+      if (cloudDoc == null) return false;
+      return await vault_.importVaultDoc(cloudDoc);
+    } catch (_) {
+      // 网络失败等：下次登录/开 App 再探测，静默
+      return false;
+    }
+  }
+
   /// 专项拉取云端 vault 文档（新设备恢复流）：逐页拉取、只处理 vault
   /// 记录（按 userId 派生传输密钥解密；业务记录密钥不同天然解不开，
   /// 静默跳过）、找到即返回明文 vault JSON。游标现算不落盘（不动

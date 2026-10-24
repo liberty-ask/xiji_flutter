@@ -12,6 +12,7 @@ import '../services/api/api_client.dart';
 import '../services/api/auth_service.dart';
 import '../services/api/family_service.dart';
 import '../sync/sync_scheduler.dart';
+import '../sync/vault_sync_service.dart';
 
 /// 认证状态管理
 ///
@@ -64,8 +65,9 @@ class AuthProvider with ChangeNotifier {
         _hasToken = true;
         _user = await LocalUser.load();
         unawaited(refreshUser().catchError((_) {}));
-        // 冷启动触发一轮同步：增量拉取云端新数据（门控不满足时自动跳过）
-        unawaited(SyncScheduler.instance.maybePush());
+        // 冷启动恢复链（6.8）：本机未配置 vault 时先从云端探测导入
+        // （免口令），开关状态随 vault 恢复；随后按门控触发一轮同步
+        unawaited(_restoreVaultThenSync());
       }
     } catch (_) {
       _hasToken = false;
@@ -92,6 +94,18 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// 冷启动恢复链（6.8）：本机未配置 vault → 云端探测导入（免口令，
+  /// 开关状态随 vault 恢复）→ 触发一轮同步。探测失败静默（下次
+  /// 登录/冷启动再试）；同步的门控不满足时调度器自动跳过。
+  Future<void> _restoreVaultThenSync() async {
+    try {
+      await VaultSyncService.restoreFromCloud();
+    } catch (_) {
+      // 静默：恢复链尽力而为
+    }
+    await SyncScheduler.instance.maybePush();
+  }
+
   /// 密码登录
   Future<void> login(String account, String password) async {
     _isLoading = true;
@@ -109,8 +123,10 @@ class AuthProvider with ChangeNotifier {
       );
       _hasToken = true;
       await refreshUser();
-      // 登录成功触发一轮同步：新设备全量恢复（门控不满足时自动跳过）
-      unawaited(SyncScheduler.instance.maybePush());
+      // 登录成功恢复链（6.8）：云端探测 vault（免口令，重装/换设备
+      // 开关状态即恢复）后触发一轮同步（新设备全量恢复；门控不满足
+      // 时自动跳过）
+      unawaited(_restoreVaultThenSync());
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -134,8 +150,10 @@ class AuthProvider with ChangeNotifier {
       );
       _hasToken = true;
       await refreshUser();
-      // 登录成功触发一轮同步：新设备全量恢复（门控不满足时自动跳过）
-      unawaited(SyncScheduler.instance.maybePush());
+      // 登录成功恢复链（6.8）：云端探测 vault（免口令，重装/换设备
+      // 开关状态即恢复）后触发一轮同步（新设备全量恢复；门控不满足
+      // 时自动跳过）
+      unawaited(_restoreVaultThenSync());
     } finally {
       _isLoading = false;
       notifyListeners();

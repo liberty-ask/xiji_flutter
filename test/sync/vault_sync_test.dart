@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
+import 'package:xiji_flutter/data/local/backup_flag_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
 import 'package:xiji_flutter/sync/sync_ingest.dart';
@@ -115,6 +116,81 @@ void main() {
           vault: vault,
           currentFamilyId: () async => null);
       expect(server.pull('f1', null, null)['records'], isEmpty);
+    });
+  });
+
+  group('6.8：开关状态随 vault 云端漫游', () {
+    test('开启 → 新设备登录探测 → 开关自动恢复开启（免口令）', () async {
+      // 设备 A：setup → 开启开关 → 推送（vault 含 enabled=true）
+      await loginAs('user-1');
+      final vaultA = newVault(InMemoryVaultStore());
+      await vaultA.setup('my-password-123');
+      await vaultA.setBackupEnabled(true);
+      await VaultSyncService.pushVault(
+          port: _ServerPushPort(server),
+          vault: vaultA,
+          currentFamilyId: () async => 'f1');
+
+      // 设备 B（重装/换设备）：登录后自动探测恢复（restoreFromCloud）
+      final vaultB = newVault(InMemoryVaultStore());
+      final restored = await VaultSyncService.restoreFromCloud(
+          port: FakeServerPullPort(server),
+          vault: vaultB,
+          userId: 'user-1',
+          familyId: 'f1');
+      expect(restored, isTrue);
+      // 开关状态已恢复为开启——用户不再有「明明开了怎么又关了」的错觉
+      expect(await vaultB.isBackupEnabled(), isTrue);
+      // 密钥仍是锁定态：解锁需口令（安全门槛不变）
+      expect(vaultB.isUnlocked, isFalse);
+      await vaultB.unlock('my-password-123');
+    });
+
+    test('关闭动作推送 enabled=false → 新设备探测后开关为关', () async {
+      await loginAs('user-1');
+      final vaultA = newVault(InMemoryVaultStore());
+      await vaultA.setup('my-password-123');
+      await vaultA.setBackupEnabled(true);
+      await VaultSyncService.pushVault(
+          port: _ServerPushPort(server),
+          vault: vaultA,
+          currentFamilyId: () async => 'f1');
+
+      // 设备 A 关闭开关 → 推送 enabled=false 上云（不走业务门控）
+      await vaultA.setBackupEnabled(false);
+      await VaultSyncService.pushVault(
+          port: _ServerPushPort(server),
+          vault: vaultA,
+          currentFamilyId: () async => 'f1');
+
+      // 新设备：探测 → 开关忠实为关
+      final vaultB = newVault(InMemoryVaultStore());
+      await VaultSyncService.restoreFromCloud(
+          port: FakeServerPullPort(server),
+          vault: vaultB,
+          userId: 'user-1',
+          familyId: 'f1');
+      expect(await vaultB.isBackupEnabled(), isFalse);
+    });
+
+    test('老 vault 无 enabled 字段：迁移读旧 BackupFlagStore 并回填',
+        () async {
+      await loginAs('user-1');
+      final vault = newVault(InMemoryVaultStore());
+      await vault.setup('my-password-123');
+      // 旧版语义：vault 无 enabled 字段，本地 FlagStore 曾开启
+      await BackupFlagStore.setEnabled(true);
+
+      expect(await vault.isBackupEnabled(), isTrue,
+          reason: '迁移映射旧本地开关');
+      // 回填后 vault 文档带上了 enabled 字段
+      final doc = await vault.exportVaultDoc();
+      expect(doc['enabled'], isTrue);
+
+      // 关闭后 vault 字段优先（不再读旧 store）
+      await BackupFlagStore.setEnabled(true);
+      await vault.setBackupEnabled(false);
+      expect(await vault.isBackupEnabled(), isFalse);
     });
   });
 

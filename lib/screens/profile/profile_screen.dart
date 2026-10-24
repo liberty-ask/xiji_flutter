@@ -8,8 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../crypto/vault_provider.dart';
 import '../../data/local/backup_import_service.dart';
-import '../../data/local/backup_flag_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api/family_service.dart';
@@ -40,7 +40,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadBackupState() async {
-    final enabled = await BackupFlagStore.isEnabled();
+    // 开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游）
+    final enabled = await VaultProvider.vault.isBackupEnabled();
     if (mounted) setState(() => _backupEnabled = enabled);
   }
 

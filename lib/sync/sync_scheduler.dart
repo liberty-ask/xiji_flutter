@@ -6,7 +6,6 @@ import '../crypto/crypto_primitives.dart';
 import '../crypto/key_vault.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
-import '../data/local/backup_flag_store.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
 import '../services/api/api_client.dart';
@@ -158,8 +157,9 @@ class SyncScheduler {
 
   /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生数据密钥。
   /// 任一不满足返回 null（静默跳过，标记与游标保留）。
+  /// 备份开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游）。
   Future<Uint8List?> _gate() async {
-    if (!await BackupFlagStore.isEnabled()) {
+    if (!await _vault.isBackupEnabled()) {
       debugPrint('[SyncScheduler] 门控跳过：备份开关未开');
       return null;
     }

@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../crypto/key_vault.dart';
 import '../../crypto/vault_provider.dart';
-import '../../data/local/backup_flag_store.dart';
 import '../../services/local/biometric_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
@@ -21,7 +20,8 @@ import '../../widgets/common/scaled_text.dart';
 ///
 /// 密钥层见 design.md D3：口令派生 KEK 解开私钥、私钥解数据密钥、数据密钥
 /// 加密业务记录。本页只负责开关与口令/恢复码的交互流程，密钥全部落在
-/// KeyVault。7.x 同步任务以 BackupFlagStore 作为上传/下拉门控。
+/// KeyVault。7.x 同步任务以 vault.enabled（6.8：账号级开关，随 vault
+/// 云端漫游）作为上传/下拉门控。
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
 
@@ -45,7 +45,9 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _loadState() async {
-    final enabled = await BackupFlagStore.isEnabled();
+    // 开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游；
+    // 本机未配置 vault 时恒为 false——登录后自动探测已恢复）
+    final enabled = await _vault.isBackupEnabled();
     final configured = await _vault.isConfigured();
     final bioEnabled = await _vault.isBiometricEnabled();
     if (mounted) {
@@ -120,7 +122,7 @@ class _BackupScreenState extends State<BackupScreen> {
             return; // 解锁失败，开关回弹
           }
         }
-        await BackupFlagStore.setEnabled(true);
+        await _vault.setBackupEnabled(true);
         unawaited(SyncScheduler.instance.maybePush());
         if (mounted) {
           setState(() {
@@ -136,7 +138,7 @@ class _BackupScreenState extends State<BackupScreen> {
       if (result == null || !mounted) return;
       final saved = await _showRecoveryCodeDialog(result.recoveryCode);
       if (!saved || !mounted) return;
-      await BackupFlagStore.setEnabled(true);
+      await _vault.setBackupEnabled(true);
       // setup 完成即解锁，开关打开即满足门控，直接开始首轮同步
       unawaited(SyncScheduler.instance.maybePush());
       if (mounted) {
@@ -148,7 +150,10 @@ class _BackupScreenState extends State<BackupScreen> {
     } else {
       final confirmed = await _showDisableConfirm();
       if (confirmed != true || !mounted) return;
-      await BackupFlagStore.setEnabled(false);
+      await _vault.setBackupEnabled(false);
+      // 关闭动作也必须把 enabled=false 推上云（6.8）：否则重装/换设备
+      // 后开关又弹回开启。pushVault 不走业务备份门控，直接推送
+      unawaited(VaultSyncService.pushVault());
       if (mounted) setState(() => _enabled = false);
     }
   }
