@@ -83,10 +83,33 @@ class _BackupScreenState extends State<BackupScreen> {
   Future<void> _onSwitchChanged(bool value) async {
     if (value) {
       if (await _vault.isConfigured()) {
-        // 之前设置过口令：重开即恢复，无需再走设置流
+        // 之前设置过口令：重开即恢复，无需再走设置流。
+        // 冷启动后密钥为锁定态——未解锁时先口令解锁再开开关，
+        // 否则同步门控静默跳过、存量数据永远不上云（表一直为空）
+        if (!_vault.isUnlocked) {
+          final password = await _showPasswordUnlockDialog();
+          if (password == null || !mounted) return; // 取消，开关回弹
+          try {
+            await _vault.unlock(password);
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text(
+                        AppLocalizations.of(context)!.backupVaultUnlockFailed)),
+              );
+            }
+            return; // 解锁失败，开关回弹
+          }
+        }
         await BackupFlagStore.setEnabled(true);
         unawaited(SyncScheduler.instance.maybePush());
-        if (mounted) setState(() => _enabled = true);
+        if (mounted) {
+          setState(() {
+            _enabled = true;
+            _vaultUnlocked = true;
+          });
+        }
         return;
       }
       final password = await _showPasswordDialog();
