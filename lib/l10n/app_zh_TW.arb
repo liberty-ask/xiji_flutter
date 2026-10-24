@@ -250,6 +250,7 @@
   "browserDoesNotSupportSpeechRecognition": "瀏覽器不支援語音識別或未授予麥克風權限",
   "speechRecognitionServiceInitializationFailed": "語音識別服務初始化失敗\n錯誤: {error}\n請檢查系統設定或重啟應用",
   "speechRecognitionServiceInUse": "語音識別服務正在使用中，請稍後再試",
+  "speechRecognitionNetworkRequired": "語音識別服務需要網絡連接（本機無離線語音包），請檢查網絡或改用手動記帳",
   "noVoiceContentRecognized": "未識別到語音內容，請重試",
   "transactionSuccess": "記帳成功",
   "transactionFailed": "記帳失敗，請重試",

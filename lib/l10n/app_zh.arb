@@ -249,6 +249,7 @@
   "browserDoesNotSupportSpeechRecognition": "浏览器不支持语音识别或未授予麦克风权限",
   "speechRecognitionServiceInitializationFailed": "语音识别服务初始化失败\n错误: {error}\n请检查系统设置或重启应用",
   "speechRecognitionServiceInUse": "语音识别服务正在使用中，请稍后再试",
+  "speechRecognitionNetworkRequired": "语音识别服务需要网络连接（本机无离线语音包），请检查网络或改用手动记账",
   "noVoiceContentRecognized": "未识别到语音内容，请重试",
   "transactionSuccess": "记账成功",
   "transactionFailed": "记账失败，请重试",

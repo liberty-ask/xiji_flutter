@@ -255,6 +255,7 @@
   "browserDoesNotSupportSpeechRecognition": "Browser does not support speech recognition or microphone permission not granted",
   "speechRecognitionServiceInitializationFailed": "Speech recognition service initialization failed\nError: {error}\nPlease check system settings or restart the app",
   "speechRecognitionServiceInUse": "Speech recognition service is in use, please try again later",
+  "speechRecognitionNetworkRequired": "Speech recognition requires a network connection (no offline speech pack on this device). Check your network or add the transaction manually",
   "speechRecognitionFailed": "Speech recognition failed",
   "noVoiceContentRecognized": "No voice content recognized, please try again",
   "recognitionTextEmpty": "Recognition text is empty, please re-enter",

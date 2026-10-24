@@ -1553,6 +1553,12 @@ abstract class AppLocalizations {
   /// **'Speech recognition service is in use, please try again later'**
   String get speechRecognitionServiceInUse;
 
+  /// No description provided for @speechRecognitionNetworkRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition requires a network connection (no offline speech pack on this device). Check your network or add the transaction manually'**
+  String get speechRecognitionNetworkRequired;
+
   /// No description provided for @speechRecognitionFailed.
   ///
   /// In en, this message translates to:

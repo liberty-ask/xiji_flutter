@@ -314,7 +314,10 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
         }
       } else if (errorMsg.contains('network') || errorMsg.contains('网络')) {
         if (mounted) {
-          CustomSnackBar.showError(context, AppLocalizations.of(context)!.networkConnectionError);
+          // 系统识别引擎（云识别模式）断网即抛网络错误——语音转文字
+          // 需要网络，但手动记账/解析/入库全离线可用，文案指明出路
+          CustomSnackBar.showError(context,
+              AppLocalizations.of(context)!.speechRecognitionNetworkRequired);
         }
       } else {
         if (mounted) {

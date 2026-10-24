@@ -772,6 +772,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Speech recognition service is in use, please try again later';
 
   @override
+  String get speechRecognitionNetworkRequired =>
+      'Speech recognition requires a network connection (no offline speech pack on this device). Check your network or add the transaction manually';
+
+  @override
   String get speechRecognitionFailed => 'Speech recognition failed';
 
   @override

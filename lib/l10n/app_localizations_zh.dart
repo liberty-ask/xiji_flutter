@@ -745,6 +745,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechRecognitionServiceInUse => '语音识别服务正在使用中，请稍后再试';
 
   @override
+  String get speechRecognitionNetworkRequired =>
+      '语音识别服务需要网络连接（本机无离线语音包），请检查网络或改用手动记账';
+
+  @override
   String get speechRecognitionFailed => 'Speech recognition failed';
 
   @override
@@ -2084,6 +2088,10 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get speechRecognitionServiceInUse => '语音识别服务正在使用中，请稍后再试';
 
   @override
+  String get speechRecognitionNetworkRequired =>
+      '语音识别服务需要网络连接（本机无离线语音包），请检查网络或改用手动记账';
+
+  @override
   String get noVoiceContentRecognized => '未识别到语音内容，请重试';
 
   @override
@@ -3421,6 +3429,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get speechRecognitionServiceInUse => '語音識別服務正在使用中，請稍後再試';
+
+  @override
+  String get speechRecognitionNetworkRequired =>
+      '語音識別服務需要網絡連接（本機無離線語音包），請檢查網絡或改用手動記帳';
 
   @override
   String get noVoiceContentRecognized => '未識別到語音內容，請重試';
