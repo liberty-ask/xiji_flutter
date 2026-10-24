@@ -28,7 +28,8 @@ class DetailScreen extends StatefulWidget {
 }
 
 class _DetailScreenState extends State<DetailScreen> {
-  final TransactionService _transactionService = TransactionService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  TransactionService get _transactionService => TransactionService();
   final FamilyService _familyService = FamilyService();
   List<Transaction> _transactions = [];
   List<FamilyMember> _members = [];

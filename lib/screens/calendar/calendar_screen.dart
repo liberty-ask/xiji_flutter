@@ -20,7 +20,8 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  final CalendarService _calendarService = CalendarService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  CalendarService get _calendarService => CalendarService();
   Map<String, dynamic>? _calendarData;
   bool _isLoading = true;
   String? _error;

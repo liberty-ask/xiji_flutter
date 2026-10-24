@@ -23,7 +23,8 @@ class StatisticsScreen extends StatefulWidget {
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
-  final StatisticsService _statisticsService = StatisticsService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  StatisticsService get _statisticsService => StatisticsService();
   Map<String, dynamic>? _statsData;
   Map<String, dynamic>? _overviewData; // 概览数据
   Map<String, dynamic>? _trendData; // 趋势数据

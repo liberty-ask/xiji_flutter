@@ -18,7 +18,8 @@ class BudgetScreen extends StatefulWidget {
 }
 
 class _BudgetScreenState extends State<BudgetScreen> {
-  final BudgetService _budgetService = BudgetService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  BudgetService get _budgetService => BudgetService();
   final TextEditingController _amountController = TextEditingController();
   Map<String, dynamic>? _budgetData;
   bool _isLoading = true;

@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../services/api/transaction_service.dart';
 
 class TransactionProvider with ChangeNotifier {
-  final TransactionService _transactionService = TransactionService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  TransactionService get _transactionService => TransactionService();
   
   bool _isLoading = false;
   String? _error;

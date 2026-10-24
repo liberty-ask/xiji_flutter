@@ -3,7 +3,8 @@ import '../services/api/category_service.dart';
 import '../models/category.dart' as models;
 
 class CategoryProvider with ChangeNotifier {
-  final CategoryService _categoryService = CategoryService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  CategoryService get _categoryService => CategoryService();
   
   List<models.Category> _categories = [];
   bool _isLoading = false;

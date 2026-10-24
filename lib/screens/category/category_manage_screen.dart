@@ -23,7 +23,8 @@ class CategoryManageScreen extends StatefulWidget {
 }
 
 class _CategoryManageScreenState extends State<CategoryManageScreen> {
-  final CategoryService _categoryService = CategoryService();
+  // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
+  CategoryService get _categoryService => CategoryService();
   late String _activeTab; // '支出', '收入'
 
   @override
