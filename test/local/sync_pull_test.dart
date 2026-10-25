@@ -149,6 +149,53 @@ void main() {
       final cursor = await SyncCursorStore.load('f1');
       expect(cursor!.id, 'tx-2', reason: '游标越过不可读记录正常推进');
     });
+
+    test('个人 key 回落密文迁移收敛：拉回标 pending → 家庭 key 重推 → 再拉归零（真机踩坑回归）', () async {
+      // 场景：A 旧版 APK 时代以个人 key 推送存量上云；重装后 A 已有
+      // 家庭 F。拉回时家庭 key 解不开旧密文 → 回落个人 key 解开——
+      // 该密文仅本人可解，必须标 pending 待重推为家庭 key 版本，
+      // 否则 B 成员拿到 F 也解不开云端存量（B 端永远空库）
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final server = FakeSyncServer(pageSize: 10);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+
+      final personalKey = dataKey; // 复用顶层固定 key 当个人 key
+      final familyKey = Uint8List.fromList(
+          List.generate(32, (i) => (i * 29 + 11) % 256));
+      // 云端旧密文（个人 key 加密）
+      server.push('f1', [
+        await SyncOutbox.encryptRecord(
+            personalKey,
+            _cloudTx('tx-1', updatedAt: DateTime(2026, 10, 1, 0, 0, 1)))
+      ]);
+
+      final puller = SyncPuller(
+          db: db, port: FakeServerPullPort(server), currentFamilyId: () async => 'f1');
+      await puller.pullAll(personalKey,
+          familyDataKeyProvider: () async => familyKey);
+
+      // 回落解密入库：数据在，且标记 pending（需重推家庭 key 版本）
+      var rows = await db.select(db.transactions).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.syncPending, isTrue,
+          reason: '个人密文是过渡态，必须重推为家庭密文');
+
+      // 模拟推送侧重推：家庭 key 加密的新版云端记录（updated_at 更新）
+      server.push('f1', [
+        await SyncOutbox.encryptRecord(
+            familyKey,
+            _cloudTx('tx-1',
+                updatedAt: DateTime(2026, 10, 1, 0, 0, 9)))
+      ]);
+      await puller.pullAll(personalKey,
+          familyDataKeyProvider: () async => familyKey);
+
+      // 家庭 key 解开的权威数据：pending=0，迁移收敛完成
+      rows = await db.select(db.transactions).get();
+      expect(rows.single.syncPending, isFalse,
+          reason: '家庭密文为终态，无需回推');
+    });
   });
 
   group('任务 7.4：新设备全量恢复（双设备模拟）', () {
@@ -243,11 +290,12 @@ void main() {
 }
 
 /// 构造云端交易记录（明文载荷 → 加密由调用方执行）
-SyncPendingRow _cloudTx(String id, {DateTime? updatedAt}) {
+SyncPendingRow _cloudTx(String id,
+    {DateTime? updatedAt, int version = 1}) {
   return SyncPendingRow(
     recordType: 'transaction',
     id: id,
-    version: 1,
+    version: version,
     updatedAt: updatedAt ?? DateTime(2026, 10, 1),
     deleted: false,
     familyId: 'f1',

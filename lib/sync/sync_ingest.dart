@@ -22,7 +22,10 @@ enum IngestResult { inserted, updated, skipped }
 /// - 同 version → updated_at 新者胜；完全相同 → 幂等跳过
 /// - 墓碑与正常记录同规则：墓碑胜出即删除落库，正常记录胜出
 ///   不复活（只有更高 version 才能翻案）
-/// - 云端覆盖写入的行 syncPending=false（云端权威数据无需回推）
+/// - 云端覆盖写入的行 syncPending=false（云端权威数据无需回推），
+///   例外：个人 key 回落解密的行标 true——过渡密文仅本人可解，
+///   需以家庭 key 重推覆盖云端旧密文，其他成员才能解（见
+///   applyRecord 内注释）
 ///
 /// 解密键序（8.4 D13）：家庭 dataKey（业务记录主键）→ 失败按记录
 /// 前缀分流：vault-/fkey- 机制记录走传输密钥；普通业务记录回落
@@ -51,12 +54,20 @@ class SyncIngest {
   }) async {
     final id = record['id'] as String;
     Map<String, dynamic>? payload;
+    // 个人 key 回落且已有家庭 key：该密文是过渡态（仅本人可解），
+    // 入库后标 pending 待以家庭 key 重推——否则重装方回落拉回的
+    // 存量永远停留为个人密文，其他成员拿到 F 也解不开（真机踩坑）。
+    // 注意仅限「有家庭 key 却解不开」的回落：无 F 时个人密文是常态
+    // （同账号多设备/家庭尚未启用分发），标 pending 反而推不出去
+    var usedFallbackKey = false;
 
     // 键序解密：家庭 key → 个人 key
     for (final key in [familyDataKey, personalDataKey]) {
       if (key == null) continue;
       try {
         payload = await SyncOutbox.decryptRecord(key, record);
+        usedFallbackKey = identical(key, personalDataKey) &&
+            familyDataKey != null;
         break;
       } on SecretBoxAuthenticationError {
         continue; // 试下一把键
@@ -78,10 +89,14 @@ class SyncIngest {
 
     final recordType = payload['recordType'] as String;
     return switch (recordType) {
-      SyncOutbox.kTypeTransaction => _applyTransaction(record, payload),
-      SyncOutbox.kTypeCategory => _applyCategory(record, payload),
-      SyncOutbox.kTypeBudget => _applyBudget(record, payload),
-      SyncOutbox.kTypeCategoryRule => _applyCategoryRule(record, payload),
+      SyncOutbox.kTypeTransaction =>
+        _applyTransaction(record, payload, markPending: usedFallbackKey),
+      SyncOutbox.kTypeCategory =>
+        _applyCategory(record, payload, markPending: usedFallbackKey),
+      SyncOutbox.kTypeBudget =>
+        _applyBudget(record, payload, markPending: usedFallbackKey),
+      SyncOutbox.kTypeCategoryRule =>
+        _applyCategoryRule(record, payload, markPending: usedFallbackKey),
       VaultSyncService.kRecordType =>
         Future<IngestResult>.value(IngestResult.skipped),
       FamilyKeyService.kRecordType =>
@@ -174,8 +189,9 @@ class SyncIngest {
 
   Future<IngestResult> _applyTransaction(
     Map<String, dynamic> record,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    bool markPending = false,
+  }) async {
     final (version, updatedAt, deleted) = _meta(record);
     final id = record['id'] as String;
 
@@ -209,7 +225,7 @@ class SyncIngest {
       version: Value(version),
       updatedAt: Value(updatedAt),
       deleted: Value(deleted),
-      syncPending: const Value(false),
+      syncPending: Value(markPending),
     );
 
     if (existing == null) {
@@ -223,8 +239,9 @@ class SyncIngest {
 
   Future<IngestResult> _applyCategory(
     Map<String, dynamic> record,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    bool markPending = false,
+  }) async {
     final (version, updatedAt, deleted) = _meta(record);
     final id = record['id'] as String;
 
@@ -251,7 +268,7 @@ class SyncIngest {
       version: Value(version),
       updatedAt: Value(updatedAt),
       deleted: Value(deleted),
-      syncPending: const Value(false),
+      syncPending: Value(markPending),
     );
 
     if (existing == null) {
@@ -265,8 +282,9 @@ class SyncIngest {
 
   Future<IngestResult> _applyBudget(
     Map<String, dynamic> record,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    bool markPending = false,
+  }) async {
     final (version, updatedAt, deleted) = _meta(record);
     final id = record['id'] as String;
 
@@ -292,7 +310,7 @@ class SyncIngest {
       version: Value(version),
       updatedAt: Value(updatedAt),
       deleted: Value(deleted),
-      syncPending: const Value(false),
+      syncPending: Value(markPending),
     );
 
     if (existing == null) {
@@ -315,8 +333,9 @@ class SyncIngest {
   ///   最终该文本收敛到最新 version 的指认
   Future<IngestResult> _applyCategoryRule(
     Map<String, dynamic> record,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    bool markPending = false,
+  }) async {
     final (version, updatedAt, deleted) = _meta(record);
     final id = record['id'] as String;
     final matchText = payload['matchText'] as String;
@@ -341,7 +360,7 @@ class SyncIngest {
       version: Value(version),
       updatedAt: Value(updatedAt),
       deleted: Value(deleted),
-      syncPending: const Value(false),
+      syncPending: Value(markPending),
     );
 
     if (existing == null) {
@@ -354,7 +373,7 @@ class SyncIngest {
             version: Value(version),
             updatedAt: Value(updatedAt),
             deleted: Value(deleted),
-            syncPending: const Value(false),
+            syncPending: Value(markPending),
           ));
       return IngestResult.inserted;
     }
