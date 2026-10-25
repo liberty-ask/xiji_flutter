@@ -227,12 +227,13 @@ class SyncScheduler {
 
   /// 当前家庭成员（分发 F 的检测范围）。注入（测试）优先；
   /// 网络失败返回空列表（本轮跳过分发，成员数据同步不受影响）。
+  /// 注意：该接口 data 为顶层数组（同 FamilyService.getMembers），
+  /// 不能用 get<Map> 泛型——cast 失败会导致 F 分发每轮静默跳过。
   Future<List<({String id, int role})>> _loadMembers() async {
     if (_membersProvider != null) return await _membersProvider!();
     try {
-      final result =
-          await ApiClient().get<Map<String, dynamic>>('/v1/families/members');
-      final list = (result['data'] as List? ?? const []);
+      final result = await ApiClient().get<dynamic>('/v1/families/members');
+      final list = result as List? ?? const [];
       return list
           .map((m) => (id: (m as Map)['id'] as String, role: m['role'] as int))
           .toList();
