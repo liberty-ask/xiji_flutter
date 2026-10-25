@@ -18,14 +18,20 @@ class HomeProvider with ChangeNotifier {
   String? get error => _error;
 
   Future<void> fetchHomeData() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // 闪屏修复（stale-while-revalidate）：有旧数据时静默刷新、原地
+    // 替换，不先撕页换 loading——同步轮完成/切页触发的重拉不再闪屏；
+    // 仅首次无数据才显示 loading。失败时保留旧数据兜底（与家庭信息
+    // 缓存兜底同一哲学），仅无数据时走错误页
+    final hasStale = _homeData != null;
+    if (!hasStale) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       _homeData = await _transactionService.getHomeData();
       _error = null;
-      
+
       // 将收支数据直传原生并刷新财务汇总小部件
       if (_homeData != null) {
         final income = (_homeData!['income'] as num?)?.toDouble() ?? 0.0;
@@ -37,7 +43,7 @@ class HomeProvider with ChangeNotifier {
       }
     } catch (e) {
       _error = e.toString();
-      _homeData = null;
+      if (!hasStale) _homeData = null;
     } finally {
       _isLoading = false;
       notifyListeners();

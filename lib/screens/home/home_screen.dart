@@ -291,11 +291,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Consumer<HomeProvider>(
         builder: (context, provider, _) {
-          if (provider.isLoading) {
+          // 闪屏修复：仅「加载中且无旧数据」才显示 loading（首启场景）；
+          // 静默刷新期间继续渲染旧数据。错误页仅在无数据可兜底时出现
+          if (provider.isLoading && provider.homeData == null) {
             return LoadingIndicator(message: AppLocalizations.of(context)!.loading);
           }
 
-          if (provider.error != null || provider.homeData == null) {
+          if (provider.homeData == null) {
             return custom.CustomErrorWidget(
               message: provider.error ?? AppLocalizations.of(context)!.noData,
               onRetry: () => provider.fetchHomeData(),

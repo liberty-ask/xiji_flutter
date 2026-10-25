@@ -27,4 +27,13 @@ class SyncCursorStore {
     await prefs.setInt('$_timePrefix$familyId', time);
     await prefs.setString('$_idPrefix$familyId', id);
   }
+
+  /// 清除家庭游标（首获 F 后全量重拉用）：游标已推进的历史密文
+  /// 此前无 F 解不开被跳过，须回到无游标态从头拉取（LWW 幂等，
+  /// 重拉无害）
+  static Future<void> clear(String familyId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_timePrefix$familyId');
+    await prefs.remove('$_idPrefix$familyId');
+  }
 }

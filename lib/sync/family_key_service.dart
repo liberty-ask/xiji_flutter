@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart'
-    show KeyPairType, SimplePublicKey;
+    show KeyPairType, SecretBoxAuthenticationError, SimplePublicKey;
 import 'package:flutter/foundation.dart';
 
 import '../crypto/key_vault.dart';
@@ -101,6 +101,71 @@ class FamilyKeyService {
       }
     } catch (e) {
       debugPrint('[FamilyKey] 分发跳过，下轮重试: $e');
+    }
+  }
+
+  /// 自身包裹探测送达（8.4 缺陷修复）：本机无 F 时用 recordId 精确
+  /// 拉取自身 fkey（不走游标分页——包裹记录为 epoch 时间戳，在已
+  /// 推进的游标之前，增量拉取永远够不到；「后开启成员首拉错过包裹、
+  /// F 永久失联」的洞），拉到即本人传输密钥解密、私钥解密封盒、
+  /// F 落库。
+  ///
+  /// 返回 true = 本轮首获 F（调用方据此做存量重密封 + 重置拉取游标
+  /// 全量重拉——此前无 F 被跳过的历史密文以家庭 key 解开入库）。
+  /// 覆盖场景：普通成员后开启云备份（admin 补包裹后送达）、admin
+  /// 换设备（vault 云端恢复同一私钥，解开自包裹恢复同一把 F，避免
+  /// 误生成新 F 裂脑）。墓碑态/解密失败等待重包裹，返回 false。
+  /// 探测应在 ensureDistributed 之前调用：先恢复 F 再谈生成/分发。
+  static Future<bool> ensureOwnFamilyKey({
+    KeyVault? vault,
+    SyncPullPort? pullPort,
+    Future<String?> Function()? currentFamilyId,
+  }) async {
+    final vault_ = vault ?? VaultProvider.vault;
+    try {
+      final me = await LocalUser.load();
+      if (me == null) return false;
+      final familyId =
+          await (currentFamilyId ?? CurrentFamilyStore.get)();
+      if (familyId == null || familyId.isEmpty) return false;
+      if (!vault_.isUnlocked) return false;
+      if (await vault_.getFamilyKey(familyId) != null) return false;
+
+      final page = await (pullPort ?? ApiSyncPullPort()).pull(familyId, null,
+          null,
+          recordId: familyKeyRecordId(familyId, me.id));
+      final records =
+          (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
+      if (records.isEmpty) return false;
+      final record = records.first;
+      if ((record['deleted'] as num?)?.toInt() == 1 ||
+          record['deleted'] == true) {
+        return false; // 墓碑态：等待重包裹
+      }
+
+      Map<String, dynamic> payload;
+      try {
+        payload = await SyncOutbox.decryptRecord(
+            KeyVault.vaultTransportKey(me.id), record);
+      } on SecretBoxAuthenticationError {
+        return false; // 解不开（数据异常）：等待重包裹
+      }
+      if (payload['forUserId'] != me.id) return false;
+      // 墓碑 payload（无包裹字段）同样按等待处理
+      if (payload['ephemeralPubKey'] == null ||
+          payload['wrappedF'] == null) {
+        return false;
+      }
+      final familyKey = await vault_.openFamilyKeyWrap(
+        ephemeralPubKeyBase64: payload['ephemeralPubKey'] as String,
+        wrappedFBase64: payload['wrappedF'] as String,
+      );
+      await vault_.putFamilyKey(familyId, familyKey);
+      debugPrint('[FamilyKey] 自身包裹送达，F 已落库（首获，触发全量重拉）');
+      return true;
+    } catch (e) {
+      debugPrint('[FamilyKey] 自身 fkey 探测跳过，下轮重试: $e');
+      return false;
     }
   }
 

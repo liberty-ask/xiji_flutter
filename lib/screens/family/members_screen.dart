@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
+import '../../widgets/common/font_size_inherited.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
@@ -102,9 +103,20 @@ class _MembersScreenState extends State<MembersScreen> {
     final dormant = !member.isSyncing;
     final nameColor =
         dormant ? Colors.white.withValues(alpha: 0.4) : Colors.white;
+    // 徽章是状态装饰而非阅读主体：反比抵消应用内字号缩放，
+    // 字号调大时徽章尺寸稳定，充当卡片的视觉比例锚点（不变形）
+    final badgeScale = 1 / FontSizeInherited.of(context).fontSizeScale;
+    // 描述行：备注与休眠说明共存（超宽省略，不再互斥顶替丢信息）
+    final desc = [
+      if (member.label != null && member.label!.isNotEmpty) member.label!,
+      if (dormant) AppLocalizations.of(context)!.memberSyncDormantDesc,
+    ].join(' · ');
+
     return Container(
-      margin: EdgeInsets.only(bottom: ResponsiveHelper.spacing(context, small: 10, normal: 12)),
-      padding: ResponsiveHelper.cardPadding(context),
+      margin: EdgeInsets.only(
+          bottom: ResponsiveHelper.spacing(context, small: 8, normal: 10)),
+      padding: EdgeInsets.all(ResponsiveHelper.responsiveValue(
+          context, small: 10.0, normal: 12.0, large: 16.0)),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: ThemeHelper.surface(context),
@@ -117,9 +129,9 @@ class _MembersScreenState extends State<MembersScreen> {
           CircleAvatar(
             radius: ResponsiveHelper.responsiveValue(
               context,
-              small: 24.0,
-              normal: 28.0,
-              large: 32.0,
+              small: 18.0,
+              normal: 22.0,
+              large: 26.0,
             ),
             backgroundImage: member.avatar != null && member.avatar!.isNotEmpty
                 ? NetworkImage(member.avatar!)
@@ -133,99 +145,113 @@ class _MembersScreenState extends State<MembersScreen> {
                         : ThemeHelper.primary(context),
                     size: ResponsiveHelper.responsiveValue(
                       context,
-                      small: 24.0,
-                      normal: 28.0,
-                      large: 32.0,
+                      small: 18.0,
+                      normal: 22.0,
+                      large: 26.0,
                     ),
                   )
                 : null,
           ),
-          SizedBox(width: ResponsiveHelper.spacing(context)),
+          SizedBox(
+              width: ResponsiveHelper.spacing(context, small: 10, normal: 12)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    ScaledText(
-                      member.name,
-                      style: ResponsiveHelper.responsiveTitleStyle(context, color: nameColor),
+                    Flexible(
+                      child: ScaledText(
+                        member.name,
+                        style: ResponsiveHelper.responsiveTextStyle(
+                          context,
+                          fontSize: ResponsiveHelper.responsiveValue(
+                              context, small: 15.0, normal: 16.0, large: 18.0),
+                          fontWeight: FontWeight.bold,
+                          color: nameColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
                     if (FamilyMemberRole.isAdmin(member.role)) ...[
-                      SizedBox(width: ResponsiveHelper.spacing(context, small: 6, normal: 8)),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ResponsiveHelper.spacing(context, small: 6, normal: 8),
-                          vertical: ResponsiveHelper.spacing(context, small: 2, normal: 2),
-                        ),
-                        decoration: BoxDecoration(
-                          color: ThemeHelper.primary(context).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: ThemeHelper.primary(context),
-                            width: 1,
-                          ),
-                        ),
-                        child: ScaledText(
-                          AppLocalizations.of(context)!.admin,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: ThemeHelper.primary(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (dormant) ...[
-                      SizedBox(width: ResponsiveHelper.spacing(context, small: 6, normal: 8)),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: ResponsiveHelper.spacing(context, small: 6, normal: 8),
-                          vertical: ResponsiveHelper.spacing(context, small: 2, normal: 2),
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: ScaledText(
-                          AppLocalizations.of(context)!.memberSyncDormant,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white.withValues(alpha: 0.5),
-                          ),
-                        ),
+                      const SizedBox(width: 6),
+                      _buildBadge(
+                        AppLocalizations.of(context)!.admin,
+                        badgeScale,
+                        textColor: ThemeHelper.primary(context),
+                        borderColor: ThemeHelper.primary(context),
+                        backgroundColor:
+                            ThemeHelper.primary(context).withValues(alpha: 0.2),
                       ),
                     ],
                   ],
                 ),
-                if (dormant) ...[
-                  const SizedBox(height: 4),
+                if (desc.isNotEmpty) ...[
+                  const SizedBox(height: 2),
                   ScaledText(
-                    AppLocalizations.of(context)!.memberSyncDormantDesc,
+                    desc,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 11,
+                      color: Colors.white
+                          .withValues(alpha: dormant ? 0.4 : 0.5),
                     ),
-                  ),
-                ] else if (member.label != null && member.label!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  ScaledText(
-                    member.label!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ],
               ],
             ),
           ),
+          // 右侧状态区（方案 A）：休眠=灰胶囊（异常态显眼），
+          // 同步中=主题色小圆点（正常态轻表达，几乎隐形）
+          SizedBox(
+              width: ResponsiveHelper.spacing(context, small: 8, normal: 10)),
+          if (dormant)
+            _buildBadge(
+              AppLocalizations.of(context)!.memberSyncDormant,
+              badgeScale,
+              textColor: Colors.white.withValues(alpha: 0.5),
+              borderColor: Colors.white.withValues(alpha: 0.3),
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
+            )
+          else
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ThemeHelper.primary(context),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  /// 徽章胶囊：9px 小字 + 紧凑内边距，锁定字号缩放
+  Widget _buildBadge(
+    String text,
+    double scale, {
+    required Color textColor,
+    required Color borderColor,
+    required Color backgroundColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: ScaledText(
+        text,
+        textScaleFactor: scale,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: textColor,
+        ),
       ),
     );
   }

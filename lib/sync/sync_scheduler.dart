@@ -13,6 +13,7 @@ import '../data/local/db_provider.dart';
 import '../data/local/local_user.dart';
 import '../services/api/api_client.dart';
 import 'family_key_service.dart';
+import 'sync_cursor_store.dart';
 import 'sync_outbox.dart';
 import 'sync_puller.dart';
 import 'vault_sync_service.dart';
@@ -168,11 +169,24 @@ class SyncScheduler {
     // 新开启用户首轮同步即补上云端 vault。内部自吞异常，失败下轮重试
     await VaultSyncService.pushVault();
 
-    // 三期 8.4：家庭密钥 F 保障——admin 首次生成 / 云端缺份的成员
-    // 补包裹分发。成员列表拉取失败静默跳过（下轮重试），不阻断同步
+    // 三期 8.4：家庭密钥 F 保障。先做自身包裹探测（缺陷修复）：
+    // fkey 记录为 epoch 时间戳，在已推进的游标之前——增量拉取永远
+    // 够不到，后开启成员首拉错过包裹会导致 F 永久失联。无 F 时用
+    // recordId 精确拉取（不走游标），命中即解 F 落库（普通成员后
+    // 开启、admin 换设备恢复同一把 F，避免误生成裂脑）。
+    // 探测先于分发：恢复到的 F 直接进入下方分发/重密封链路
+    final gainedFamilyKey = await FamilyKeyService.ensureOwnFamilyKey(
+      vault: _vault,
+      pullPort: _pullPort,
+      currentFamilyId: _currentFamilyId,
+    );
+
+    // admin 首次生成 / 云端缺份的成员补包裹分发。成员列表拉取失败
+    // 静默跳过（下轮重试），不阻断同步
     final members = await _loadMembers();
     await FamilyKeyService.ensureDistributed(
       members: members,
+      vault: _vault,
       pushPort: _port,
       pullPort: _pullPort,
       currentFamilyId: _currentFamilyId,
@@ -187,6 +201,11 @@ class SyncScheduler {
     // 下方推送环节用家庭 key 全量重推（LWW 同 version 时间新者胜覆盖）
     if (familyId != null && familyKey != null) {
       await _maybeReseal(familyId);
+      // 首获 F（探测送达）：重置拉取游标——此前无 F 时历史密文被
+      // 跳过且游标推进，须全量重拉以家庭 key 解开入库（LWW 幂等）
+      if (gainedFamilyKey) {
+        await SyncCursorStore.clear(familyId);
+      }
     }
 
     await _pushAll();

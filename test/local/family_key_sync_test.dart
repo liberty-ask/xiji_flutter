@@ -14,6 +14,7 @@ import 'package:xiji_flutter/data/local/local_user.dart';
 import 'package:xiji_flutter/data/local/member_public_key_store.dart';
 import 'package:xiji_flutter/models/family_member.dart';
 import 'package:xiji_flutter/sync/family_key_service.dart';
+import 'package:xiji_flutter/sync/sync_cursor_store.dart';
 import 'package:xiji_flutter/sync/sync_ingest.dart';
 import 'package:xiji_flutter/sync/sync_outbox.dart';
 import 'package:xiji_flutter/sync/sync_puller.dart';
@@ -588,6 +589,118 @@ void main() {
             ..where((t) => t.id.equals('tx-1')))
           .getSingle();
       expect(row.syncPending, true, reason: '标记保留，F 到达后下轮重推');
+    });
+  });
+
+  group('8.4 缺陷修复：后开启成员跨轮 F 送达', () {
+    test('B 首轮无 fkey 错过家庭密文 → A 补包裹 → B 下轮探测命中全量恢复',
+        () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      // vault 按归属用户登录态 setup（账号隔离约束）
+      await loginAs('user-1');
+      final vaultA = newVault();
+      await vaultA.setup('pw123456');
+      // 开关真值源在 vault.enabled（setBackupEnabled 也要求归属
+      // 用户登录态，否则写错账号的键）；不走 prefs backup_enabled
+      // 迁移路径——A 的迁移会删该键，共享 prefs mock 的 B 读不到
+      await vaultA.setBackupEnabled(true);
+      await loginAs('user-2');
+      final vaultB = newVault();
+      await vaultB.setup('pw123456');
+      await vaultB.setBackupEnabled(true);
+      await MemberPublicKeyStore.setForTesting(<String, String>{
+        'user-1': await pubBase64Of(vaultA),
+        'user-2': await pubBase64Of(vaultB),
+      });
+
+      final server = FakeSyncServer();
+      // A 用 Noop 拉取端口：A/B 共享 prefs mock，避免 A 的拉取推进
+      // 与 B 相同 familyId 的游标键（真实世界两设备各自存储）
+      var membersOfA = <({String id, int role})>[
+        (id: 'user-1', role: FamilyMemberRole.admin),
+      ];
+
+      // ── A 首轮：生成 F 只给自己分发（B 未开启时点），推家庭密文 ──
+      await loginAs('user-1');
+      final dbA = AppDatabase(NativeDatabase.memory());
+      addTearDown(dbA.close);
+      await dbA.into(dbA.transactions).insertReturning(
+          TransactionsCompanion.insert(
+        id: const Value('tx-1'),
+        type: 1,
+        categoryId: diningId,
+        amountCents: 3000,
+        date: DateTime(2026, 10, 1),
+        userId: 'user-1',
+        familyId: const Value('f1'),
+        description: const Value('午餐'),
+      ));
+      final schedulerA = SyncScheduler(
+        db: dbA,
+        port: _RecordingPushPort(server),
+        pullPort: _NoopPullPort(),
+        vault: vaultA,
+        isSignedIn: () async => true,
+        currentFamilyId: () async => 'f1',
+        membersProvider: () async => membersOfA,
+      );
+      await schedulerA.maybePush();
+      final f = await vaultA.getFamilyKey('f1');
+      expect(f, isNotNull, reason: 'admin 生成 F');
+      expect(
+          server
+              .record(FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
+          isNull,
+          reason: 'B 未开启：云端尚无 B 的包裹');
+
+      // ── B 首轮：无 F，家庭密文全部 skipped 且游标推进（洞现场）──
+      await loginAs('user-2');
+      final dbB = AppDatabase(NativeDatabase.memory());
+      addTearDown(dbB.close);
+      final schedulerB = SyncScheduler(
+        db: dbB,
+        port: _RecordingPushPort(server),
+        pullPort: FakeServerPullPort(server),
+        vault: vaultB,
+        isSignedIn: () async => true,
+        currentFamilyId: () async => 'f1',
+        membersProvider: () async => [
+          (id: 'user-1', role: FamilyMemberRole.admin),
+          (id: 'user-2', role: FamilyMemberRole.member),
+        ],
+      );
+      await schedulerB.maybePush();
+
+      expect(await vaultB.getFamilyKey('f1'), isNull, reason: 'B 首轮未获 F');
+      expect(await dbB.select(dbB.transactions).get(), isEmpty,
+          reason: '家庭密文无 F 解不开，全部跳过');
+      expect(await SyncCursorStore.load('f1'), isNotNull,
+          reason: '游标已推进——不重置游标历史密文将永久错过');
+
+      // ── A 下轮：B 已开启（vaultDoc 公钥到达），补分发 B 的包裹 ──
+      await loginAs('user-1');
+      membersOfA = [
+        (id: 'user-1', role: FamilyMemberRole.admin),
+        (id: 'user-2', role: FamilyMemberRole.member),
+      ];
+      await schedulerA.maybePush();
+      expect(
+          server
+              .record(FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
+          isNotNull,
+          reason: 'A 补发 B 的包裹（epoch 时间戳，增量拉取够不到）');
+
+      // ── B 下轮：recordId 精确探测命中 → F 落库 + 游标重置全量重拉 ──
+      await loginAs('user-2');
+      await schedulerB.maybePush();
+
+      expect(await vaultB.getFamilyKey('f1'), equals(f),
+          reason: '探测送达恢复同一把 F');
+      final txs = await dbB.select(dbB.transactions).get();
+      expect(txs, hasLength(1),
+          reason: '游标重置后全量重拉，历史密文以家庭 key 解开入库');
+      expect(txs.first.amountCents, 3000);
+      expect(txs.first.description, '午餐');
     });
   });
 
