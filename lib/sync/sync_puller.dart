@@ -122,7 +122,7 @@ class SyncPuller {
             // 记录立即可解（只在 F 从无到有时发生一次，常态零开销）
             if (familyKey == null &&
                 result == IngestResult.updated &&
-                (record['id'] as String).startsWith('fkey-')) {
+                (record['id'] as String).startsWith('fk-')) {
               familyKey = await familyDataKeyProvider?.call();
             }
           }

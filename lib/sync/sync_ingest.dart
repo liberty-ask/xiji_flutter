@@ -68,7 +68,7 @@ class SyncIngest {
       if (id.startsWith('vault-')) {
         return _ingestVaultDoc(record);
       }
-      if (id.startsWith('fkey-')) {
+      if (id.startsWith('fk-')) {
         return _ingestFamilyKeyWrap(record);
       }
       // 其他成员未重密封的旧密文：本人无其个人 key，解不开是预期。

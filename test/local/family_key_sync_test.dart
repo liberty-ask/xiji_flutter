@@ -132,11 +132,15 @@ void main() {
       final pushedIds = pushPort.calls
           .expand((c) => c.records.map((r) => r['id'] as String))
           .toSet();
-      expect(pushedIds, {'fkey-f1-user-1', 'fkey-f1-user-2'},
+      final fkId1 =
+          await FamilyKeyService.familyKeyRecordId('f1', 'user-1');
+      final fkId2 =
+          await FamilyKeyService.familyKeyRecordId('f1', 'user-2');
+      expect(pushedIds, {fkId1, fkId2},
           reason: '每人一条包裹记录，含 admin 自己（换设备可恢复）');
 
       // B 的包裹份：B 传输密钥可解 payload，B 私钥可解密封盒得同一 F
-      final recB = server.record('fkey-f1-user-2')!;
+      final recB = server.record(fkId2)!;
       final payloadB = await SyncOutbox.decryptRecord(
           KeyVault.vaultTransportKey('user-2'), recB);
       expect(payloadB['recordType'], FamilyKeyService.kRecordType);
@@ -148,7 +152,7 @@ void main() {
       expect(fB, equals(f), reason: 'B 解密封盒得到同一把 F');
 
       // A 自己的包裹份用 A 私钥可解（换设备恢复路径）
-      final recA = server.record('fkey-f1-user-1')!;
+      final recA = server.record(fkId1)!;
       final payloadA = await SyncOutbox.decryptRecord(
           KeyVault.vaultTransportKey('user-1'), recA);
       final fA = await vaultA.openFamilyKeyWrap(
@@ -241,7 +245,8 @@ void main() {
       final ids1 = pushPort.calls
           .expand((c) => c.records.map((r) => r['id'] as String))
           .toSet();
-      expect(ids1, {'fkey-f1-user-1'}, reason: '缺公钥成员本轮跳过');
+      expect(ids1, {await FamilyKeyService.familyKeyRecordId('f1', 'user-1')},
+          reason: '缺公钥成员本轮跳过');
       pushPort.calls.clear();
 
       // 公钥到达（模拟其 vaultDoc 拉取登记）后下轮补包裹
@@ -250,7 +255,7 @@ void main() {
       final ids2 = pushPort.calls
           .expand((c) => c.records.map((r) => r['id'] as String))
           .toSet();
-      expect(ids2, {'fkey-f1-user-2'});
+      expect(ids2, {await FamilyKeyService.familyKeyRecordId('f1', 'user-2')});
     });
 
     test('锁定期不分发：静默跳过', () async {
@@ -328,7 +333,7 @@ void main() {
       );
       final myRow = SyncPendingRow(
         recordType: FamilyKeyService.kRecordType,
-        id: FamilyKeyService.familyKeyRecordId('f1', 'user-2'),
+        id: await FamilyKeyService.familyKeyRecordId('f1', 'user-2'),
         version: 1,
         updatedAt: DateTime.fromMillisecondsSinceEpoch(1),
         deleted: false,
@@ -347,7 +352,7 @@ void main() {
       // 他人包裹份（user-1 传输密钥加密，B 解不开是预期）
       final foreignRow = SyncPendingRow(
         recordType: FamilyKeyService.kRecordType,
-        id: FamilyKeyService.familyKeyRecordId('f1', 'user-1'),
+        id: await FamilyKeyService.familyKeyRecordId('f1', 'user-1'),
         version: 1,
         updatedAt: DateTime.fromMillisecondsSinceEpoch(1),
         deleted: false,
@@ -593,6 +598,20 @@ void main() {
   });
 
   group('8.4 缺陷修复：后开启成员跨轮 F 送达', () {
+    test('包裹记录 ID 不超服务端 36 字符上限（雪花 ID 场景）', () async {
+      // 真机踩坑：fkey-<雪花19>-<雪花19> = 44 字符被服务端 400 拒绝，
+      // F 分发每轮静默失败
+      final id = await FamilyKeyService.familyKeyRecordId(
+          '2009264986999275522', '2009264986999275523');
+      expect(id.length, lessThanOrEqualTo(36));
+      expect(id.startsWith('fk-'), isTrue);
+      // 确定性：两端各自计算结果一致（探测/幂等依赖）
+      expect(
+          await FamilyKeyService.familyKeyRecordId(
+              '2009264986999275522', '2009264986999275523'),
+          id);
+    });
+
     test('B 首轮无 fkey 错过家庭密文 → A 补包裹 → B 下轮探测命中全量恢复',
         () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -649,7 +668,7 @@ void main() {
       expect(f, isNotNull, reason: 'admin 生成 F');
       expect(
           server
-              .record(FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
+              .record(await FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
           isNull,
           reason: 'B 未开启：云端尚无 B 的包裹');
 
@@ -686,7 +705,7 @@ void main() {
       await schedulerA.maybePush();
       expect(
           server
-              .record(FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
+              .record(await FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
           isNotNull,
           reason: 'A 补发 B 的包裹（epoch 时间戳，增量拉取够不到）');
 
@@ -766,7 +785,8 @@ void main() {
           port: pushPort, vault: vaultB2, currentFamilyId: () async => 'f1');
 
       // 忘者自己的 fkey 已变墓碑
-      final tombstone = server.record('fkey-f1-user-2')!;
+      final tombstone =
+          server.record(await FamilyKeyService.familyKeyRecordId('f1', 'user-2'))!;
       expect(tombstone['deleted'], 1, reason: '旧包裹已被墓碑废弃');
       expect(
           (server.record(VaultSyncService.vaultRecordId('user-2'))!
@@ -792,7 +812,8 @@ void main() {
         pullPort: FakeServerPullPort(server),
         currentFamilyId: () async => 'f1',
       );
-      final rewrapped = server.record('fkey-f1-user-2')!;
+      final rewrapped = server.record(
+          await FamilyKeyService.familyKeyRecordId('f1', 'user-2'))!;
       expect(rewrapped['deleted'], 0, reason: '墓碑被重包裹覆盖');
       expect(rewrapped['version'] as int,
           greaterThanOrEqualTo((tombstone['version'] as int) + 1),

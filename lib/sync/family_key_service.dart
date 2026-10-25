@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart'
-    show KeyPairType, SecretBoxAuthenticationError, SimplePublicKey;
+    show KeyPairType, SecretBoxAuthenticationError, Sha256, SimplePublicKey;
 import 'package:flutter/foundation.dart';
 
 import '../crypto/key_vault.dart';
@@ -21,7 +21,8 @@ import 'sync_scheduler.dart' show ApiSyncPushPort, SyncPushPort;
 ///   多把 F 并存会导致部分成员密文互解不通，生成权唯一给 admin
 ///   （现实中创建者先开同步是压倒性主流；admin 不开同步的家庭成员
 ///   共享数据不可用是诚实语义，由 8.2 休眠标记给出明确预期）。
-/// - 包裹记录：recordType=familyKeyWrap、id=fkey-<familyId>-<forUserId>、
+/// - 包裹记录：recordType=familyKeyWrap、id=fk-<sha256(familyId:
+///   forUserId) 截 32hex>（35 字符，直拼雪花 ID 会超服务端 36 上限）、
 ///   payload 用 forUserId 的 vault 传输密钥加密（与 vaultDoc 同机制，
 ///   服务端零明文）；F 机密性由密封盒保证——其他成员拉到也解不出。
 /// - 分发触发：每轮同步对比「成员列表 vs 云端 fkey 记录」（recordId
@@ -35,8 +36,19 @@ class FamilyKeyService {
   static const String kRecordType = 'familyKeyWrap';
 
   /// fkey 记录确定性 ID：同家庭同成员 upsert 单行覆盖
-  static String familyKeyRecordId(String familyId, String userId) =>
-      'fkey-$familyId-$userId';
+  /// 包裹记录 ID：`fk-` + sha256(familyId:forUserId) 前 32 位十六进制
+  /// （35 字符）。不直拼 familyId+forUserId——雪花 ID 拼接会超过
+  /// 服务端 sync_records.id 的 36 字符上限（fkey-19+1+19=44 被拒），
+  /// 哈希确定性保证两端算出同一 ID（探测/幂等依赖）
+  static Future<String> familyKeyRecordId(
+      String familyId, String userId) async {
+    final digest = await Sha256().hash(utf8.encode('$familyId:$userId'));
+    final hex = digest.bytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join()
+        .substring(0, 32);
+    return 'fk-$hex';
+  }
 
   /// 每轮同步的 F 保障入口（调度器门控通过后调用）：
   /// 1. 本机无 F：仅 admin 生成并全员分发；普通成员静默等待
@@ -79,7 +91,7 @@ class FamilyKeyService {
       // 为云端缺 fkey 记录（或墓碑态）的成员包裹（含我：换设备后
       // F 云端可恢复）
       for (final member in members) {
-        final recordId = familyKeyRecordId(familyId, member.id);
+        final recordId = await familyKeyRecordId(familyId, member.id);
         final remote = await _remoteRecordState(
             pullPort, familyId, recordId);
         // 正常记录跳过；无记录 or 墓碑（互救重置废弃的旧包裹）补
@@ -133,7 +145,7 @@ class FamilyKeyService {
 
       final page = await (pullPort ?? ApiSyncPullPort()).pull(familyId, null,
           null,
-          recordId: familyKeyRecordId(familyId, me.id));
+          recordId: await familyKeyRecordId(familyId, me.id));
       final records =
           (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
       if (records.isEmpty) return false;
@@ -184,7 +196,7 @@ class FamilyKeyService {
           await (currentFamilyId ?? CurrentFamilyStore.get)();
       if (familyId == null || familyId.isEmpty) return;
 
-      final recordId = familyKeyRecordId(familyId, me.id);
+      final recordId = await familyKeyRecordId(familyId, me.id);
       final remote =
           await _remoteRecordState(pullPort, familyId, recordId);
       if (remote == null || remote.deleted == true) return; // 无需墓碑
@@ -262,7 +274,7 @@ class FamilyKeyService {
 
     final row = SyncPendingRow(
       recordType: kRecordType,
-      id: familyKeyRecordId(familyId, forUserId),
+      id: await familyKeyRecordId(familyId, forUserId),
       version: version,
       // 与 vaultDoc 同策略：机制记录固定极老值，不干扰业务游标分页
       updatedAt: DateTime.fromMillisecondsSinceEpoch(1),
