@@ -46,6 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _restorePromptShown = false;
   // 同步轮完成订阅：恢复/增量同步落库后停留页主动重拉
   StreamSubscription<void>? _syncRoundSub;
+  // 手动刷新转圈：stale-while-revalidate 下静默刷新无任何视觉
+  // 反馈，用户显式点击须有反馈（自动刷新保持静默不闪屏）
+  bool _manualRefreshing = false;
 
   @override
   void initState() {
@@ -540,10 +543,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const Spacer(),
                         IconButton(
-                          icon: const Icon(Icons.sync, color: Colors.white54),
-                          onPressed: () {
-                            provider.fetchHomeData();
-                            _loadFamilies();
+                          icon: _manualRefreshing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white),
+                                )
+                              : const Icon(Icons.sync,
+                                  color: Colors.white54),
+                          onPressed: _manualRefreshing ? null : () async {
+                            setState(() => _manualRefreshing = true);
+                            try {
+                              await provider.fetchHomeData();
+                              await _loadFamilies();
+                            } finally {
+                              if (mounted) {
+                                setState(() => _manualRefreshing = false);
+                              }
+                            }
                           },
                         ),
                       ],
