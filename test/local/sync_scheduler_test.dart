@@ -409,19 +409,19 @@ void main() {
 
     test('升级迁移：清全部家庭游标（一次性，二轮不再清）', () async {
       final scheduler = familyScheduler();
-      await SyncCursorStore.save('f1', 1000, 'a');
-      await SyncCursorStore.save('f2', 2000, 'b');
+      await SyncCursorStore.save('f1', '', 1000, 'a');
+      await SyncCursorStore.save('f2', '', 2000, 'b');
       await insertTx('tx-1');
 
       await scheduler.maybePush();
-      expect(await SyncCursorStore.load('f1'), isNull,
+      expect(await SyncCursorStore.load('f1', ''), isNull,
           reason: '迁移清掉旧游标，本轮全量重拉自愈旧个人密文');
-      expect(await SyncCursorStore.load('f2'), isNull);
+      expect(await SyncCursorStore.load('f2', ''), isNull);
 
       // 二轮：迁移标记已置位，新推进的游标不再被清
-      await SyncCursorStore.save('f1', 3000, 'c');
+      await SyncCursorStore.save('f1', '', 3000, 'c');
       await scheduler.maybePush();
-      expect(await SyncCursorStore.load('f1'), isNotNull);
+      expect(await SyncCursorStore.load('f1', ''), isNotNull);
     });
 
     test('F 轮换：指纹账本失效，存量以新 F 全量重推', () async {

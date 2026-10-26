@@ -19,6 +19,29 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  group('任务 8.8：游标账号隔离', () {
+    test('同家庭不同账号游标互不继承（同手机切账号不死锁）', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+
+      // A 账号先登录，同步推进家庭游标
+      await SyncCursorStore.save('f1', 'user-1', 1000, 'a');
+
+      // 同一手机切到 B 账号：读不到 A 的游标（无游标 → 全量拉取，
+      // 不被 A 推进的位置劫持——切账号看不到对方数据的死锁根因）
+      expect(await SyncCursorStore.load('f1', 'user-2'), isNull);
+
+      // B 各自独立推进，互不覆盖
+      await SyncCursorStore.save('f1', 'user-2', 2000, 'b');
+      expect((await SyncCursorStore.load('f1', 'user-1'))!.id, 'a');
+      expect((await SyncCursorStore.load('f1', 'user-2'))!.id, 'b');
+
+      // clear 只清自己（首获 F 全量重拉不影响另一账号的位置）
+      await SyncCursorStore.clear('f1', 'user-1');
+      expect(await SyncCursorStore.load('f1', 'user-1'), isNull);
+      expect((await SyncCursorStore.load('f1', 'user-2'))!.id, 'b');
+    });
+  });
+
   group('任务 7.4：分页拉取循环', () {
     test('hasMore 翻页直到取完，全部入库，游标落位', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -43,7 +66,7 @@ void main() {
       final txCount = await db.select(db.transactions).get();
       expect(txCount, hasLength(5));
       // 游标保存到尾页末条位置
-      final cursor = await SyncCursorStore.load('f1');
+      final cursor = await SyncCursorStore.load('f1', '');
       expect(cursor, isNotNull);
       expect(cursor!.time, DateTime(2026, 10, 1, 0, 0, 5).millisecondsSinceEpoch);
       expect(cursor.id, 'tx-5');
@@ -101,7 +124,7 @@ void main() {
 
       await expectLater(puller.pullAll(dataKey), throwsA(isA<ArgumentError>()));
       // 游标停在第一页末条（tx-2 成功入库已推进），坏页下次重拉
-      final cursor = await SyncCursorStore.load('f1');
+      final cursor = await SyncCursorStore.load('f1', '');
       expect(cursor, isNotNull);
       expect(
           cursor!.time, DateTime(2026, 10, 1, 0, 0, 2).millisecondsSinceEpoch);
@@ -146,7 +169,7 @@ void main() {
       await puller.pullAll(dataKey);
       final rows = await db.select(db.transactions).get();
       expect(rows.map((r) => r.id), ['tx-2']);
-      final cursor = await SyncCursorStore.load('f1');
+      final cursor = await SyncCursorStore.load('f1', '');
       expect(cursor!.id, 'tx-2', reason: '游标越过不可读记录正常推进');
     });
 
@@ -284,7 +307,7 @@ void main() {
       expect(bBudget.year, 2026);
 
       // 设备 B 恢复后游标落位，下次增量
-      expect(await SyncCursorStore.load('f1'), isNotNull);
+      expect(await SyncCursorStore.load('f1', ''), isNotNull);
     });
   });
 }

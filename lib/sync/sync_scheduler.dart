@@ -206,7 +206,8 @@ class SyncScheduler {
       // 首获 F（探测送达）：重置拉取游标——此前无 F 时历史密文被
       // 跳过且游标推进，须全量重拉以家庭 key 解开入库（LWW 幂等）
       if (gainedFamilyKey) {
-        await SyncCursorStore.clear(familyId);
+        final user = await LocalUser.load();
+        await SyncCursorStore.clear(familyId, user?.id ?? '');
       }
     }
 

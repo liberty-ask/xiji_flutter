@@ -693,7 +693,7 @@ void main() {
       expect(await vaultB.getFamilyKey('f1'), isNull, reason: 'B 首轮未获 F');
       expect(await dbB.select(dbB.transactions).get(), isEmpty,
           reason: '家庭密文无 F 解不开，全部跳过');
-      expect(await SyncCursorStore.load('f1'), isNotNull,
+      expect(await SyncCursorStore.load('f1', 'user-2'), isNotNull,
           reason: '游标已推进——不重置游标历史密文将永久错过');
 
       // ── A 下轮：B 已开启（vaultDoc 公钥到达），补分发 B 的包裹 ──

@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 import '../crypto/key_vault.dart';
 import '../data/local/app_database.dart';
@@ -89,13 +89,25 @@ class SyncPuller {
     final familyId = await _currentFamilyId();
     if (familyId == null) return;
 
+    // 游标按「家庭 + 用户」隔离（8.8）：同一手机切换账号时游标
+    // 互不继承，各自从自己的位置增量拉取。未登录归一空串（同步
+    // 门控保证生产环境已登录，此处仅测试环境可达）
+    final user = await LocalUser.load();
+    final userId = user?.id ?? '';
+
     final ingest = SyncIngest(
       _db,
       vault: _vault,
-      userId: () => LocalUser.load().then((u) => u?.id),
+      userId: () async => user?.id,
     );
-    var cursor = await SyncCursorStore.load(familyId);
+    var cursor = await SyncCursorStore.load(familyId, userId);
     Uint8List? familyKey = await familyDataKeyProvider?.call();
+
+    // 拉取统计（8.8 可观测性）：拉到但解不开/仲裁跳过的记录
+    // 此前完全不可见，切账号死锁排查全靠排除法
+    var pulled = 0;
+    var applied = 0;
+    var skipped = 0;
 
     while (true) {
       // 每页 2000 条（服务端上限）：万条数据 18 页（200/页时 45 页）
@@ -114,10 +126,16 @@ class SyncPuller {
       // 语义完全一致（LWW 幂等，重拉无害）。首页 watch 流在提交后
       // 一次刷新（比逐条连刷更省 UI 开销）。
       if (records.isNotEmpty) {
+        pulled += records.length;
         await _db.transaction(() async {
           for (final record in records) {
             final result = await ingest.applyRecord(personalDataKey, record,
                 familyDataKey: familyKey);
+            if (result == IngestResult.skipped) {
+              skipped++;
+            } else {
+              applied++;
+            }
             // 刚解出自己的包裹份拿到 F：重读家庭 key，同页后续业务
             // 记录立即可解（只在 F 从无到有时发生一次，常态零开销）
             if (familyKey == null &&
@@ -133,18 +151,21 @@ class SyncPuller {
         // 服务端在 hasMore=true 时给出本页末条位置作为下页游标
         final nextTime = page['nextCursorTime'] as int;
         final nextId = page['nextCursorId'] as String;
-        await SyncCursorStore.save(familyId, nextTime, nextId);
+        await SyncCursorStore.save(familyId, userId, nextTime, nextId);
         cursor = (time: nextTime, id: nextId);
       } else {
         // 尾页服务端不给游标，取本页末条 (updatedAt, id) 落位，
         // 下次增量从此继续；空页（云端无记录）保持旧游标不动
         if (records.isNotEmpty) {
           final last = records.last;
-          await SyncCursorStore.save(familyId, last['updatedAt'] as int,
+          await SyncCursorStore.save(familyId, userId, last['updatedAt'] as int,
               last['id'] as String);
         }
         break;
       }
     }
+
+    debugPrint(
+        '[SyncPuller] 家庭 $familyId 拉取完成：$pulled 条（入库 $applied / 跳过 $skipped）');
   }
 }

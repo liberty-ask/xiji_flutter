@@ -148,10 +148,16 @@ class FamilyKeyService {
           recordId: await familyKeyRecordId(familyId, me.id));
       final records =
           (page['records'] as List? ?? const []).cast<Map<String, dynamic>>();
-      if (records.isEmpty) return false;
+      if (records.isEmpty) {
+        // 静默分支补记（8.8 可观测性）：无包裹是「admin 尚未分发」的
+        // 暂态，每轮探测打一条直至送达——此前零日志，排查全靠排除法
+        debugPrint('[FamilyKey] 自身 fkey 探测：云端无包裹（待 admin 分发）');
+        return false;
+      }
       final record = records.first;
       if ((record['deleted'] as num?)?.toInt() == 1 ||
           record['deleted'] == true) {
+        debugPrint('[FamilyKey] 自身包裹为墓碑，等待重包裹');
         return false; // 墓碑态：等待重包裹
       }
 
@@ -160,12 +166,17 @@ class FamilyKeyService {
         payload = await SyncOutbox.decryptRecord(
             KeyVault.vaultTransportKey(me.id), record);
       } on SecretBoxAuthenticationError {
-        return false; // 解不开（数据异常）：等待重包裹
+        debugPrint('[FamilyKey] 自身包裹解密失败（传输密钥不匹配），等待重包裹');
+        return false;
       }
-      if (payload['forUserId'] != me.id) return false;
+      if (payload['forUserId'] != me.id) {
+        debugPrint('[FamilyKey] 自身包裹归属校验不过（forUserId 不匹配）');
+        return false;
+      }
       // 墓碑 payload（无包裹字段）同样按等待处理
       if (payload['ephemeralPubKey'] == null ||
           payload['wrappedF'] == null) {
+        debugPrint('[FamilyKey] 自身包裹 payload 缺包裹字段（墓碑/异常）');
         return false;
       }
       final familyKey = await vault_.openFamilyKeyWrap(
