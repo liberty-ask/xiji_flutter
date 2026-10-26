@@ -6,6 +6,7 @@ import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/sync/sync_outbox.dart';
+import 'package:xiji_flutter/sync/sync_cursor_store.dart';
 import 'package:xiji_flutter/sync/sync_puller.dart';
 import 'package:xiji_flutter/sync/sync_scheduler.dart';
 
@@ -391,6 +392,61 @@ void main() {
       // rerun 补跑无新变更，不再发请求
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(port.calls, hasLength(1));
+    });
+  });
+
+  group('任务 8.4g：重密封账本 F 指纹 + 升级全量重拉迁移', () {
+    // 重密封/迁移逻辑按「当前家庭」触发：注入固定 familyId 的调度器
+    final familyScheduler = () => SyncScheduler(
+          db: db,
+          port: port,
+          pullPort: NoopPullPort(),
+          vault: vault,
+          isSignedIn: () async => true,
+          currentFamilyId: () async => 'f1',
+          membersProvider: () async => const [],
+        );
+
+    test('升级迁移：清全部家庭游标（一次性，二轮不再清）', () async {
+      final scheduler = familyScheduler();
+      await SyncCursorStore.save('f1', 1000, 'a');
+      await SyncCursorStore.save('f2', 2000, 'b');
+      await insertTx('tx-1');
+
+      await scheduler.maybePush();
+      expect(await SyncCursorStore.load('f1'), isNull,
+          reason: '迁移清掉旧游标，本轮全量重拉自愈旧个人密文');
+      expect(await SyncCursorStore.load('f2'), isNull);
+
+      // 二轮：迁移标记已置位，新推进的游标不再被清
+      await SyncCursorStore.save('f1', 3000, 'c');
+      await scheduler.maybePush();
+      expect(await SyncCursorStore.load('f1'), isNotNull);
+    });
+
+    test('F 轮换：指纹账本失效，存量以新 F 全量重推', () async {
+      final scheduler = familyScheduler();
+      await insertTx('tx-1');
+      await scheduler.maybePush(); // 首轮：重密封 + 旧 F 推送 + 账本落位
+      expect(port.totalRecords, 1);
+      final oldKey = await vault.familyDataKey('f1');
+
+      // F 轮换（admin 重生成）+ 存量已推净（pending=0，模拟旧密文态）
+      await vault.putFamilyKey('f1', KeyVault.generateFamilyKey());
+      await (db.update(db.transactions)..where((t) => t.id.equals('tx-1')))
+          .write(const TransactionsCompanion(syncPending: Value(false)));
+
+      await scheduler.maybePush();
+      expect(port.totalRecords, 2, reason: '新 F 指纹账本缺失，重新重标重推');
+      expect(await pendingCount('transactions'), 0);
+
+      // 重推密文确以新 F 加密（旧 F 解不开）
+      final newKey = await vault.familyDataKey('f1');
+      final record = port.calls.last.records.single;
+      final payload = await SyncOutbox.decryptRecord(newKey!, record);
+      expect(payload['recordType'], 'transaction');
+      expect(() => SyncOutbox.decryptRecord(oldKey!, record),
+          throwsA(isA<Exception>()));
     });
   });
 }

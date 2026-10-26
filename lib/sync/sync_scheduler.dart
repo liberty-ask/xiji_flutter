@@ -200,6 +200,8 @@ class SyncScheduler {
     // 迁移到家庭 key——version 不变、updated_at 刷新、syncPending 重标，
     // 下方推送环节用家庭 key 全量重推（LWW 同 version 时间新者胜覆盖）
     if (familyId != null && familyKey != null) {
+      // 升级一次性迁移：清全部家庭游标做一轮全量重拉（见方法注释）
+      await _maybeFullRespullOnUpgrade();
       await _maybeReseal(familyId);
       // 首获 F（探测送达）：重置拉取游标——此前无 F 时历史密文被
       // 跳过且游标推进，须全量重拉以家庭 key 解开入库（LWW 幂等）
@@ -243,15 +245,27 @@ class SyncScheduler {
     }
   }
 
-  /// 首次拿到 F 的家庭做一次存量重密封标记（per 家庭 per 账号）：
+  /// 首次拿到 F 的家庭做一次存量重密封标记（per 家庭 per 账号 per F）：
   /// 该家庭全部业务行 syncPending 重标 + updated_at 刷新，
   /// 让推送环节以家庭 key 重加密重推（云端旧个人密文被覆盖，
   /// 其他成员从「不可读跳过」变为可解——家庭数据共享的存量闭环）。
   /// 学习表（用户级、走当前家庭通道）全表重标。version 不动，
   /// 多设备侧按同 version 时间新者胜收敛，无翻案冲突。
+  ///
+  /// 账本键含 F 指纹（前 4 字节 hex）：F 轮换（互救重置/换设备重生成）
+  /// 后键名变化，新 F 自动视为「未重推」而重新全量重推——云端密文
+  /// 需要用新 F 重新覆盖。旧版无指纹键自然作废：升级用户全部重推
+  /// 一次（修复「账本在数据到达前置位」的时序缺陷，重推幂等无害）。
   Future<void> _maybeReseal(String familyId) async {
+    final f = await _vault.getFamilyKey(familyId);
+    if (f == null) return;
+    final fingerprint = f
+        .sublist(0, 4)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
     final user = await LocalUser.load();
-    final key = 'xiji_reseal_done@$familyId@${user?.id ?? ''}';
+    final key =
+        'xiji_reseal_done@$familyId@${user?.id ?? ''}@$fingerprint';
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(key) == true) return;
 
@@ -273,6 +287,33 @@ class SyncScheduler {
 
     await prefs.setBool(key, true);
     debugPrint('[SyncScheduler] 存量重密封完成：$familyId 全量重标待推');
+  }
+
+  /// 升级一次性迁移（v1）：清全部家庭拉取游标，触发一轮全量重拉。
+  ///
+  /// 修复场景：修复前版本的设备曾以个人 key 回落解密拉回存量
+  /// （pending=0 落库、游标推进），升级后云端密文仍是个人 key 版，
+  /// 增量拉取永远不会再路过这些记录——其他成员拿 F 解不开（空库）。
+  /// 清游标后全量重拉：旧个人密文重新路过时回落解密并标 pending
+  /// 重推（家庭 key 覆盖云端），云端密文版本自愈。
+  ///
+  /// 一次性开关（prefs 布尔标记）：新装用户首轮本来就无游标（全量），
+  /// 此迁移对它是无操作；LWW 幂等保证重拉无害。
+  static const _fullRespullMigrationKey = 'xiji_full_respull_v1';
+  Future<void> _maybeFullRespullOnUpgrade() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_fullRespullMigrationKey) == true) return;
+    final cursorKeys = prefs
+        .getKeys()
+        .where((k) =>
+            k.startsWith('sync_cursor_time_') || k.startsWith('sync_cursor_id_'))
+        .toList();
+    for (final k in cursorKeys) {
+      await prefs.remove(k);
+    }
+    await prefs.setBool(_fullRespullMigrationKey, true);
+    debugPrint('[SyncScheduler] 升级迁移：已清 ${cursorKeys.length ~/ 2} 个'
+        '家庭游标，本轮全量重拉');
   }
 
   /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生双数据密钥。
