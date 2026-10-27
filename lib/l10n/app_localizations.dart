@@ -1066,6 +1066,7 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup key is locked'**
   String get backupVaultLocked;
+
   /// No description provided for @backupVaultLockedDesc.
   ///
   /// In en, this message translates to:
@@ -1119,6 +1120,7 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Checking cloud backup…'**
   String get backupCheckingCloudVault;
+
   /// No description provided for @monthlyBudget.
   ///
   /// In en, this message translates to:
@@ -2732,6 +2734,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cannot recognize this bill file'**
   String get billParseFailed;
+
+  /// No description provided for @billNoTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'No transactions found in the {platform} bill'**
+  String billNoTransactions(Object platform);
+
+  /// No description provided for @billHeaderUnrecognized.
+  ///
+  /// In en, this message translates to:
+  /// **'Bill header not recognized, please make sure the file is complete'**
+  String get billHeaderUnrecognized;
+
+  /// No description provided for @billRowsUnparsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Parsed {count} rows but none could be read'**
+  String billRowsUnparsed(int count);
 
   /// No description provided for @billGroupCount.
   ///

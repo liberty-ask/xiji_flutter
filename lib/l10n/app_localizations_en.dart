@@ -515,8 +515,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupVaultLocked => 'Backup key is locked';
 
   @override
-
-  @override
   String get backupVaultLockedDesc =>
       'After restarting the app, unlock once with the encryption password';
 
@@ -545,18 +543,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupCheckingCloudVault => 'Checking cloud backup…';
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
 
   @override
   String get monthlyBudget => 'Monthly Budget';
@@ -1426,6 +1412,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get billParseFailed => 'Cannot recognize this bill file';
+
+  @override
+  String billNoTransactions(Object platform) {
+    return 'No transactions found in the $platform bill';
+  }
+
+  @override
+  String get billHeaderUnrecognized =>
+      'Bill header not recognized, please make sure the file is complete';
+
+  @override
+  String billRowsUnparsed(int count) {
+    return 'Parsed $count rows but none could be read';
+  }
 
   @override
   String billGroupCount(Object count) {

@@ -502,8 +502,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupVaultLocked => '备份密钥已锁定';
 
   @override
-
-  @override
   String get backupVaultLockedDesc => '重启应用后需凭加密口令解锁一次';
 
   @override
@@ -530,18 +528,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupCheckingCloudVault => '正在检查云端备份…';
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
 
   @override
   String get monthlyBudget => '月度预算';
@@ -1383,6 +1369,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get billParseFailed => 'Cannot recognize this bill file';
 
   @override
+  String billNoTransactions(Object platform) {
+    return 'No transactions found in the $platform bill';
+  }
+
+  @override
+  String get billHeaderUnrecognized =>
+      'Bill header not recognized, please make sure the file is complete';
+
+  @override
+  String billRowsUnparsed(int count) {
+    return 'Parsed $count rows but none could be read';
+  }
+
+  @override
   String billGroupCount(Object count) {
     return '$count transactions';
   }
@@ -1882,8 +1882,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupVaultLocked => '备份密钥已锁定';
 
   @override
-
-  @override
   String get backupVaultLockedDesc => '重启应用后需凭加密口令解锁一次';
 
   @override
@@ -1910,18 +1908,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get backupCheckingCloudVault => '正在检查云端备份…';
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
 
   @override
   String get monthlyBudget => '月度预算';
@@ -2755,6 +2741,19 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get billParseFailed => '无法识别该账单文件';
 
   @override
+  String billNoTransactions(Object platform) {
+    return '未在$platform账单中发现交易记录';
+  }
+
+  @override
+  String get billHeaderUnrecognized => '无法识别账单表头，请确认文件完整';
+
+  @override
+  String billRowsUnparsed(int count) {
+    return '解析到$count行数据但均无法读取';
+  }
+
+  @override
   String billGroupCount(Object count) {
     return '$count笔';
   }
@@ -3258,8 +3257,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get backupVaultLocked => '備份金鑰已鎖定';
 
   @override
-
-  @override
   String get backupVaultLockedDesc => '重新啟動應用後需憑加密口令解鎖一次';
 
   @override
@@ -3286,18 +3283,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get backupCheckingCloudVault => '正在檢查雲端備份…';
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
-
-  @override
 
   @override
   String get monthlyBudget => '月度預算';
@@ -4129,6 +4114,19 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get billParseFailed => '無法識別該帳單檔案';
+
+  @override
+  String billNoTransactions(Object platform) {
+    return '未在$platform帳單中發現交易記錄';
+  }
+
+  @override
+  String get billHeaderUnrecognized => '無法識別帳單表頭，請確認檔案完整';
+
+  @override
+  String billRowsUnparsed(int count) {
+    return '解析到$count行資料但均無法讀取';
+  }
 
   @override
   String billGroupCount(Object count) {

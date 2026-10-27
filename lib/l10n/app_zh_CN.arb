@@ -481,5 +481,8 @@
   "billAssignHint": "点击分组上的分类，可为该商户全部交易批量指认",
   "billDuplicateSkip": "已导入，将跳过",
   "billParseFailed": "无法识别该账单文件",
+  "billNoTransactions": "未在{platform}账单中发现交易记录",
+  "billHeaderUnrecognized": "无法识别账单表头，请确认文件完整",
+  "billRowsUnparsed": "解析到{count}行数据但均无法读取",
   "billGroupCount": "{count}笔"
 }

@@ -303,8 +303,20 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
       final parsed = isXlsx
           ? BillXlsxParser().parse(bytes)
           : BillCsvParser().parse(bytes);
-      if (parsed == null || parsed.rows.isEmpty) {
+      if (parsed == null) {
         throw Exception(AppLocalizations.of(context)!.billParseFailed);
+      }
+      if (parsed.rows.isEmpty) {
+        final l10n = AppLocalizations.of(context)!;
+        if (parsed.errors.isEmpty) {
+          // 平台与表头已识别成功，仅账单内无交易记录——与「文件无法识别」区分
+          throw Exception(l10n.billNoTransactions(parsed.platform));
+        }
+        if (parsed.errors.any((e) => e.row == 0)) {
+          // row==0 为表头级错误
+          throw Exception(l10n.billHeaderUnrecognized);
+        }
+        throw Exception(l10n.billRowsUnparsed(parsed.errors.length));
       }
 
       // 2. 初始化服务（含内置规则库加载）与分类缓存

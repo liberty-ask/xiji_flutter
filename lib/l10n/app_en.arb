@@ -493,5 +493,18 @@
   "billAssignHint": "Tap the category on a group to assign it to all transactions of that counterparty",
   "billDuplicateSkip": "Already imported, will skip",
   "billParseFailed": "Cannot recognize this bill file",
+  "billNoTransactions": "No transactions found in the {platform} bill",
+  "@billNoTransactions": {
+    "placeholders": {
+      "platform": {}
+    }
+  },
+  "billHeaderUnrecognized": "Bill header not recognized, please make sure the file is complete",
+  "billRowsUnparsed": "Parsed {count} rows but none could be read",
+  "@billRowsUnparsed": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "billGroupCount": "{count} transactions"
 }

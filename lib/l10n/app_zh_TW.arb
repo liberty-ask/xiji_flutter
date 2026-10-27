@@ -482,5 +482,8 @@
   "billAssignHint": "點擊分組上的分類，可為該商家全部交易批量指認",
   "billDuplicateSkip": "已匯入，將跳過",
   "billParseFailed": "無法識別該帳單檔案",
+  "billNoTransactions": "未在{platform}帳單中發現交易記錄",
+  "billHeaderUnrecognized": "無法識別帳單表頭，請確認檔案完整",
+  "billRowsUnparsed": "解析到{count}行資料但均無法讀取",
   "billGroupCount": "{count}筆"
 }
