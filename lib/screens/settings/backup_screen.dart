@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../crypto/key_vault.dart';
 import '../../crypto/vault_provider.dart';
 import '../../services/api/family_service.dart';
-import '../../services/local/biometric_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
@@ -15,6 +14,7 @@ import '../../sync/family_key_service.dart';
 import '../../sync/sync_scheduler.dart';
 import '../../sync/vault_sync_service.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
+import '../../widgets/common/custom_snackbar.dart';
 import '../../widgets/common/scaled_text.dart';
 
 /// 云备份设置页（tasks.md 6.3）：备份开关（默认关闭）+ 开启时口令设置流
@@ -33,11 +33,9 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   final KeyVault _vault = VaultProvider.vault;
-  final BiometricService _biometric = BiometricService();
 
   bool _enabled = false;
   bool _configured = false;
-  bool _bioEnabled = false;
   bool _vaultUnlocked = false;
 
   @override
@@ -51,12 +49,10 @@ class _BackupScreenState extends State<BackupScreen> {
     // 本机未配置 vault 时恒为 false——登录后自动探测已恢复）
     final enabled = await _vault.isBackupEnabled();
     final configured = await _vault.isConfigured();
-    final bioEnabled = await _vault.isBiometricEnabled();
     if (mounted) {
       setState(() {
         _enabled = enabled;
         _configured = configured;
-        _bioEnabled = bioEnabled;
         _vaultUnlocked = _vault.isUnlocked;
       });
     }
@@ -98,9 +94,8 @@ class _BackupScreenState extends State<BackupScreen> {
       // 先探测拉取（口令包裹的密文，导入后仍需口令解锁才可用）
       if (!await _vault.isConfigured()) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(AppLocalizations.of(context)!
-                  .backupCheckingCloudVault)));
+          CustomSnackBar.showSuccess(
+              context, AppLocalizations.of(context)!.backupCheckingCloudVault);
         }
         try {
           final cloudDoc = await VaultSyncService.pullVaultDoc();
@@ -122,11 +117,8 @@ class _BackupScreenState extends State<BackupScreen> {
             await _vault.unlock(password);
           } catch (_) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                    content: Text(
-                        AppLocalizations.of(context)!.backupVaultUnlockFailed)),
-              );
+              CustomSnackBar.showError(context,
+                  AppLocalizations.of(context)!.backupVaultUnlockFailed);
             }
             return; // 解锁失败，开关回弹
           }
@@ -257,9 +249,7 @@ class _BackupScreenState extends State<BackupScreen> {
       return await _vault.setup(password);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupSetupFailed)),
-        );
+        CustomSnackBar.showError(context, l10n.backupSetupFailed);
       }
       return null;
     } finally {
@@ -325,9 +315,7 @@ class _BackupScreenState extends State<BackupScreen> {
         _enabled = true;
         _vaultUnlocked = true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.backupResetDone)),
-      );
+      CustomSnackBar.showSuccess(context, l10n.backupResetDone);
     }
   }
 
@@ -412,9 +400,8 @@ class _BackupScreenState extends State<BackupScreen> {
               TextButton.icon(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: formatted));
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    SnackBar(content: Text(l10n.backupRecoveryCodeCopied)),
-                  );
+                  CustomSnackBar.showSuccess(
+                      dialogContext, l10n.backupRecoveryCodeCopied);
                 },
                 icon: const Icon(Icons.copy, size: 16),
                 label: Text(l10n.backupRecoveryCodeCopy),
@@ -464,21 +451,15 @@ class _BackupScreenState extends State<BackupScreen> {
     try {
       await _vault.resetPasswordWithRecoveryCode(input.$1, input.$2);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupResetDone)),
-        );
+        CustomSnackBar.showSuccess(context, l10n.backupResetDone);
       }
     } on KeyVaultUnlockException {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupResetWrongCode)),
-        );
+        CustomSnackBar.showError(context, l10n.backupResetWrongCode);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupResetFailed)),
-        );
+        CustomSnackBar.showError(context, l10n.backupResetFailed);
       }
     } finally {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
@@ -625,84 +606,7 @@ class _BackupScreenState extends State<BackupScreen> {
     return null;
   }
 
-  /// 生物识别保护开关（6.6）：开启需先解锁（口令仅此处开启时输入），
-  /// 关闭直接移除生物识别包裹份。
-  Future<void> _onBiometricChanged(bool value) async {
-    final l10n = AppLocalizations.of(context)!;
-    final messenger = ScaffoldMessenger.of(context);
-    if (value) {
-      if (!await _biometric.isAvailable()) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(l10n.biometricUnavailable)),
-        );
-        return; // 不可用，开关回弹
-      }
-      if (!_vault.isUnlocked) {
-        final password = await _showPasswordUnlockDialog();
-        if (password == null || !mounted) return;
-        try {
-          await _vault.unlock(password);
-        } on KeyVaultUnlockException {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.backupPasswordWrong)),
-            );
-          }
-          return;
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.backupVaultUnlockFailed)),
-            );
-          }
-          return;
-        }
-      }
-      try {
-        await _vault.enableBiometric();
-        if (mounted) {
-          setState(() {
-            _bioEnabled = true;
-            _vaultUnlocked = true;
-          });
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l10n.biometricEnableFailed)),
-          );
-        }
-      }
-    } else {
-      await _vault.disableBiometric();
-      if (mounted) setState(() => _bioEnabled = false);
-    }
-  }
-
-  /// 日常解锁（6.6 验证场景）：系统生物识别提示通过后解包缓存私钥，
-  /// 全程不出现口令输入。
-  Future<void> _unlockWithBiometric() async {
-    final l10n = AppLocalizations.of(context)!;
-    final ok = await _biometric.authenticate(l10n);
-    if (!ok || !mounted) return;
-    try {
-      await _vault.unlockWithBiometric();
-      if (mounted) {
-        setState(() => _vaultUnlocked = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupVaultUnlocked)),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupVaultUnlockFailed)),
-        );
-      }
-    }
-  }
-
-  /// 日常解锁的口令兜底（生物识别多次失败/本机临时不可用时）。
+  /// 日常解锁（口令路径）：解包缓存私钥。
   Future<void> _unlockWithPassword() async {
     final l10n = AppLocalizations.of(context)!;
     final password = await _showPasswordUnlockDialog();
@@ -711,15 +615,11 @@ class _BackupScreenState extends State<BackupScreen> {
       await _vault.unlock(password);
       if (mounted) {
         setState(() => _vaultUnlocked = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupVaultUnlocked)),
-        );
+        CustomSnackBar.showSuccess(context, l10n.backupVaultUnlocked);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.backupVaultUnlockFailed)),
-        );
+        CustomSnackBar.showError(context, l10n.backupVaultUnlockFailed);
       }
     }
   }
@@ -864,9 +764,7 @@ class _BackupScreenState extends State<BackupScreen> {
                           ),
                           const SizedBox(height: 4),
                           ScaledText(
-                            _bioEnabled
-                                ? l10n.backupVaultLockedBio
-                                : l10n.backupVaultLockedDesc,
+                            l10n.backupVaultLockedDesc,
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.white.withValues(alpha: 0.5),
@@ -877,30 +775,10 @@ class _BackupScreenState extends State<BackupScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: _bioEnabled
-                              ? _unlockWithBiometric
-                              : _unlockWithPassword,
-                          icon: Icon(
-                              _bioEnabled ? Icons.fingerprint : Icons.key),
-                          label: Text(l10n.backupVaultUnlock),
-                        ),
-                        if (_bioEnabled)
-                          TextButton(
-                            onPressed: _unlockWithPassword,
-                            child: ScaledText(
-                              l10n.backupUnlockWithPassword,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ),
-                      ],
+                    FilledButton.icon(
+                      onPressed: _unlockWithPassword,
+                      icon: const Icon(Icons.key),
+                      label: Text(l10n.backupVaultUnlock),
                     ),
                   ],
                 ),
@@ -989,51 +867,6 @@ class _BackupScreenState extends State<BackupScreen> {
                     ),
                   ),
                   onTap: _resetPassword,
-                ),
-              ),
-            if (_configured) const SizedBox(height: 16),
-            // 生物识别保护开关（6.6）
-            if (_configured)
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: ThemeHelper.surface(context),
-                  border: Border.all(color: borderColor),
-                ),
-                child: ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color:
-                          ThemeHelper.primary(context).withValues(alpha: 0.2),
-                    ),
-                    child: Icon(
-                      Icons.fingerprint,
-                      color: ThemeHelper.primary(context),
-                      size: 20,
-                    ),
-                  ),
-                  title: ScaledText(
-                    l10n.biometricUnlockTitle,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  subtitle: ScaledText(
-                    l10n.biometricUnlockSubtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  trailing: Switch(
-                    value: _bioEnabled,
-                    onChanged: _onBiometricChanged,
-                  ),
                 ),
               ),
             if (_configured) const SizedBox(height: 16),

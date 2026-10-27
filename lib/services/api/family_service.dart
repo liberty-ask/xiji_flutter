@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'api_client.dart';
 import '../../models/family_member.dart';
 import '../../models/application.dart';
 import '../../models/family.dart';
+import '../../data/local/member_nicknames.dart';
 
 class FamilyService {
   // 单例实例
@@ -36,7 +39,12 @@ class FamilyService {
   Future<List<FamilyMember>> getMembers() async {
     final result = await _api.get('/v1/families/members');
     final List<dynamic> list = result as List<dynamic>;
-    return list.map((json) => FamilyMember.fromJson(json as Map<String, dynamic>)).toList();
+    final members =
+        list.map((json) => FamilyMember.fromJson(json as Map<String, dynamic>)).toList();
+    // 昵称缓存随成员列表刷新（近期动态归属者显示离线可用）
+    unawaited(MemberNicknames.cacheAll(
+        {for (final m in members) m.id: m.name}));
+    return members;
   }
 
   // 上报同步开关投影（云备份开关切换时；账号级语义，服务端更新

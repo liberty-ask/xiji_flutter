@@ -9,6 +9,7 @@ import '../../data/local/category_repository.dart';
 import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/local_user.dart';
+import '../../data/local/member_nicknames.dart';
 import '../../data/local/statistics_repository.dart';
 import '../../data/local/transaction_repository.dart';
 import '../../models/transaction.dart';
@@ -210,7 +211,10 @@ class TransactionService {
     // 近期动态：最近 10 条，排除不计收支（type=2），口径对齐服务端
     final recent = await _transactions.recent(familyId, 10);
 
-    final userName = (user != null && user.nickname.isNotEmpty)
+    // 归属者昵称：优先成员昵称缓存（随成员列表刷新），本人兜底
+    // LocalUser，再兜底「未知用户」（多成员家庭动态归属者显名）
+    final nicknameMap = await MemberNicknames.loadAll();
+    final myName = (user != null && user.nickname.isNotEmpty)
         ? user.nickname
         : '未知用户';
 
@@ -224,10 +228,14 @@ class TransactionService {
       final title =
           category?.name ?? r.description ?? '支出';
       final icon = category?.icon ?? 'payments';
+      // 归属者：按记录 userId 查昵称映射（本人记录未入缓存时兜底当前用户名）
+      final ownerName = nicknameMap[r.userId] ??
+          (user != null && r.userId == user.id ? myName : null) ??
+          '未知用户';
       return <String, dynamic>{
         'title': title,
         'icon': icon,
-        'user': userName,
+        'user': ownerName,
         'time': DateFormat('yyyy-MM-dd HH:mm').format(r.updatedAt),
         'date': DateFormat('yyyy-MM-dd').format(r.date),
         'amount': Money.centsToYuan(r.amountCents),

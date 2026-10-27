@@ -110,7 +110,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final vault = VaultProvider.vault;
       if (await vault.isBackupEnabled() &&
           !vault.isUnlocked &&
-          !await vault.isBiometricEnabled() &&
           !_restorePromptShown &&
           mounted) {
         _restorePromptShown = true;

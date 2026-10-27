@@ -84,16 +84,10 @@ class KeyVault {
       : _defaultProfile = profile ?? Argon2Profile.production();
 
   /// 老版本全局键（无账号隔离）：账号化升级的认领迁移源。
-  /// vault 文档与生物 KEK 均按当前登录用户账号化存储——同机多账号
-  /// 各自独立密钥体系，B 开关/解锁不得读到 A 的 vault（否则 B 的
-  /// 数据被 A 密钥加密推云后永久失解）。
+  /// vault 文档按当前登录用户账号化存储——同机多账号各自独立
+  /// 密钥体系，B 开关/解锁不得读到 A 的 vault（否则 B 的数据被
+  /// A 密钥加密推云后永久失解）。
   static const String _legacyStorageKey = 'xiji_key_vault';
-  static const String _legacyBiometricKey = 'xiji_biometric_kek';
-
-  /// 生物识别 KEK 在 secure storage 中的独立 key（与 vault 文档分开存，
-  /// 日常解锁先过生物识别提示，通过后才读取本 key）。
-  Future<String> _biometricKey() async =>
-      '$_legacyBiometricKey${await _keySuffix()}';
 
   Future<String> _vaultKey() async =>
       '$_legacyStorageKey${await _keySuffix()}';
@@ -129,11 +123,6 @@ class KeyVault {
       await _store.write(key, jsonEncode(decoded));
     }
     await _store.delete(_legacyStorageKey);
-    final legacyBio = await _store.read(_legacyBiometricKey);
-    if (legacyBio != null) {
-      await _store.write(await _biometricKey(), legacyBio);
-      await _store.delete(_legacyBiometricKey);
-    }
     return await _store.read(key);
   }
 
@@ -149,7 +138,6 @@ class KeyVault {
   /// vault 文档结构版本（向后兼容扩展预留）。
   static const int _kVaultVersion = 1;
   static const int _kSaltLength = 16;
-  static const int _kKekLength = 32;
 
   /// 恢复码字符表：排除易混淆的 I/O/0/1（120 bit 熵，足够恢复口令用）。
   static const String _kRecoveryAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -339,12 +327,10 @@ class KeyVault {
   ///
   /// 返回 false 的场景（由 UI 层决定是否弹口令框）：
   /// - vault 未配置
-  /// - 开启了生物识别保护（尊重「解锁要过指纹」的用户意愿，走 6.6）
   /// - 无自动解锁份（卸载重装/换设备/老版本升级后首次启动）
   /// - 副本损坏（按无自动解锁份处理，走口令）
   Future<bool> autoUnlock() async {
     if (isUnlocked) return true;
-    if (await isBiometricEnabled()) return false;
     final raw = await _readVaultRaw();
     if (raw == null) return false;
     final b64 = await _store.read(await _autoUnlockKey());
@@ -431,92 +417,13 @@ class KeyVault {
     await _writeAutoUnlock(privateKeyBytes);
   }
 
-  /// 是否已开启生物识别解锁（biometricWrap 与 KEK 双存才视为开启）。
-  Future<bool> isBiometricEnabled() async {
-    final raw = await _readVaultRaw();
-    if (raw == null) return false;
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic> ||
-        decoded['biometricWrap'] == null ||
-        !await _vaultBelongsToCurrentUser(decoded)) {
-      return false;
-    }
-    return await _store.read(await _biometricKey()) != null;
-  }
-
-  /// 开启生物识别解锁（6.6）：生成随机 KEK 包裹当前已解锁的私钥，
-  /// KEK 存 secure storage 独立 key。日常解锁由 UI 层先过生物识别
-  /// 提示，再调 [unlockWithBiometric] 取 KEK 解包。未解锁态不可开启
-  /// （需先凭口令/恢复码解锁，口令仅开启/重置时输入）。
-  /// 改口令/重置口令不动 biometricWrap（私钥未变）。
-  Future<void> enableBiometric() async {
-    final keyPair = _unlockedKeyPair;
-    final publicKey = _unlockedPublicKey;
-    if (keyPair == null || publicKey == null) {
-      throw StateError('KeyVault is locked');
-    }
-    final vault = await _readVault();
-    final kek = _randomBytes(_kKekLength);
-    final privateKeyBytes = await keyPair.extractPrivateKeyBytes();
-    final box = await CryptoPrimitives.aeadEncrypt(kek, privateKeyBytes,
-        aad: publicKey.bytes);
-    vault['biometricWrap'] = _boxJson(box);
-    await _writeVault(vault);
-    await _store.write(await _biometricKey(), base64Encode(kek));
-  }
-
-  /// 生物识别提示通过后调用：用 KEK 解开私钥并缓存于内存。
-  /// 未开启抛 StateError；KEK/包裹物损坏抛 [KeyVaultUnlockException]。
-  Future<SimpleKeyPair> unlockWithBiometric() async {
-    final vault = await _readVault();
-    final wrap = vault['biometricWrap'];
-    final kekRaw = await _store.read(await _biometricKey());
-    if (wrap == null || kekRaw == null) {
-      throw StateError('Biometric unlock not enabled');
-    }
-    try {
-      final box = SecretBox(
-        base64Decode(wrap['ciphertext'] as String),
-        nonce: base64Decode(wrap['nonce'] as String),
-        mac: Mac(base64Decode(wrap['mac'] as String)),
-      );
-      final privateKeyBytes = await CryptoPrimitives.aeadDecrypt(
-          base64Decode(kekRaw), box,
-          aad: base64Decode(vault['publicKey'] as String));
-      final publicKey = SimplePublicKey(
-          base64Decode(vault['publicKey'] as String),
-          type: KeyPairType.x25519);
-      final keyPair = SimpleKeyPairData(privateKeyBytes,
-          publicKey: publicKey, type: KeyPairType.x25519);
-      _unlockedKeyPair = keyPair;
-      _unlockedPublicKey = publicKey;
-      return keyPair;
-    } on SecretBoxAuthenticationError {
-      throw KeyVaultUnlockException();
-    }
-  }
-
-  /// 关闭生物识别解锁：删除包裹份与 KEK（口令/恢复码包裹份不受影响）。
-  Future<void> disableBiometric() async {
-    final raw = await _readVaultRaw();
-    if (raw == null) return;
-    final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic> &&
-        decoded['biometricWrap'] != null) {
-      decoded.remove('biometricWrap');
-      await _writeVault(decoded);
-    }
-    await _store.delete(await _biometricKey());
-  }
-
   /// 互救重置流（8.6）：口令+恢复码双丢且 vault 已锁死时，销毁本机
-  /// vault（口令/恢复码包裹、生物包裹、开关状态、syncVersion 全清），
-  /// 供 setup 重建新密钥对。家庭密钥 F 存储独立于 vault 文档键，不受
-  /// 影响（本机家庭数据继续可用）。调用方必须走完整互救流程：新
+  /// vault（口令/恢复码包裹、开关状态、syncVersion 全清），供 setup
+  /// 重建新密钥对。家庭密钥 F 存储独立于 vault 文档键，不受影响
+  /// （本机家庭数据继续可用）。调用方必须走完整互救流程：新
   /// vault 上云 + 旧包裹墓碑废弃，老成员重包裹后新设备链路才完整。
   Future<void> destroyVault() async {
     await _store.delete(await _vaultKey());
-    await _store.delete(await _biometricKey());
   }
 
   /// vault 文档统一写入口：每次变更递增 syncVersion（vault 云端
@@ -661,15 +568,6 @@ class KeyVault {
     return <String, dynamic>{
       'salt': base64Encode(salt),
       'argon2': profile.toJson(),
-      'nonce': base64Encode(box.nonce),
-      'mac': base64Encode(box.mac.bytes),
-      'ciphertext': base64Encode(box.cipherText),
-    };
-  }
-
-  /// 随机 KEK 包裹份（生物识别用）：无需口令派生参数，仅存密文盒。
-  Map<String, dynamic> _boxJson(SecretBox box) {
-    return <String, dynamic>{
       'nonce': base64Encode(box.nonce),
       'mac': base64Encode(box.mac.bytes),
       'ciphertext': base64Encode(box.cipherText),

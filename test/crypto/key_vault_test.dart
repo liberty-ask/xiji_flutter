@@ -259,63 +259,6 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
-
-    test('生物识别包裹：开启需先解锁，解锁后凭包裹份解出同一私钥', () async {
-      final store = InMemoryVaultStore();
-      final vault = newVault(store);
-      final setupResult = await vault.setup('my-password-123');
-      vault.lock();
-      expect(vault.isUnlocked, isFalse);
-      // 锁定态不可开启（需先凭口令解锁）
-      expect(() => vault.enableBiometric(), throwsA(isA<StateError>()));
-      expect(await vault.isBiometricEnabled(), isFalse);
-
-      await vault.unlock('my-password-123');
-      await vault.enableBiometric();
-      expect(await vault.isBiometricEnabled(), isTrue);
-
-      // 重启模拟：lock 后无需口令，凭生物识别包裹份解锁
-      vault.lock();
-      final keyPair = await vault.unlockWithBiometric();
-      final pub = await keyPair.extractPublicKey();
-      expect(pub.bytes, equals(setupResult.publicKey.bytes));
-      expect(vault.isUnlocked, isTrue);
-
-      // KEK 独立存储：vault 文档与 KEK 都不含私钥明文
-      final raw = (await store.read(await vault.vaultKeyForTesting))!;
-      expect(raw.contains('my-password-123'), isFalse);
-    });
-
-    test('生物识别包裹：改口令/重置口令后仍有效，关闭后彻底移除', () async {
-      final store = InMemoryVaultStore();
-      final vault = newVault(store);
-      final setupResult = await vault.setup('old-password');
-      await vault.enableBiometric();
-
-      // 改口令不动 biometricWrap（私钥未换）
-      await vault.changePassword('old-password', 'new-password-1');
-      expect(await vault.isBiometricEnabled(), isTrue);
-      vault.lock();
-      final keyPair = await vault.unlockWithBiometric();
-      final pub = await keyPair.extractPublicKey();
-      expect(pub.bytes, equals(setupResult.publicKey.bytes));
-
-      // 恢复码重置口令后同样有效
-      await vault.resetPasswordWithRecoveryCode(
-          setupResult.recoveryCode, 'third-pass-1');
-      vault.lock();
-      final keyPair2 = await vault.unlockWithBiometric();
-      final pub2 = await keyPair2.extractPublicKey();
-      expect(pub2.bytes, equals(setupResult.publicKey.bytes));
-
-      // 关闭：包裹份与 KEK 一并移除，解锁仅剩口令路径
-      await vault.disableBiometric();
-      expect(await vault.isBiometricEnabled(), isFalse);
-      vault.lock();
-      expect(() => vault.unlockWithBiometric(), throwsA(isA<StateError>()));
-      await vault.unlock('third-pass-1');
-      expect(vault.isUnlocked, isTrue);
-    });
   });
 
   group('vault 账号隔离（同机多账号硬约束）', () {
@@ -324,14 +267,12 @@ void main() {
       await loginAs('user-a');
       final vaultA = newVault(store);
       final setupA = await vaultA.setup('password-a-123');
-      await vaultA.enableBiometric();
 
       // 切换账号 B（同手机另一账号登录）
       await loginAs('user-b');
       final vaultB = newVault(store);
       expect(await vaultB.isConfigured(), isFalse,
           reason: 'B 读不到 A 的 vault（键已账号化）');
-      expect(await vaultB.isBiometricEnabled(), isFalse);
       expect(() => vaultB.unlock('password-a-123'), throwsStateError,
           reason: 'B 输 A 的口令不可能解锁——vault 都不存在');
 
@@ -344,7 +285,6 @@ void main() {
       await loginAs('user-a');
       final vaultA2 = newVault(store);
       expect(await vaultA2.isConfigured(), isTrue);
-      expect(await vaultA2.isBiometricEnabled(), isTrue);
       vaultA2.lock();
       final pair = await vaultA2.unlock('password-a-123');
       final pub = await pair.extractPublicKey();
@@ -357,7 +297,6 @@ void main() {
       // 模拟升级前的老版 vault（全局键、无 userId 字段）
       await store.write('xiji_key_vault',
           jsonEncode({'version': 1, 'publicKey': 'aGk=', 'passwordWrap': {}}));
-      await store.write('xiji_biometric_kek', 'b2xkS0VL');
 
       await loginAs('user-a');
       final vault = newVault(store);
@@ -371,10 +310,6 @@ void main() {
       expect(await store.read((await vault.vaultKeyForTesting)
           .replaceFirst(RegExp(r'@.*$'), '@user-b')), isNull,
           reason: '认领只写给当前用户，不复制给其他账号键');
-      final bioKey =
-          (await vault.vaultKeyForTesting).replaceFirst('xiji_key_vault', 'xiji_biometric_kek');
-      expect(await store.read(bioKey), 'b2xkS0VL',
-          reason: '生物 KEK 老键同步迁移到账号键');
 
       // 认领后切 B：B 不认领（老键已删），B 未配置
       await loginAs('user-b');
@@ -460,22 +395,6 @@ void main() {
       expect(await third.autoUnlock(), isTrue, reason: '恢复码重置后仍有效');
       pub = await third.unlockedKeyPair!.extractPublicKey();
       expect(pub.bytes, equals(setupResult.publicKey.bytes));
-    });
-
-    test('生物识别开启时 autoUnlock 跳过（尊重解锁关卡意愿），关闭后恢复',
-        () async {
-      final store = InMemoryVaultStore();
-      final vault = newVault(store);
-      await vault.setup('my-password-123');
-      await vault.enableBiometric();
-
-      final fresh = newVault(store);
-      expect(await fresh.autoUnlock(), isFalse, reason: '生物识别用户走 6.6 指纹路径');
-      expect(fresh.isUnlocked, isFalse);
-
-      await vault.disableBiometric();
-      final second = newVault(store);
-      expect(await second.autoUnlock(), isTrue, reason: '关闭生物识别后自动解锁生效');
     });
 
     test('账号隔离：A/B 自动解锁份互不串，各解锁出自己的私钥', () async {

@@ -223,8 +223,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memberSyncDormant => 'Sync off';
 
   @override
-  String get memberSyncDormantDesc =>
-      'This member hasn\'t enabled cloud backup; bills won\'t sync to the family';
+  String get memberSyncActive => 'Sync on';
 
   @override
   String get backupRescueEntry => 'Also lost the recovery code?';
@@ -516,8 +515,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupVaultLocked => 'Backup key is locked';
 
   @override
-  String get backupVaultLockedBio =>
-      'After restarting the app, verify fingerprint/face once — no password needed';
 
   @override
   String get backupVaultLockedDesc =>
@@ -550,26 +547,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupCheckingCloudVault => 'Checking cloud backup…';
 
   @override
-  String get backupUnlockWithPassword => 'Use password';
 
   @override
-  String get biometricUnlockTitle => 'Biometric Protection';
 
   @override
-  String get biometricUnlockSubtitle =>
-      'Unlock with fingerprint/face, no password needed';
 
   @override
-  String get biometricUnlockReason =>
-      'Verify fingerprint/face to unlock the backup key';
 
   @override
-  String get biometricUnavailable =>
-      'No fingerprint or face enrolled on this device';
 
   @override
-  String get biometricEnableFailed =>
-      'Failed to enable biometric protection, please try again';
 
   @override
   String get monthlyBudget => 'Monthly Budget';

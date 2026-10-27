@@ -7,6 +7,7 @@ import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
 import '../data/local/local_family_cache.dart';
 import '../data/local/local_user.dart';
+import '../data/local/member_nicknames.dart';
 import '../models/user.dart';
 import '../services/api/api_client.dart';
 import '../services/api/auth_service.dart';
@@ -46,6 +47,7 @@ class AuthProvider with ChangeNotifier {
   Future<void> _onSessionExpired() async {
     await _apiClient.removeToken();
     await LocalUser.clear();
+    await MemberNicknames.clear();
     await LocalFamilyCache.clear();
     await CurrentFamilyStore.clear();
     VaultProvider.vault.lock(); // 清密钥解锁内存态：防切账号串用上一账号私钥
@@ -84,6 +86,7 @@ class AuthProvider with ChangeNotifier {
       _user = User.fromJson(userData);
       if (_user != null) {
         await LocalUser.cache(_user!);
+        await MemberNicknames.cacheOne(_user!.id, _user!.nickname);
         await Db.switchAccount(_user!.id); // 登录/冷启动恢复后锚定账号库
       }
     } catch (e) {
@@ -177,6 +180,7 @@ class AuthProvider with ChangeNotifier {
       if (registerResult['user'] != null) {
         _user = User.fromJson(registerResult['user']);
         await LocalUser.cache(_user!);
+        await MemberNicknames.cacheOne(_user!.id, _user!.nickname);
         await Db.switchAccount(_user!.id); // 注册即登录，锚定账号库
       } else {
         _user = null;

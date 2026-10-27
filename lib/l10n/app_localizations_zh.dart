@@ -223,7 +223,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memberSyncDormant => '未开启同步';
 
   @override
-  String get memberSyncDormantDesc => '该成员未开启云备份，账单不会同步到家庭';
+  String get memberSyncActive => '已开启同步';
 
   @override
   String get backupRescueEntry => '恢复码也丢失了？';
@@ -502,7 +502,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupVaultLocked => '备份密钥已锁定';
 
   @override
-  String get backupVaultLockedBio => '重启应用后验证一次指纹/面容即可，无需输入加密口令';
 
   @override
   String get backupVaultLockedDesc => '重启应用后需凭加密口令解锁一次';
@@ -533,22 +532,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupCheckingCloudVault => '正在检查云端备份…';
 
   @override
-  String get backupUnlockWithPassword => '使用口令';
 
   @override
-  String get biometricUnlockTitle => '生物识别保护';
 
   @override
-  String get biometricUnlockSubtitle => '开启后凭指纹/面容解锁，无需再输入加密口令';
 
   @override
-  String get biometricUnlockReason => '验证指纹/面容以解锁备份密钥';
 
   @override
-  String get biometricUnavailable => '本机未录入指纹或面容，无法开启';
 
   @override
-  String get biometricEnableFailed => '生物识别保护开启失败，请重试';
 
   @override
   String get monthlyBudget => '月度预算';
@@ -1610,7 +1603,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get memberSyncDormant => '未开启同步';
 
   @override
-  String get memberSyncDormantDesc => '该成员未开启云备份，账单不会同步到家庭';
+  String get memberSyncActive => '已开启同步';
 
   @override
   String get backupRescueEntry => '恢复码也丢失了？';
@@ -1889,7 +1882,6 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupVaultLocked => '备份密钥已锁定';
 
   @override
-  String get backupVaultLockedBio => '重启应用后验证一次指纹/面容即可，无需输入加密口令';
 
   @override
   String get backupVaultLockedDesc => '重启应用后需凭加密口令解锁一次';
@@ -1920,22 +1912,16 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupCheckingCloudVault => '正在检查云端备份…';
 
   @override
-  String get backupUnlockWithPassword => '使用口令';
 
   @override
-  String get biometricUnlockTitle => '生物识别保护';
 
   @override
-  String get biometricUnlockSubtitle => '开启后凭指纹/面容解锁，无需再输入加密口令';
 
   @override
-  String get biometricUnlockReason => '验证指纹/面容以解锁备份密钥';
 
   @override
-  String get biometricUnavailable => '本机未录入指纹或面容，无法开启';
 
   @override
-  String get biometricEnableFailed => '生物识别保护开启失败，请重试';
 
   @override
   String get monthlyBudget => '月度预算';
@@ -2992,7 +2978,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get memberSyncDormant => '未開啟同步';
 
   @override
-  String get memberSyncDormantDesc => '該成員未開啟雲備份，帳單不會同步到家庭';
+  String get memberSyncActive => '已開啟同步';
 
   @override
   String get backupRescueEntry => '恢復碼也丟失了？';
@@ -3272,7 +3258,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get backupVaultLocked => '備份金鑰已鎖定';
 
   @override
-  String get backupVaultLockedBio => '重新啟動應用後驗證一次指紋/面容即可，無需輸入加密口令';
 
   @override
   String get backupVaultLockedDesc => '重新啟動應用後需憑加密口令解鎖一次';
@@ -3303,22 +3288,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get backupCheckingCloudVault => '正在檢查雲端備份…';
 
   @override
-  String get backupUnlockWithPassword => '使用口令';
 
   @override
-  String get biometricUnlockTitle => '生物辨識保護';
 
   @override
-  String get biometricUnlockSubtitle => '開啟後憑指紋/面容解鎖，無需再輸入加密口令';
 
   @override
-  String get biometricUnlockReason => '驗證指紋/面容以解鎖備份金鑰';
 
   @override
-  String get biometricUnavailable => '本機未錄入指紋或面容，無法開啟';
 
   @override
-  String get biometricEnableFailed => '生物辨識保護開啟失敗，請重試';
 
   @override
   String get monthlyBudget => '月度預算';

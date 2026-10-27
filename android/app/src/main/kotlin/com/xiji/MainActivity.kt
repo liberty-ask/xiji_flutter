@@ -7,7 +7,7 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-// 必须用 FlutterFragmentActivity：local_auth 的指纹/面容提示依赖 FragmentActivity
+// FlutterFragmentActivity：保留基类（冷启动路由依赖 getInitialRoute 拉取，见 onCreate 注释）
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.xiji/widget"
 

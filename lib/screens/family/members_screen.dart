@@ -106,10 +106,9 @@ class _MembersScreenState extends State<MembersScreen> {
     // 徽章是状态装饰而非阅读主体：反比抵消应用内字号缩放，
     // 字号调大时徽章尺寸稳定，充当卡片的视觉比例锚点（不变形）
     final badgeScale = 1 / FontSizeInherited.of(context).fontSizeScale;
-    // 描述行：备注与休眠说明共存（超宽省略，不再互斥顶替丢信息）
+    // 描述行：备注（超宽省略）
     final desc = [
       if (member.label != null && member.label!.isNotEmpty) member.label!,
-      if (dormant) AppLocalizations.of(context)!.memberSyncDormantDesc,
     ].join(' · ');
 
     return Container(
@@ -203,8 +202,8 @@ class _MembersScreenState extends State<MembersScreen> {
               ],
             ),
           ),
-          // 右侧状态区（方案 A）：休眠=灰胶囊（异常态显眼），
-          // 同步中=主题色小圆点（正常态轻表达，几乎隐形）
+          // 右侧状态区：两态徽章显式区分——开启=主题色胶囊「已开启同步」，
+          // 未开启=灰胶囊「未开启同步」（家庭内可辨识谁的账单会出现在云端）
           SizedBox(
               width: ResponsiveHelper.spacing(context, small: 8, normal: 10)),
           if (dormant)
@@ -216,13 +215,13 @@ class _MembersScreenState extends State<MembersScreen> {
               backgroundColor: Colors.white.withValues(alpha: 0.08),
             )
           else
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: ThemeHelper.primary(context),
-              ),
+            _buildBadge(
+              AppLocalizations.of(context)!.memberSyncActive,
+              badgeScale,
+              textColor: ThemeHelper.primary(context),
+              borderColor: ThemeHelper.primary(context).withValues(alpha: 0.6),
+              backgroundColor:
+                  ThemeHelper.primary(context).withValues(alpha: 0.2),
             ),
         ],
       ),

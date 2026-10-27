@@ -526,11 +526,11 @@ abstract class AppLocalizations {
   /// **'Sync off'**
   String get memberSyncDormant;
 
-  /// No description provided for @memberSyncDormantDesc.
+  /// No description provided for @memberSyncActive.
   ///
   /// In en, this message translates to:
-  /// **'This member hasn\'t enabled cloud backup; bills won\'t sync to the family'**
-  String get memberSyncDormantDesc;
+  /// **'Sync on'**
+  String get memberSyncActive;
 
   /// No description provided for @backupRescueEntry.
   ///
@@ -1066,13 +1066,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup key is locked'**
   String get backupVaultLocked;
-
-  /// No description provided for @backupVaultLockedBio.
-  ///
-  /// In en, this message translates to:
-  /// **'After restarting the app, verify fingerprint/face once — no password needed'**
-  String get backupVaultLockedBio;
-
   /// No description provided for @backupVaultLockedDesc.
   ///
   /// In en, this message translates to:
@@ -1126,43 +1119,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Checking cloud backup…'**
   String get backupCheckingCloudVault;
-
-  /// No description provided for @backupUnlockWithPassword.
-  ///
-  /// In en, this message translates to:
-  /// **'Use password'**
-  String get backupUnlockWithPassword;
-
-  /// No description provided for @biometricUnlockTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Biometric Protection'**
-  String get biometricUnlockTitle;
-
-  /// No description provided for @biometricUnlockSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Unlock with fingerprint/face, no password needed'**
-  String get biometricUnlockSubtitle;
-
-  /// No description provided for @biometricUnlockReason.
-  ///
-  /// In en, this message translates to:
-  /// **'Verify fingerprint/face to unlock the backup key'**
-  String get biometricUnlockReason;
-
-  /// No description provided for @biometricUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'No fingerprint or face enrolled on this device'**
-  String get biometricUnavailable;
-
-  /// No description provided for @biometricEnableFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to enable biometric protection, please try again'**
-  String get biometricEnableFailed;
-
   /// No description provided for @monthlyBudget.
   ///
   /// In en, this message translates to:
