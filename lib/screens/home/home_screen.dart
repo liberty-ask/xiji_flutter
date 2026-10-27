@@ -484,12 +484,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 }).toList(),
                                 onSelected: (selectedFamily) async {
+                                  // 同步段先取引用，避免 async gap 后使用 context
+                                  final authProvider = context.read<AuthProvider>();
                                   if (selectedFamily.id != _currentFamily?.id) {
                                     try {
                                       // 调用切换家庭接口
                                       await _familyService.switchFamily(selectedFamily.id);
                                       // 刷新家庭列表以获取最新的isCurrent状态
                                       await _loadFamilies();
+                                      // 按当前家庭刷新用户资料缓存（role 随新家庭归位，
+                                      // "我的"页入口与 /audit 守卫随 notifyListeners 重绘）；
+                                      // 失败不阻断切换，资料缓存保留上次内容
+                                      try {
+                                        await authProvider.refreshUser();
+                                      } catch (_) {}
                                       // 刷新首页数据
                                       if (mounted) {
                                         context.read<HomeProvider>().fetchHomeData();

@@ -38,9 +38,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
       if (familyId.isNotEmpty) {
         // 停止扫描
         _controller.stop();
-        // 跳转到申请页面
+        // 跳转到申请页面（替换扫码页：提交成功或返回均直接回到邀请页，
+        // 避免落回摄像头已停止的扫码页）
         if (mounted) {
-          context.push('/apply-family?familyId=$familyId');
+          context.pushReplacement('/apply-family?familyId=$familyId');
         }
       }
     } else {
