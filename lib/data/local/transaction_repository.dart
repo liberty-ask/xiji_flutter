@@ -56,15 +56,16 @@ class TransactionRepository {
     });
   }
 
-  /// 已存在的平台单号集合（含墓碑行：软删记录仍占单号，重复导入跳过口径）。
-  /// 家庭维度：仅比对当前家庭的单号
+  /// 已存在的平台单号集合（不含墓碑行：软删记录不占单号，删除后可重导，
+  /// 重导生成新 id 独立参与同步仲裁）。家庭维度：仅比对当前家庭的单号
   Future<Set<String>> findExistingTradeNos(
       String familyId, Set<String> tradeNos) {
     if (tradeNos.isEmpty) return Future.value(const {});
     final query = _db.selectOnly(_db.transactions)
       ..addColumns([_db.transactions.tradeNo])
       ..where(_db.transactions.tradeNo.isIn(tradeNos) &
-          _db.transactions.familyId.equals(familyId));
+          _db.transactions.familyId.equals(familyId) &
+          _db.transactions.deleted.equals(false));
     return query.map((row) => row.read(_db.transactions.tradeNo)!).get().then(
           (list) => list.whereType<String>().toSet(),
         );

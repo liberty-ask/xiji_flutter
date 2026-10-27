@@ -119,6 +119,29 @@ void main() {
       expect(preview[0].duplicate, true);
       expect(preview[1].duplicate, false);
     });
+
+    test('墓碑不占单号：删除后重导成功入库（新 id 独立同步）', () async {
+      await service.importRows(await service.prepare([row(tradeNo: 'TN1')]));
+      final saved = await transactions.listAll('');
+      expect(saved, hasLength(1));
+
+      // 软删除（墓碑）：行保留参与同步，但不再占用单号
+      await transactions.softDelete(saved.first.id);
+      expect(await transactions.listAll(''), isEmpty,
+          reason: '墓碑行不出现在列表查询');
+
+      // 重新导入同一单号：不再被「已导入将跳过」挡住
+      final outcome = await service.importRows(await service.prepare([
+        row(tradeNo: 'TN1', counterparty: '重导商户')
+      ]));
+      expect(outcome.successCount, 1, reason: '墓碑不占单号，重导放行');
+      expect(outcome.skipCount, 0);
+
+      final again = await transactions.listAll('');
+      expect(again, hasLength(1));
+      expect(again.first.counterparty, '重导商户');
+      expect(again.first.id, isNot(saved.first.id), reason: '重导生成新 id');
+    });
   });
 
   group('任务 3.6：未分类兜底入库不阻塞', () {
@@ -190,7 +213,7 @@ void main() {
       expect(entry.hitCount, 1, reason: 'prepare 命中即计数');
     });
 
-    test('退款行强制转收入（对齐服务端导入语义）', () async {
+    test('退款守卫：明确标注支出的行不被退款文本改写', () async {
       final preview = await service.prepare([
         row(
             counterparty: '瑞幸咖啡',
@@ -198,7 +221,30 @@ void main() {
             type: 1,
             status: '退款成功'),
       ]);
-      expect(preview.first.row.type, 0, reason: '描述/状态含退款 → 收入');
+      expect(preview.first.row.type, 1, reason: '账单明确标注支出 → 保持支出');
+      expect(preview.first.categoryId, diningId, reason: '支出类型命中支出关键词规则');
+    });
+
+    test('退款守卫：明确标注收入的行保持收入', () async {
+      final preview = await service.prepare([
+        row(
+            counterparty: '瑞幸咖啡',
+            description: '退款-拿铁',
+            type: 0,
+            status: '退款成功'),
+      ]);
+      expect(preview.first.row.type, 0, reason: '账单明确标注收入 → 保持收入');
+    });
+
+    test('收/支未标注的退款行仍转收入（type=2 唯一合法服务对象）', () async {
+      final preview = await service.prepare([
+        row(
+            counterparty: '瑞幸咖啡',
+            description: '退款-拿铁',
+            type: 2,
+            status: '退款成功'),
+      ]);
+      expect(preview.first.row.type, 0, reason: '收/支未标注 + 退款佐证 → 收入');
       expect(preview.first.categoryId, uncategorizedIncomeId,
           reason: '收入类型不命中支出关键词规则');
     });

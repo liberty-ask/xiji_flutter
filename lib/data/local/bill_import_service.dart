@@ -86,7 +86,7 @@ class BillImportService {
     return _instance!;
   }
 
-  /// 预览准备：退款修正（描述/状态含「退款」→ 收入，对齐服务端）+
+  /// 预览准备：退款修正（仅收/支未标注的退款行转收入）+
   /// 引擎分类预填 + 本地重复单号标记。家庭维度：当前家庭内去重
   Future<List<BillImportPreviewItem>> prepare(List<ParsedBillRow> rows) async {
     final corrected = rows.map(_applyRefundRule).toList();
@@ -202,11 +202,13 @@ class BillImportService {
     );
   }
 
-  /// 退款规则：描述或交易状态含「退款」→ 强制收入类型（对齐服务端导入语义）
+  /// 退款规则守卫：账单明确标注收支方向的行（type=0 收入、type=1 支出）
+  /// 永不被文本改写；仅收/支未标注的行（type=2）可凭描述/状态含「退款」
+  /// 佐证转为收入入账（全额退款净 0、部分退款净余支出，如实入账自然对）
   ParsedBillRow _applyRefundRule(ParsedBillRow row) {
     final isRefund = (row.description?.contains('退款') ?? false) ||
         (row.status?.contains('退款') ?? false);
-    if (!isRefund || row.type == 0) return row;
+    if (!isRefund || row.type == 0 || row.type == 1) return row;
     return ParsedBillRow(
       platformCode: row.platformCode,
       tradeNo: row.tradeNo,

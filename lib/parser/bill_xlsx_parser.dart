@@ -12,7 +12,7 @@ import 'bill_csv_parser.dart';
 /// - 收/支：收入/收款/转入→0，支出/付款/转出→1，「/」（不计收支）等其余值默认支出
 /// - 商品列为空或「/」时回退「交易类型/交易对方」
 /// - 交易单号缺失时以「时间_金额_对方」生成兜底单号
-/// 去重（tradeNo 单键）与退款修正（状态含「退款」→收入）由导入服务统一处理。
+/// 去重（tradeNo 单键）与退款修正（仅收/支未标注行凭「退款」佐证转收入）由导入服务统一处理。
 class BillXlsxParser {
   /// 微信表头关键字段（对齐服务端 HeaderDetector.PLATFORM_KEYWORDS）
   static const _wechatKeywords = {
@@ -104,7 +104,7 @@ class BillXlsxParser {
     if (date == null || amount == null) return null;
 
     // 微信：收入/收款/转入→0，支出/付款/转出→1，「/」不计收支默认支出（对齐服务端，
-    // 微信不产生 type=2；状态含「退款」的行由导入服务统一修正为收入）
+    // 微信不产生 type=2；退款守卫后导入服务不覆盖明确标注的收支类型）
     final incomeExpense = cell(['收/支']);
     int type;
     if (incomeExpense == '收入' ||
