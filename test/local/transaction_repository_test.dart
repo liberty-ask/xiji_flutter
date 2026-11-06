@@ -138,5 +138,37 @@ void main() {
       expect(ftsRows.read<int>('c'), 0, reason: '无正文的记录不应产生 FTS 行');
       expect(await repo.findById(row.id), isNotNull);
     });
+
+    test('已冲抵退款的支出：编辑金额低于已退额被拒且原值不变', () async {
+      final row = await repo.insert(newTx(amountCents: 10000));
+      await repo.addRefundedCents({row.id: 4000});
+      final before = await repo.findById(row.id);
+      expect(before!.refundedCents, 4000);
+
+      await expectLater(
+        () => repo.update(row.id,
+            const TransactionsCompanion(amountCents: Value(3000))),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(), 'message', contains('已退款'))),
+      );
+
+      final after = await repo.findById(row.id);
+      expect(after!.amountCents, 10000, reason: '被拒后原金额不变');
+      expect(after.refundedCents, 4000, reason: '已退额不变');
+      expect(after.version, before.version, reason: '被拒不产生版本变更');
+    });
+
+    test('编辑金额等于已退额允许，高于已退额允许', () async {
+      final row = await repo.insert(newTx(amountCents: 10000));
+      await repo.addRefundedCents({row.id: 4000});
+
+      final equal = await repo.update(row.id,
+          const TransactionsCompanion(amountCents: Value(4000)));
+      expect(equal.amountCents, 4000, reason: '净额可为 0，等于已退额允许');
+
+      final higher = await repo.update(row.id,
+          const TransactionsCompanion(amountCents: Value(5000)));
+      expect(higher.amountCents, 5000);
+    });
   });
 }

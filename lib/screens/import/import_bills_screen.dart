@@ -682,6 +682,13 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
               style: const TextStyle(fontSize: 11, color: Colors.orange),
             ),
           ],
+          if (item.refundLinked) ...[
+            const SizedBox(width: 6),
+            ScaledText(
+              AppLocalizations.of(context)!.noCount,
+              style: const TextStyle(fontSize: 11, color: Colors.white54),
+            ),
+          ],
           const SizedBox(width: 6),
           ScaledText(
             dateFormat.format(item.row.date),
@@ -696,9 +703,11 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: item.row.type == 0
-                  ? Colors.green
-                  : ThemeHelper.expenseColor(context),
+              color: item.refundLinked
+                  ? Colors.white.withValues(alpha: 0.7)
+                  : item.row.type == 0
+                      ? Colors.green
+                      : ThemeHelper.expenseColor(context),
             ),
           ),
         ],

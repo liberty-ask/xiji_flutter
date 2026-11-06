@@ -56,19 +56,33 @@ class TransactionRepository {
     });
   }
 
-  /// 已存在的平台单号集合（不含墓碑行：软删记录不占单号，删除后可重导，
+  /// 账单导入去重键：平台单号 + 商家单号。
+  ///
+  /// 京东同一订单号的付款行与退款行（价保/部分退款）商家单号不同，是两笔
+  /// 不同交易，单键 tradeNo 会把其中一行当重复吞掉。商家单号缺失时退化为
+  /// 平台单号（支付宝/微信单号本身即逐笔唯一，行为不变）
+  static String importKey(String tradeNo, String? merchantOrderNo) =>
+      merchantOrderNo == null || merchantOrderNo.isEmpty
+          ? tradeNo
+          : '$tradeNo|$merchantOrderNo';
+
+  /// 已存在的导入去重键集合（不含墓碑行：软删记录不占单号，删除后可重导，
   /// 重导生成新 id 独立参与同步仲裁）。家庭维度：仅比对当前家庭的单号
-  Future<Set<String>> findExistingTradeNos(
+  Future<Set<String>> findExistingImportKeys(
       String familyId, Set<String> tradeNos) {
     if (tradeNos.isEmpty) return Future.value(const {});
     final query = _db.selectOnly(_db.transactions)
-      ..addColumns([_db.transactions.tradeNo])
+      ..addColumns([_db.transactions.tradeNo, _db.transactions.merchantOrderNo])
       ..where(_db.transactions.tradeNo.isIn(tradeNos) &
           _db.transactions.familyId.equals(familyId) &
           _db.transactions.deleted.equals(false));
-    return query.map((row) => row.read(_db.transactions.tradeNo)!).get().then(
-          (list) => list.whereType<String>().toSet(),
-        );
+    return query
+        .map((row) => importKey(
+              row.read(_db.transactions.tradeNo)!,
+              row.read(_db.transactions.merchantOrderNo),
+            ))
+        .get()
+        .then((list) => list.toSet());
   }
 
   /// 编辑交易：version+1、updatedAt 刷新、syncPending 置位，FTS 同步重建
@@ -79,6 +93,17 @@ class TransactionRepository {
           .getSingleOrNull();
       if (current == null) {
         throw StateError('交易不存在: $id');
+      }
+
+      // 已冲抵退款的支出：金额不得低于已退额，否则净额变负。
+      // 校验以本地库当前值为准（含同步写入的其他设备退款），仅拦金额下限
+      final nextAmount = changes.amountCents.present
+          ? changes.amountCents.value
+          : current.amountCents;
+      if (nextAmount < current.refundedCents) {
+        throw Exception(
+            '该笔交易已退款${(current.refundedCents / 100).toStringAsFixed(2)}元，'
+            '金额不能低于已退款金额');
       }
 
       final row = await (_db.update(_db.transactions)
@@ -105,13 +130,36 @@ class TransactionRepository {
     });
   }
 
-  /// 删除交易（软删除墓碑）：行保留参与同步，FTS 摘除，列表查询不可见
+  /// 删除交易（软删除墓碑）：行保留参与同步，FTS 摘除，列表查询不可见。
+  /// 退款冲抵（净额法）联动：
+  /// - 删退款行 → 原支出已退额回冲（支出金额恢复）
+  /// - 删原支出 → 级联删其退款行，避免悬空关联导致金额错乱
   Future<void> softDelete(String id) {
     return _db.transaction(() async {
       final current = await (_db.select(_db.transactions)
             ..where((t) => t.id.equals(id)))
           .getSingleOrNull();
       if (current == null) return;
+
+      final refundOfId = current.refundOfId;
+      if (refundOfId != null && refundOfId.isNotEmpty) {
+        await _restoreExpenseRefunded(refundOfId, current.amountCents);
+      } else {
+        final refunds = await (_db.select(_db.transactions)
+              ..where((t) =>
+                  t.refundOfId.equals(id) & t.deleted.equals(false)))
+            .get();
+        for (final r in refunds) {
+          await (_db.update(_db.transactions)..where((t) => t.id.equals(r.id)))
+              .write(TransactionsCompanion(
+            version: Value(r.version + 1),
+            updatedAt: Value(DateTime.now()),
+            deleted: const Value(true),
+            syncPending: const Value(true),
+          ));
+          await _ftsRemove(r.id);
+        }
+      }
 
       await (_db.update(_db.transactions)
             ..where((t) => t.id.equals(id)))
@@ -122,6 +170,67 @@ class TransactionRepository {
         syncPending: const Value(true),
       ));
       await _ftsRemove(id);
+    });
+  }
+
+  /// 退款删除时回冲原支出已退额（分域减法，不低于 0）
+  Future<void> _restoreExpenseRefunded(String expenseId, int cents) async {
+    final expense = await (_db.select(_db.transactions)
+          ..where((t) => t.id.equals(expenseId) & t.deleted.equals(false)))
+        .getSingleOrNull();
+    if (expense == null) return;
+    final remaining = expense.refundedCents - cents;
+    final next = remaining < 0 ? 0 : remaining;
+    if (next == expense.refundedCents) return;
+    await (_db.update(_db.transactions)
+          ..where((t) => t.id.equals(expenseId)))
+        .write(TransactionsCompanion(
+      refundedCents: Value(next),
+      version: Value(expense.version + 1),
+      updatedAt: Value(DateTime.now()),
+      syncPending: const Value(true),
+    ));
+  }
+
+  /// 退款关联候选原支出：同单号、支出、未删除、仍有可退余额。
+  /// 家庭维度：仅当前家庭；按业务日期升序取最早一笔（同单号多支出时兜底）
+  Future<List<Transaction>> findLinkableExpenses(
+      String familyId, Set<String> tradeNos) async {
+    if (tradeNos.isEmpty) return const [];
+    return (_db.select(_db.transactions)
+          ..where((t) =>
+              t.tradeNo.isIn(tradeNos) &
+              t.familyId.equals(familyId) &
+              t.type.equals(1) &
+              t.deleted.equals(false))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.asc),
+          ]))
+        .get();
+  }
+
+  /// 批量累加原支出的已退款额（导入关联退款时用，单事务）。
+  /// 上限为原支出金额，version+1 进发件箱
+  Future<void> addRefundedCents(Map<String, int> deltasByExpenseId) {
+    return _db.transaction(() async {
+      for (final entry in deltasByExpenseId.entries) {
+        if (entry.value <= 0) continue;
+        final expense = await (_db.select(_db.transactions)
+              ..where((t) => t.id.equals(entry.key) & t.deleted.equals(false)))
+            .getSingleOrNull();
+        if (expense == null) continue;
+        final next = expense.refundedCents + entry.value;
+        final capped = next > expense.amountCents ? expense.amountCents : next;
+        if (capped == expense.refundedCents) continue;
+        await (_db.update(_db.transactions)
+              ..where((t) => t.id.equals(entry.key)))
+            .write(TransactionsCompanion(
+          refundedCents: Value(capped),
+          version: Value(expense.version + 1),
+          updatedAt: Value(DateTime.now()),
+          syncPending: const Value(true),
+        ));
+      }
     });
   }
 
@@ -249,6 +358,8 @@ class TransactionRepository {
       merchantOrderNo: row.readNullable<String>('merchant_order_no'),
       payMethod: row.readNullable<String>('pay_method'),
       platform: row.readNullable<String>('platform'),
+      refundOfId: row.readNullable<String>('refund_of_id'),
+      refundedCents: row.read<int>('refunded_cents'),
       version: row.read<int>('version'),
       updatedAt: row.read<DateTime>('updated_at'),
       deleted: row.read<bool>('deleted'),

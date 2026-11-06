@@ -89,6 +89,8 @@ class SyncOutbox {
           'merchantOrderNo': t.merchantOrderNo,
           'payMethod': t.payMethod,
           'platform': t.platform,
+          'refundOfId': t.refundOfId,
+          'refundedCents': t.refundedCents,
         },
       ));
     }

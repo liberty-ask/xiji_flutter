@@ -207,6 +207,16 @@ class SyncIngest {
       return IngestResult.skipped;
     }
 
+    // v7 退款冲抵字段：旧客户端推来的 payload 无此字段，此时保留本地已有
+    // 关联与已退额，避免旧版本编辑原支出把净额冲抵清零
+    final hasRefundFields = payload.containsKey('refundedCents');
+    final refundOfIdValue = !hasRefundFields && existing != null
+        ? Value(existing.refundOfId)
+        : Value(payload['refundOfId'] as String?);
+    final refundedCentsValue = !hasRefundFields && existing != null
+        ? Value(existing.refundedCents)
+        : Value((payload['refundedCents'] as num?)?.toInt() ?? 0);
+
     final row = TransactionsCompanion.insert(
       id: Value(id),
       type: payload['type'] as int,
@@ -222,6 +232,8 @@ class SyncIngest {
       merchantOrderNo: Value(payload['merchantOrderNo'] as String?),
       payMethod: Value(payload['payMethod'] as String?),
       platform: Value(payload['platform'] as String?),
+      refundOfId: refundOfIdValue,
+      refundedCents: refundedCentsValue,
       version: Value(version),
       updatedAt: Value(updatedAt),
       deleted: Value(deleted),

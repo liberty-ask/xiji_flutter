@@ -9,6 +9,7 @@ import 'package:xiji_flutter/data/local/category_engine.dart';
 import 'package:xiji_flutter/data/local/category_repository.dart';
 import 'package:xiji_flutter/data/local/category_rule_repository.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
+import 'package:xiji_flutter/data/local/statistics_repository.dart';
 import 'package:xiji_flutter/data/local/transaction_repository.dart';
 import 'package:xiji_flutter/models/category_keyword_rule.dart';
 import 'package:xiji_flutter/models/user.dart';
@@ -55,16 +56,19 @@ void main() {
 
   ParsedBillRow row({
     String? tradeNo = 'TN001',
+    String? merchantOrderNo,
     String? counterparty = '某商户',
     String? description = '商品',
     double amount = 25,
     int? type = 1,
     String? status,
+    DateTime? date,
   }) {
     return ParsedBillRow(
       platformCode: 'alipay',
       tradeNo: tradeNo,
-      date: DateTime(2026, 9, 1, 10, 0, 0),
+      merchantOrderNo: merchantOrderNo,
+      date: date ?? DateTime(2026, 9, 1, 10, 0, 0),
       amount: amount,
       type: type,
       counterparty: counterparty,
@@ -107,6 +111,229 @@ void main() {
       ]));
       expect(outcome.successCount, 2);
       expect(outcome.skipCount, 0);
+    });
+
+    test('同一订单号的付款行与退款行（商家单号不同）各入一条，复导幂等', () async {
+      final csv = [
+        // 京东价保/部分退款：两行共用交易订单号，商家单号不同
+        row(
+            tradeNo: 'JD1',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '价保退款-商品',
+            amount: 3.23,
+            type: 2),
+        row(
+            tradeNo: 'JD1',
+            merchantOrderNo: 'M_ORDER',
+            description: '商品',
+            amount: 33.79,
+            type: 1),
+      ];
+      final first = await service.importRows(await service.prepare(csv));
+      expect(first.successCount, 2, reason: '商家单号不同 → 两笔独立交易');
+      expect(first.skipCount, 0);
+
+      final saved = await transactions.listAll('');
+      expect(saved, hasLength(2));
+      final refund =
+          saved.firstWhere((t) => t.merchantOrderNo == 'M_REFUND');
+      final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
+      expect(refund.type, 2, reason: '净额法：退款冲抵原支出，本身不计收支');
+      expect(refund.amountCents, 323);
+      expect(refund.refundOfId, pay.id, reason: '退款显式关联原支出');
+      expect(refund.categoryId, pay.categoryId, reason: '退款沿用原支出分类');
+      expect(pay.type, 1);
+      expect(pay.amountCents, 3379, reason: '支出按账单原额入账，净额由退款冲抵');
+      expect(pay.refundedCents, 323, reason: '原支出累计已退额');
+
+      // 统计净额：33.79 - 3.23 = 30.56，退款不进收入
+      final stats = StatisticsRepository(db);
+      final summary = await stats.rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 30.56);
+      expect(summary.income, 0.0);
+
+      final second = await service.importRows(await service.prepare(csv));
+      expect(second.successCount, 0, reason: '同一份账单复导幂等');
+      expect(second.skipCount, 2);
+      expect(await transactions.listAll(''), hasLength(2));
+    });
+
+    test('预览即判定退款冲抵：可关联行标记不计收支，无原支出保持收入', () async {
+      final items = await service.prepare([
+        row(
+            tradeNo: 'JD9',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '价保退款-商品',
+            amount: 3.23,
+            type: 2),
+        row(
+            tradeNo: 'JD9',
+            merchantOrderNo: 'M_ORDER',
+            description: '商品',
+            amount: 33.79,
+            type: 1),
+      ]);
+      final refundItem = items.firstWhere((i) => i.refund);
+      final payItem =
+          items.firstWhere((i) => i.row.tradeNo == 'JD9' && i.row.type == 1);
+      expect(refundItem.refundLinked, true, reason: '预览应与入库一致按不计收支展示');
+      expect(refundItem.categoryId, payItem.categoryId, reason: '沿用原支出分类');
+
+      final orphan = await service.prepare([
+        row(
+            tradeNo: 'JD10',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '退款-商品',
+            amount: 5,
+            type: 2),
+      ]);
+      expect(orphan.single.refundLinked, false, reason: '无原支出时降级为收入展示');
+    });
+
+    test('跨月退款仍冲抵原支出所属月份，不在退款当月计负支出', () async {
+      final csv = [
+        row(
+            tradeNo: 'JD2',
+            merchantOrderNo: 'M_ORDER',
+            amount: 100,
+            type: 1,
+            date: DateTime(2026, 9, 28, 10)),
+        row(
+            tradeNo: 'JD2',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '退款-商品',
+            amount: 40,
+            type: 2,
+            date: DateTime(2026, 10, 3, 10)),
+      ];
+      final outcome = await service.importRows(await service.prepare(csv));
+      expect(outcome.successCount, 2);
+
+      final stats = StatisticsRepository(db);
+      final sep = await stats.rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      final oct = await stats.rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 10, 1),
+        end: DateTime(2026, 10, 31),
+      );
+      expect(sep.expense, 60.0, reason: '9 月支出 100 - 40');
+      expect(oct.expense, 0.0, reason: '10 月不计负支出');
+      expect(oct.income, 0.0, reason: '退款不计收入');
+    });
+
+    test('多次部分退款累加到同一原支出（含先导原支出后再导退款）', () async {
+      // 第一次：先导入原支出
+      await service.importRows(await service.prepare([
+        row(tradeNo: 'JD3', merchantOrderNo: 'M_ORDER', amount: 100, type: 1),
+      ]));
+      // 第二次：同一订单两次退款，各自商家单号不同，且原支出已在库中
+      final outcome = await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'JD3',
+            merchantOrderNo: 'M_R1',
+            counterparty: '京东金融',
+            description: '退款-商品',
+            amount: 30,
+            type: 2),
+        row(
+            tradeNo: 'JD3',
+            merchantOrderNo: 'M_R2',
+            counterparty: '京东金融',
+            description: '价保退款-商品',
+            amount: 20,
+            type: 2),
+      ]));
+      expect(outcome.successCount, 2);
+
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
+      expect(pay.refundedCents, 5000, reason: '30 + 20 累加');
+      expect(pay.version, greaterThan(1), reason: '原支出改动进发件箱');
+      final refunds = saved.where((t) => t.refundOfId == pay.id).toList();
+      expect(refunds, hasLength(2));
+      expect(refunds.every((r) => r.type == 2), true);
+
+      final stats = StatisticsRepository(db);
+      expect(
+          (await stats.rangeSummary(
+            familyId: '',
+            start: DateTime(2026, 9, 1),
+            end: DateTime(2026, 9, 30),
+          ))
+              .expense,
+          50.0);
+    });
+
+    test('退款额超过剩余可退额时不关联，降级为独立收入行', () async {
+      final outcome = await service.importRows(await service.prepare([
+        row(tradeNo: 'JD4', merchantOrderNo: 'M_ORDER', amount: 10, type: 1),
+        row(
+            tradeNo: 'JD4',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '退款-商品',
+            amount: 15,
+            type: 2),
+      ]));
+      expect(outcome.successCount, 2);
+      final saved = await transactions.listAll('');
+      final refund = saved.firstWhere((t) => t.merchantOrderNo == 'M_REFUND');
+      expect(refund.refundOfId, isNull, reason: '超额退款不猜关联');
+      expect(refund.type, 0, reason: '降级为独立收入行');
+      final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
+      expect(pay.refundedCents, 0);
+    });
+
+    test('删除退款行恢复原支出金额', () async {
+      await service.importRows(await service.prepare([
+        row(tradeNo: 'JD5', merchantOrderNo: 'M_ORDER', amount: 100, type: 1),
+        row(
+            tradeNo: 'JD5',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '退款-商品',
+            amount: 40,
+            type: 2),
+      ]));
+      final saved = await transactions.listAll('');
+      final refund = saved.firstWhere((t) => t.merchantOrderNo == 'M_REFUND');
+      final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
+
+      await transactions.softDelete(refund.id);
+      final after = await transactions.listAll('');
+      expect(after, hasLength(1));
+      expect(after.first.refundedCents, 0, reason: '删除退款后支出恢复原额');
+      expect(after.first.version, greaterThan(pay.version));
+    });
+
+    test('删除原支出级联删除其退款行，不留悬空关联', () async {
+      await service.importRows(await service.prepare([
+        row(tradeNo: 'JD6', merchantOrderNo: 'M_ORDER', amount: 100, type: 1),
+        row(
+            tradeNo: 'JD6',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '退款-商品',
+            amount: 40,
+            type: 2),
+      ]));
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
+
+      await transactions.softDelete(pay.id);
+      expect(await transactions.listAll(''), isEmpty, reason: '退款随原支出级联删除');
     });
 
     test('与历史单号去重：prepare 阶段即标记重复', () async {

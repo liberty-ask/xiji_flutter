@@ -9,6 +9,8 @@ import '../../utils/money.dart';
 /// - type=2（不计收支）排除在一切收支统计之外：总额查询 type IN (0,1)，
 ///   分类统计/今日支出仅取显式 type 0/1
 /// - 墓碑（deleted=1）排除在统计之外
+/// - 退款冲抵（净额法）：支出金额按 amount_cents - refunded_cents 计，
+///   已关联退款行落 type=2 天然不进统计；跨月退款也减在原支出所属月份
 /// - 分类关联批量 IN 拉取，禁止循环单查（N+1）
 class StatisticsRepository {
   final AppDatabase _db;
@@ -30,7 +32,7 @@ class StatisticsRepository {
 
     final rows = await _db.customSelect(
       'SELECT SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense '
+      'SUM(CASE WHEN type = 1 THEN amount_cents - refunded_cents ELSE 0 END) AS expense '
       'FROM transactions WHERE deleted = 0 AND type IN (0, 1) '
       'AND family_id = ? AND date >= ? AND date <= ?',
       variables: [
@@ -62,7 +64,7 @@ class StatisticsRepository {
     final dayEnd = day.add(const Duration(days: 1))
         .subtract(const Duration(microseconds: 1));
     final rows = await _db.customSelect(
-      'SELECT SUM(amount_cents) AS total FROM transactions '
+      'SELECT SUM(amount_cents - refunded_cents) AS total FROM transactions '
       'WHERE deleted = 0 AND type = 1 AND family_id = ? '
       'AND date >= ? AND date <= ?',
       variables: [
@@ -127,7 +129,7 @@ class StatisticsRepository {
 
     // 同口径成员的本月支出（type=1、排除墓碑与不计收支）
     final uRows = await _db.customSelect(
-      'SELECT SUM(amount_cents) AS used FROM transactions '
+      'SELECT SUM(amount_cents - refunded_cents) AS used FROM transactions '
       'WHERE deleted = 0 AND type = 1 AND family_id = ? '
       'AND user_id IN (${List.filled(budgetedUserIds.length, '?').join(', ')}) '
       'AND date >= ? AND date <= ?',
@@ -200,7 +202,8 @@ class StatisticsRepository {
 
     // 聚合下推：SUM GROUP BY category_id（分域整数聚合）
     final rows = await _db.customSelect(
-      'SELECT category_id, SUM(amount_cents) AS total FROM transactions '
+      'SELECT category_id, SUM(amount_cents - refunded_cents) AS total '
+      'FROM transactions '
       'WHERE deleted = 0 AND type = ? AND family_id = ? '
       'AND date >= ? AND date <= ? '
       'GROUP BY category_id ORDER BY total DESC',
@@ -288,7 +291,7 @@ class StatisticsRepository {
   }) async {
     final r = (await _db.customSelect(
       'SELECT SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense, '
+      'SUM(CASE WHEN type = 1 THEN amount_cents - refunded_cents ELSE 0 END) AS expense, '
       'COUNT(*) AS cnt FROM transactions '
       'WHERE deleted = 0 AND type IN (0, 1) AND family_id = ? '
       'AND date >= ? AND date <= ?',
@@ -329,7 +332,7 @@ class StatisticsRepository {
       ..add(Variable<DateTime>(start))
       ..add(Variable<DateTime>(_endInclusive(end)));
     final r = (await _db.customSelect(
-      'SELECT SUM(amount_cents) AS total, COUNT(*) AS cnt FROM transactions '
+      'SELECT SUM(amount_cents - refunded_cents) AS total, COUNT(*) AS cnt FROM transactions '
       'WHERE ${where.join(' AND ')}',
       variables: variables,
       readsFrom: {_db.transactions},
@@ -361,7 +364,7 @@ class StatisticsRepository {
     final rows = await _db.customSelect(
       "SELECT strftime('%Y-%m-%d', date, 'unixepoch', ?) AS day_key, "
       'SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense, '
+      'SUM(CASE WHEN type = 1 THEN amount_cents - refunded_cents ELSE 0 END) AS expense, '
       'COUNT(*) AS cnt FROM transactions '
       'WHERE ${where.join(' AND ')} '
       'GROUP BY day_key ORDER BY day_key',
@@ -397,7 +400,7 @@ class StatisticsRepository {
     final rows = await _db.customSelect(
       "SELECT CAST(strftime('%m', date, 'unixepoch', ?) AS INTEGER) AS m, "
       'SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount_cents ELSE 0 END) AS expense '
+      'SUM(CASE WHEN type = 1 THEN amount_cents - refunded_cents ELSE 0 END) AS expense '
       'FROM transactions '
       'WHERE ${where.join(' AND ')} '
       'GROUP BY m ORDER BY m',
@@ -431,7 +434,7 @@ class StatisticsRepository {
       ..add(Variable<DateTime>(start))
       ..add(Variable<DateTime>(_endInclusive(end)));
     final r = (await _db.customSelect(
-      'SELECT MAX(amount_cents) AS max_amount FROM transactions '
+      'SELECT MAX(amount_cents - refunded_cents) AS max_amount FROM transactions '
       'WHERE ${where.join(' AND ')}',
       variables: variables,
       readsFrom: {_db.transactions},

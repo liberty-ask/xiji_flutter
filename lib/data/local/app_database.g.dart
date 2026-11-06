@@ -87,6 +87,20 @@ class $TransactionsTable extends Transactions
   late final GeneratedColumn<String> platform = GeneratedColumn<String>(
       'platform', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _refundOfIdMeta =
+      const VerificationMeta('refundOfId');
+  @override
+  late final GeneratedColumn<String> refundOfId = GeneratedColumn<String>(
+      'refund_of_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _refundedCentsMeta =
+      const VerificationMeta('refundedCents');
+  @override
+  late final GeneratedColumn<int> refundedCents = GeneratedColumn<int>(
+      'refunded_cents', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _versionMeta =
       const VerificationMeta('version');
   @override
@@ -138,6 +152,8 @@ class $TransactionsTable extends Transactions
         merchantOrderNo,
         payMethod,
         platform,
+        refundOfId,
+        refundedCents,
         version,
         updatedAt,
         deleted,
@@ -224,6 +240,18 @@ class $TransactionsTable extends Transactions
       context.handle(_platformMeta,
           platform.isAcceptableOrUnknown(data['platform']!, _platformMeta));
     }
+    if (data.containsKey('refund_of_id')) {
+      context.handle(
+          _refundOfIdMeta,
+          refundOfId.isAcceptableOrUnknown(
+              data['refund_of_id']!, _refundOfIdMeta));
+    }
+    if (data.containsKey('refunded_cents')) {
+      context.handle(
+          _refundedCentsMeta,
+          refundedCents.isAcceptableOrUnknown(
+              data['refunded_cents']!, _refundedCentsMeta));
+    }
     if (data.containsKey('version')) {
       context.handle(_versionMeta,
           version.isAcceptableOrUnknown(data['version']!, _versionMeta));
@@ -277,6 +305,10 @@ class $TransactionsTable extends Transactions
           .read(DriftSqlType.string, data['${effectivePrefix}pay_method']),
       platform: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}platform']),
+      refundOfId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}refund_of_id']),
+      refundedCents: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}refunded_cents'])!,
       version: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}version'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -308,6 +340,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final String? merchantOrderNo;
   final String? payMethod;
   final String? platform;
+  final String? refundOfId;
+  final int refundedCents;
   final int version;
   final DateTime updatedAt;
   final bool deleted;
@@ -326,6 +360,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       this.merchantOrderNo,
       this.payMethod,
       this.platform,
+      this.refundOfId,
+      required this.refundedCents,
       required this.version,
       required this.updatedAt,
       required this.deleted,
@@ -358,6 +394,10 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     if (!nullToAbsent || platform != null) {
       map['platform'] = Variable<String>(platform);
     }
+    if (!nullToAbsent || refundOfId != null) {
+      map['refund_of_id'] = Variable<String>(refundOfId);
+    }
+    map['refunded_cents'] = Variable<int>(refundedCents);
     map['version'] = Variable<int>(version);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['deleted'] = Variable<bool>(deleted);
@@ -392,6 +432,10 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       platform: platform == null && nullToAbsent
           ? const Value.absent()
           : Value(platform),
+      refundOfId: refundOfId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(refundOfId),
+      refundedCents: Value(refundedCents),
       version: Value(version),
       updatedAt: Value(updatedAt),
       deleted: Value(deleted),
@@ -416,6 +460,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       merchantOrderNo: serializer.fromJson<String?>(json['merchantOrderNo']),
       payMethod: serializer.fromJson<String?>(json['payMethod']),
       platform: serializer.fromJson<String?>(json['platform']),
+      refundOfId: serializer.fromJson<String?>(json['refundOfId']),
+      refundedCents: serializer.fromJson<int>(json['refundedCents']),
       version: serializer.fromJson<int>(json['version']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deleted: serializer.fromJson<bool>(json['deleted']),
@@ -439,6 +485,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       'merchantOrderNo': serializer.toJson<String?>(merchantOrderNo),
       'payMethod': serializer.toJson<String?>(payMethod),
       'platform': serializer.toJson<String?>(platform),
+      'refundOfId': serializer.toJson<String?>(refundOfId),
+      'refundedCents': serializer.toJson<int>(refundedCents),
       'version': serializer.toJson<int>(version),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deleted': serializer.toJson<bool>(deleted),
@@ -460,6 +508,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           Value<String?> merchantOrderNo = const Value.absent(),
           Value<String?> payMethod = const Value.absent(),
           Value<String?> platform = const Value.absent(),
+          Value<String?> refundOfId = const Value.absent(),
+          int? refundedCents,
           int? version,
           DateTime? updatedAt,
           bool? deleted,
@@ -481,6 +531,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
             : this.merchantOrderNo,
         payMethod: payMethod.present ? payMethod.value : this.payMethod,
         platform: platform.present ? platform.value : this.platform,
+        refundOfId: refundOfId.present ? refundOfId.value : this.refundOfId,
+        refundedCents: refundedCents ?? this.refundedCents,
         version: version ?? this.version,
         updatedAt: updatedAt ?? this.updatedAt,
         deleted: deleted ?? this.deleted,
@@ -508,6 +560,11 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           : this.merchantOrderNo,
       payMethod: data.payMethod.present ? data.payMethod.value : this.payMethod,
       platform: data.platform.present ? data.platform.value : this.platform,
+      refundOfId:
+          data.refundOfId.present ? data.refundOfId.value : this.refundOfId,
+      refundedCents: data.refundedCents.present
+          ? data.refundedCents.value
+          : this.refundedCents,
       version: data.version.present ? data.version.value : this.version,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deleted: data.deleted.present ? data.deleted.value : this.deleted,
@@ -532,6 +589,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('merchantOrderNo: $merchantOrderNo, ')
           ..write('payMethod: $payMethod, ')
           ..write('platform: $platform, ')
+          ..write('refundOfId: $refundOfId, ')
+          ..write('refundedCents: $refundedCents, ')
           ..write('version: $version, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deleted: $deleted, ')
@@ -555,6 +614,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       merchantOrderNo,
       payMethod,
       platform,
+      refundOfId,
+      refundedCents,
       version,
       updatedAt,
       deleted,
@@ -576,6 +637,8 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.merchantOrderNo == this.merchantOrderNo &&
           other.payMethod == this.payMethod &&
           other.platform == this.platform &&
+          other.refundOfId == this.refundOfId &&
+          other.refundedCents == this.refundedCents &&
           other.version == this.version &&
           other.updatedAt == this.updatedAt &&
           other.deleted == this.deleted &&
@@ -596,6 +659,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<String?> merchantOrderNo;
   final Value<String?> payMethod;
   final Value<String?> platform;
+  final Value<String?> refundOfId;
+  final Value<int> refundedCents;
   final Value<int> version;
   final Value<DateTime> updatedAt;
   final Value<bool> deleted;
@@ -615,6 +680,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.merchantOrderNo = const Value.absent(),
     this.payMethod = const Value.absent(),
     this.platform = const Value.absent(),
+    this.refundOfId = const Value.absent(),
+    this.refundedCents = const Value.absent(),
     this.version = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deleted = const Value.absent(),
@@ -635,6 +702,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.merchantOrderNo = const Value.absent(),
     this.payMethod = const Value.absent(),
     this.platform = const Value.absent(),
+    this.refundOfId = const Value.absent(),
+    this.refundedCents = const Value.absent(),
     this.version = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deleted = const Value.absent(),
@@ -659,6 +728,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<String>? merchantOrderNo,
     Expression<String>? payMethod,
     Expression<String>? platform,
+    Expression<String>? refundOfId,
+    Expression<int>? refundedCents,
     Expression<int>? version,
     Expression<DateTime>? updatedAt,
     Expression<bool>? deleted,
@@ -679,6 +750,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (merchantOrderNo != null) 'merchant_order_no': merchantOrderNo,
       if (payMethod != null) 'pay_method': payMethod,
       if (platform != null) 'platform': platform,
+      if (refundOfId != null) 'refund_of_id': refundOfId,
+      if (refundedCents != null) 'refunded_cents': refundedCents,
       if (version != null) 'version': version,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deleted != null) 'deleted': deleted,
@@ -701,6 +774,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       Value<String?>? merchantOrderNo,
       Value<String?>? payMethod,
       Value<String?>? platform,
+      Value<String?>? refundOfId,
+      Value<int>? refundedCents,
       Value<int>? version,
       Value<DateTime>? updatedAt,
       Value<bool>? deleted,
@@ -720,6 +795,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       merchantOrderNo: merchantOrderNo ?? this.merchantOrderNo,
       payMethod: payMethod ?? this.payMethod,
       platform: platform ?? this.platform,
+      refundOfId: refundOfId ?? this.refundOfId,
+      refundedCents: refundedCents ?? this.refundedCents,
       version: version ?? this.version,
       updatedAt: updatedAt ?? this.updatedAt,
       deleted: deleted ?? this.deleted,
@@ -770,6 +847,12 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (platform.present) {
       map['platform'] = Variable<String>(platform.value);
     }
+    if (refundOfId.present) {
+      map['refund_of_id'] = Variable<String>(refundOfId.value);
+    }
+    if (refundedCents.present) {
+      map['refunded_cents'] = Variable<int>(refundedCents.value);
+    }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
@@ -804,6 +887,8 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('merchantOrderNo: $merchantOrderNo, ')
           ..write('payMethod: $payMethod, ')
           ..write('platform: $platform, ')
+          ..write('refundOfId: $refundOfId, ')
+          ..write('refundedCents: $refundedCents, ')
           ..write('version: $version, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deleted: $deleted, ')
@@ -2360,6 +2445,8 @@ typedef $$TransactionsTableCreateCompanionBuilder = TransactionsCompanion
   Value<String?> merchantOrderNo,
   Value<String?> payMethod,
   Value<String?> platform,
+  Value<String?> refundOfId,
+  Value<int> refundedCents,
   Value<int> version,
   Value<DateTime> updatedAt,
   Value<bool> deleted,
@@ -2381,6 +2468,8 @@ typedef $$TransactionsTableUpdateCompanionBuilder = TransactionsCompanion
   Value<String?> merchantOrderNo,
   Value<String?> payMethod,
   Value<String?> platform,
+  Value<String?> refundOfId,
+  Value<int> refundedCents,
   Value<int> version,
   Value<DateTime> updatedAt,
   Value<bool> deleted,
@@ -2436,6 +2525,12 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get platform => $composableBuilder(
       column: $table.platform, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get refundOfId => $composableBuilder(
+      column: $table.refundOfId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get refundedCents => $composableBuilder(
+      column: $table.refundedCents, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get version => $composableBuilder(
       column: $table.version, builder: (column) => ColumnFilters(column));
@@ -2500,6 +2595,13 @@ class $$TransactionsTableOrderingComposer
   ColumnOrderings<String> get platform => $composableBuilder(
       column: $table.platform, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get refundOfId => $composableBuilder(
+      column: $table.refundOfId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get refundedCents => $composableBuilder(
+      column: $table.refundedCents,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get version => $composableBuilder(
       column: $table.version, builder: (column) => ColumnOrderings(column));
 
@@ -2561,6 +2663,12 @@ class $$TransactionsTableAnnotationComposer
   GeneratedColumn<String> get platform =>
       $composableBuilder(column: $table.platform, builder: (column) => column);
 
+  GeneratedColumn<String> get refundOfId => $composableBuilder(
+      column: $table.refundOfId, builder: (column) => column);
+
+  GeneratedColumn<int> get refundedCents => $composableBuilder(
+      column: $table.refundedCents, builder: (column) => column);
+
   GeneratedColumn<int> get version =>
       $composableBuilder(column: $table.version, builder: (column) => column);
 
@@ -2613,6 +2721,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String?> merchantOrderNo = const Value.absent(),
             Value<String?> payMethod = const Value.absent(),
             Value<String?> platform = const Value.absent(),
+            Value<String?> refundOfId = const Value.absent(),
+            Value<int> refundedCents = const Value.absent(),
             Value<int> version = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<bool> deleted = const Value.absent(),
@@ -2633,6 +2743,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             merchantOrderNo: merchantOrderNo,
             payMethod: payMethod,
             platform: platform,
+            refundOfId: refundOfId,
+            refundedCents: refundedCents,
             version: version,
             updatedAt: updatedAt,
             deleted: deleted,
@@ -2653,6 +2765,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             Value<String?> merchantOrderNo = const Value.absent(),
             Value<String?> payMethod = const Value.absent(),
             Value<String?> platform = const Value.absent(),
+            Value<String?> refundOfId = const Value.absent(),
+            Value<int> refundedCents = const Value.absent(),
             Value<int> version = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<bool> deleted = const Value.absent(),
@@ -2673,6 +2787,8 @@ class $$TransactionsTableTableManager extends RootTableManager<
             merchantOrderNo: merchantOrderNo,
             payMethod: payMethod,
             platform: platform,
+            refundOfId: refundOfId,
+            refundedCents: refundedCents,
             version: version,
             updatedAt: updatedAt,
             deleted: deleted,

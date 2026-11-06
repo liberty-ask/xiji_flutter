@@ -31,6 +31,11 @@ class Transactions extends Table {
   TextColumn get merchantOrderNo => text().nullable()(); // 商户单号
   TextColumn get payMethod => text().nullable()(); // 支付方式
   TextColumn get platform => text().nullable()(); // 所属平台（支付宝/微信/京东），账单导入与迁移写入
+  // 退款冲抵（净额法）：退款记录指向原支出；原支出累计已冲抵退款（分）。
+  // refundedCents 冗余在支出行上，跨月退款也能把扣减落在支出所属月份，
+  // 且云同步到达顺序错乱时金额仍自洽（退款行自身 type=2 不进统计）
+  TextColumn get refundOfId => text().nullable()();
+  IntColumn get refundedCents => integer().withDefault(const Constant(0))();
 
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get updatedAt =>
@@ -121,7 +126,7 @@ class AppDatabase extends _$AppDatabase {
       : _migrationSeedUserIdProvider = migrationSeedUserIdProvider;
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   /// 系统内置分类种子：固定 UUID 常量，insertOrIgnore 幂等。
   /// sortOrder 按类型分别计数（支出 0-12、收入 0-6），保证同类型内顺序稳定
@@ -293,6 +298,16 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement('DROP TABLE budgets');
         await customStatement('ALTER TABLE budgets_new RENAME TO budgets');
+      }
+      // v7：退款冲抵（净额法）——交易加退款关联与原支出累计退款额（分）。
+      // 存量行默认无关联、已退 0，统计口径与旧版完全一致
+      if (from < 7) {
+        await customStatement(
+          'ALTER TABLE transactions ADD COLUMN refund_of_id TEXT NULL',
+        );
+        await customStatement(
+          'ALTER TABLE transactions ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0',
+        );
       }
     },
   );

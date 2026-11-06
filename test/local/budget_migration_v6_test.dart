@@ -35,6 +35,9 @@ void main() {
     raw.execute(
         "INSERT INTO budgets(id, family_id, year, month, amount_cents, "
         'updated_at) VALUES (\'b1\', \'f1\', 2026, 10, 500000, 0)');
+    // v7 迁移会给 transactions 加退款冲抵列，本用例只验预算迁移，
+    // 故建同名空表满足 ALTER 前置条件（真实 v5 库由 app 建全表）
+    raw.execute('CREATE TABLE transactions(id TEXT NOT NULL PRIMARY KEY)');
     raw.execute('PRAGMA user_version = 5');
     raw.dispose();
 
