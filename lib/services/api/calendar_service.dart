@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/local/category_repository.dart';
@@ -57,7 +57,7 @@ class CalendarService {
     int? day,
   }) async {
     final start = DateTime(year, month, 1);
-    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final daysInMonth = DateUtils.getDaysInMonth(year, month);
     // 汇总聚合约定传日历日零点（内部转当天末尾含尾）
     final monthEnd = DateTime(year, month + 1, 0);
     // 明细查询需要精确到月末最后一微秒

@@ -14,6 +14,7 @@ import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/amount_format.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -460,9 +461,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
 
     final l10n = AppLocalizations.of(context)!;
     final typeLabel = result.type == 0 ? l10n.income : l10n.expense;
-    final amountText = result.amount! % 1 == 0
-        ? result.amount!.toStringAsFixed(0)
-        : result.amount!.toString();
+    final amountText = AmountFormat.format(result.amount!);
     CustomSnackBar.showSuccessWithAction(
       context,
       l10n.voiceRecordedAs(typeLabel, amountText, result.categoryName!),

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -133,7 +134,7 @@ class _MembersScreenState extends State<MembersScreen> {
               large: 26.0,
             ),
             backgroundImage: member.avatar != null && member.avatar!.isNotEmpty
-                ? NetworkImage(member.avatar!)
+                ? CachedNetworkImageProvider(member.avatar!)
                 : null,
             backgroundColor: ThemeHelper.primary(context).withValues(alpha: 0.2),
             child: member.avatar == null || member.avatar!.isEmpty

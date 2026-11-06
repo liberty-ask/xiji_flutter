@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/category.dart';
+import '../../utils/icon_constants.dart';
 import '../../utils/theme_helper.dart';
 
 class CategorySelector extends StatelessWidget {
@@ -54,7 +55,7 @@ class CategorySelector extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  _getIconFromString(category.icon),
+                  IconConstants.getIconFromString(category.icon),
                   color: isSelected
                       ? ThemeHelper.primary(context)
                       : Colors.white70,
@@ -81,42 +82,6 @@ class CategorySelector extends StatelessWidget {
         );
       },
     );
-  }
-
-  IconData _getIconFromString(String iconName) {
-    // 图标名称到 Material Icons 的映射
-    switch (iconName) {
-      case 'shopping_cart':
-        return Icons.shopping_cart;
-      case 'restaurant':
-        return Icons.restaurant;
-      case 'directions_car':
-        return Icons.directions_car;
-      case 'home':
-        return Icons.home;
-      case 'local_gas_station':
-        return Icons.local_gas_station;
-      case 'phone_android':
-        return Icons.phone_android;
-      case 'movie':
-        return Icons.movie;
-      case 'fitness_center':
-        return Icons.fitness_center;
-      case 'school':
-        return Icons.school;
-      case 'local_hospital':
-        return Icons.local_hospital;
-      case 'flight':
-        return Icons.flight;
-      case 'shopping_bag':
-        return Icons.shopping_bag;
-      case 'work':
-        return Icons.work;
-      case 'account_balance':
-        return Icons.account_balance;
-      default:
-        return Icons.category;
-    }
   }
 }
 

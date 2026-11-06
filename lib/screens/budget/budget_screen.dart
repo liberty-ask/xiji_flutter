@@ -7,6 +7,7 @@ import '../../widgets/common/scaled_text.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/amount_format.dart';
 import '../../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
@@ -143,27 +144,31 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            ScaledText(
-                              currency,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white70,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              ScaledText(
+                                currency,
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white70,
+                                ),
                               ),
-                            ),
-                            ScaledText(
-                              '${_budgetData!['budget'] ?? 0}',
-                              style: const TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                              ScaledText(
+                                AmountFormat.format(_budgetData!['budget'] as num?),
+                                style: const TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 24),
                         Row(
@@ -171,13 +176,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             Expanded(
                               child: _buildStatItem(
                                 AppLocalizations.of(context)!.expense,
-                                '$currency${_budgetData!['used'] ?? 0}',
+                                '$currency${AmountFormat.format(_budgetData!['used'] as num?)}',
                               ),
                             ),
                             Expanded(
                               child: _buildStatItem(
                                 AppLocalizations.of(context)!.net,
-                                '$currency${_budgetData!['remaining'] ?? 0}',
+                                '$currency${AmountFormat.format(_budgetData!['remaining'] as num?)}',
                               ),
                             ),
                           ],
@@ -236,7 +241,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
-                        child: ScaledText('$currency${amount.toStringAsFixed(0)}'),
+                        child: ScaledText('$currency${AmountFormat.format(amount)}'),
                       );
                     }).toList(),
                   ),
@@ -289,12 +294,17 @@ class _BudgetScreenState extends State<BudgetScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        ScaledText(
-          value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: ScaledText(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            maxLines: 1,
           ),
         ),
       ],

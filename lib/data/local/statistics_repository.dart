@@ -343,6 +343,47 @@ class StatisticsRepository {
     );
   }
 
+  /// 按成员（交易真实归属 user_id）聚合区间净额与笔数，金额降序。
+  /// 服务于成员统计：过滤口径与 [typeTotals] 完全一致（墓碑、家庭、
+  /// type/category/date），退款按净额法冲抵原支出；空 userId 独立成组，
+  /// 由门面层归入「未知用户」，不得并入某一成员。
+  Future<List<MemberTotals>> memberTotals({
+    required String familyId,
+    int? type,
+    String? categoryId,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final where = <String>['deleted = 0', 'family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
+    _typeWhere(type, where, variables);
+    if (categoryId != null && categoryId.isNotEmpty) {
+      where.add('category_id = ?');
+      variables.add(Variable(categoryId));
+    }
+    where
+      ..add('date >= ?')
+      ..add('date <= ?');
+    variables
+      ..add(Variable<DateTime>(start))
+      ..add(Variable<DateTime>(_endInclusive(end)));
+    final rows = await _db.customSelect(
+      'SELECT user_id, SUM(amount_cents - refunded_cents) AS total, '
+      'COUNT(*) AS cnt FROM transactions '
+      'WHERE ${where.join(' AND ')} '
+      'GROUP BY user_id ORDER BY total DESC',
+      variables: variables,
+      readsFrom: {_db.transactions},
+    ).get();
+    return rows
+        .map((r) => MemberTotals(
+              userId: r.read<String>('user_id'),
+              amount: Money.centsToYuan(r.readNullable<int>('total') ?? 0),
+              count: r.read<int>('cnt'),
+            ))
+        .toList();
+  }
+
   /// 按天聚合（趋势与日历）：键为本地日期 yyyy-MM-dd。
   /// type 过滤语义对齐服务端：null 拆分收支两列、0 仅收入列、1 仅支出列。
   /// 家庭维度
@@ -494,6 +535,20 @@ class TypeTotals {
   final int count;
 
   TypeTotals({required this.amount, required this.count});
+}
+
+/// 按成员（交易真实归属 user_id）聚合结果；userId 可能为空串
+/// （历史备份导入缺归属字段），由门面层展示为「未知用户」
+class MemberTotals {
+  final String userId;
+  final double amount;
+  final int count;
+
+  MemberTotals({
+    required this.userId,
+    required this.amount,
+    required this.count,
+  });
 }
 
 /// 按天聚合结果（day 为本地日期 yyyy-MM-dd）

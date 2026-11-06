@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -149,7 +150,7 @@ class _AuditScreenState extends State<AuditScreen> {
               CircleAvatar(
                 radius: 24,
                 backgroundImage: application.avatar != null && application.avatar!.isNotEmpty
-                    ? NetworkImage(application.avatar!)
+                    ? CachedNetworkImageProvider(application.avatar!)
                     : null,
                 backgroundColor: ThemeHelper.primary(context).withValues(alpha: 0.2),
                 child: application.avatar == null || application.avatar!.isEmpty

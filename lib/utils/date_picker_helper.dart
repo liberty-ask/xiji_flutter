@@ -139,7 +139,7 @@ class DatePickerHelper {
 
     // 获取当月的天数
     int getDaysInMonth(int year, int month) {
-      return DateTime(year, month + 1, 0).day;
+      return DateUtils.getDaysInMonth(year, month);
     }
 
     final result = await showDialog<Map<String, int>>(

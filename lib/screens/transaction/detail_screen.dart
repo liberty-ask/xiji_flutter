@@ -14,9 +14,11 @@ import '../../providers/category_provider.dart';
 import '../../models/category.dart' as models;
 import '../../models/family_member.dart';
 import '../../utils/theme_helper.dart';
+import '../../utils/transaction_type_style.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/constants.dart';
+import '../../utils/amount_format.dart';
 import '../../models/transaction.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -293,7 +295,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                   startYear = years[index];
                                   
                                   // 计算该年月的最大天数
-                                  int maxDays = DateTime(startYear, startMonth + 1, 0).day;
+                                  int maxDays = DateUtils.getDaysInMonth(startYear, startMonth);
                                   
                                   // 调整天数为有效值
                                   if (startDay > maxDays) {
@@ -330,7 +332,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                   startMonth = index + 1;
                                   
                                   // 计算该年月的最大天数
-                                  int maxDays = DateTime(startYear, startMonth + 1, 0).day;
+                                  int maxDays = DateUtils.getDaysInMonth(startYear, startMonth);
                                   
                                   // 调整天数为有效值
                                   if (startDay > maxDays) {
@@ -367,7 +369,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                   startDay = index + 1;
                                   
                                   // 计算该年月的最大天数
-                                  int maxDays = DateTime(startYear, startMonth + 1, 0).day;
+                                  int maxDays = DateUtils.getDaysInMonth(startYear, startMonth);
                                   
                                   // 确保选择的天数不超过最大值
                                   if (startDay > maxDays) {
@@ -429,13 +431,13 @@ class _DetailScreenState extends State<DetailScreen> {
                                   endYear = years[index];
                                   
                                   // 计算该年月的最大天数
-                                  int maxDays = DateTime(endYear, endMonth + 1, 0).day;
+                                  int maxDays = DateUtils.getDaysInMonth(endYear, endMonth);
                                   
                                   // 如果是当前年份，月份和日期不能超过今天
                                   if (endYear == now.year) {
                                     if (endMonth > now.month) {
                                       endMonth = now.month;
-                                      maxDays = DateTime(endYear, endMonth + 1, 0).day;
+                                      maxDays = DateUtils.getDaysInMonth(endYear, endMonth);
                                     }
                                     if (endMonth == now.month) {
                                       maxDays = now.day;
@@ -477,7 +479,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                   endMonth = index + 1;
                                   
                                   // 计算该年月的最大天数
-                                  int maxDays = DateTime(endYear, endMonth + 1, 0).day;
+                                  int maxDays = DateUtils.getDaysInMonth(endYear, endMonth);
                                   
                                   // 如果是当前年月，日期不能超过今天
                                   if (endYear == now.year && endMonth == now.month) {
@@ -519,7 +521,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                   endDay = index + 1;
                                   
                                   // 计算该年月的最大天数
-                                  int maxDays = DateTime(endYear, endMonth + 1, 0).day;
+                                  int maxDays = DateUtils.getDaysInMonth(endYear, endMonth);
                                   
                                   // 如果是当前年月，日期不能超过今天
                                   if (endYear == now.year && endMonth == now.month) {
@@ -1137,18 +1139,20 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
             ),
             Expanded(
-              child: ScaledText(
-                '${isNeutral ? '' : (isIncome ? '+' : '-')}${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isNeutral
-                      ? Colors.white60
-                      : (isIncome ? ThemeHelper.primary(context) : Colors.white),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: ScaledText(
+                  '${isNeutral ? '' : (isIncome ? '+' : '-')}${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(transaction.amount)}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isNeutral
+                        ? Colors.white60
+                        : (isIncome ? ThemeHelper.primary(context) : Colors.white),
+                  ),
+                  maxLines: 1,
                 ),
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),
@@ -1215,10 +1219,10 @@ class _DetailScreenState extends State<DetailScreen> {
         title: Row(
           children: [
             Icon(
-              isNeutral ? Icons.remove : (isIncome ? Icons.arrow_upward : Icons.arrow_downward),
+              isNeutral ? Icons.remove : TransactionTypeStyle.icon(isIncome),
               color: isNeutral
                   ? Colors.white60
-                  : (isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context)),
+                  : TransactionTypeStyle.color(context, isIncome),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1236,13 +1240,14 @@ class _DetailScreenState extends State<DetailScreen> {
             children: [
               _buildDetailRow(AppLocalizations.of(context)!.type,
                   isNeutral ? AppLocalizations.of(context)!.noCount
-                      : (isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense),
+                      : TransactionTypeStyle.label(AppLocalizations.of(context)!, isIncome),
                   color: isNeutral
                       ? Colors.white60
-                      : (isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context))),
+                      : TransactionTypeStyle.color(context, isIncome)),
               _buildDetailRow(AppLocalizations.of(context)!.category, transaction.category),
-              _buildDetailRow(AppLocalizations.of(context)!.amount, '${AppLocalizations.of(context)!.currencySymbol}${transaction.amount.toStringAsFixed(2)}',
-                  color: isNeutral ? Colors.white60 : (isIncome ? ThemeHelper.primary(context) : Colors.white)),
+              _buildDetailRow(AppLocalizations.of(context)!.amount, '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(transaction.amount)}',
+                  color: isNeutral ? Colors.white60 : (isIncome ? ThemeHelper.primary(context) : Colors.white),
+                  autoFit: true),
               _buildDetailRow(AppLocalizations.of(context)!.date, DateFormat.yMMMMd(Localizations.localeOf(context).toString()).format(transaction.date)),
               _buildDetailRow(AppLocalizations.of(context)!.user, userName),
               if (transaction.counterparty != null && transaction.counterparty!.isNotEmpty)
@@ -1265,7 +1270,7 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
   
-  Widget _buildDetailRow(String label, String value, {Color? color}) {
+  Widget _buildDetailRow(String label, String value, {Color? color, bool autoFit = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -1279,14 +1284,29 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          ScaledText(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              color: color ?? Colors.white,
-              fontWeight: FontWeight.bold,
+          if (autoFit)
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: ScaledText(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: color ?? Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+              ),
+            )
+          else
+            ScaledText(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                color: color ?? Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
         ],
       ),
     );

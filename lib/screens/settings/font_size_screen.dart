@@ -41,7 +41,9 @@ class _FontSizeScreenState extends State<FontSizeScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: ScaledText(AppLocalizations.of(context)!.fontSizeSettings),
+          content: ScaledText(
+            '${AppLocalizations.of(context)!.fontSizeSettings} ${AppLocalizations.of(context)!.successfullySaved}',
+          ),
           backgroundColor: Provider.of<ThemeProvider>(context, listen: false).currentTheme.primary,
         ),
       );

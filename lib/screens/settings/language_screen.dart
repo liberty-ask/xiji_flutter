@@ -37,6 +37,10 @@ class _LanguageScreenState extends State<LanguageScreen> {
   void _handleConfirm() async {
     final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     await languageProvider.setLanguage(_selectedLocale);
+    if (!mounted) return;
+    // notifyListeners 只标记重建，当前帧的 Localizations 仍是旧语言实例，
+    // 等下一帧重建完成后再取文案，保证提示语与刚保存的语言一致
+    await WidgetsBinding.instance.endOfFrame;
     if (mounted) {
       final appLocalizations = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(

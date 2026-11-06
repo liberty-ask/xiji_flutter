@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
@@ -9,9 +10,11 @@ import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 import 'package:intl/intl.dart';
 import '../../utils/theme_helper.dart';
+import '../../utils/transaction_type_style.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../utils/icon_constants.dart';
+import '../../utils/amount_format.dart';
 import '../../models/transaction.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -611,26 +614,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ),
           const SizedBox(height: 2),
-          ScaledText(
-            _formatCurrency(context, amount),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: ScaledText(
+              _formatCurrency(context, amount),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              maxLines: 1,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
+  // 金额展示：统一千分位 + 2 位小数（全局口径见 AmountFormat）
   String _formatAmount(BuildContext context, double amount) {
-    if (amount.abs() < 1000) {
-      return amount.toStringAsFixed(0);
-    }
-    final locale = Localizations.localeOf(context).toString();
-    return NumberFormat.compact(locale: locale).format(amount);
+    return AmountFormat.format(amount);
   }
 
   String _formatCurrency(BuildContext context, double amount) {
@@ -870,15 +874,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           maxLines: 1,
                         ),
                       ),
-                      ScaledText(
-                        amount,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: ScaledText(
+                            amount,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            maxLines: 1,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
                       ),
                     ],
                   ),
@@ -960,7 +969,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           padding: EdgeInsets.symmetric(horizontal: ResponsiveHelper.horizontalPadding(context)),
           child: Container(
             height: 300,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               color: ThemeHelper.surface(context),
@@ -1035,14 +1044,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              // 预留 64：容纳「12,345.67」等完整标签（字号 10），仍超宽时等比缩小
+              reservedSize: 64,
               interval: maxY / 5,
               getTitlesWidget: (value, meta) {
-                return ScaledText(
-                  _formatAmount(context, value),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.5),
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: ScaledText(
+                      _formatAmount(context, value),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                      maxLines: 1,
+                    ),
                   ),
                 );
               },
@@ -1146,9 +1163,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 final isIncome = touchedSpot.barIndex == 0;
                 final value = touchedSpot.y;
                 return LineTooltipItem(
-                  '${isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense}: ${_formatCurrency(context, value)}',
+                  '${TransactionTypeStyle.label(AppLocalizations.of(context)!, isIncome)}: ${_formatCurrency(context, value)}',
                   TextStyle(
-                    color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context),
+                    color: TransactionTypeStyle.color(context, isIncome),
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -1290,7 +1307,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           padding: EdgeInsets.symmetric(horizontal: ResponsiveHelper.horizontalPadding(context)),
           child: Container(
             height: 250,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               color: ThemeHelper.surface(context),
@@ -1372,14 +1389,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              // 预留 64：容纳「12,345.67」等完整标签（字号 10），仍超宽时等比缩小
+              reservedSize: 64,
               interval: maxY / 5,
               getTitlesWidget: (value, meta) {
-                return ScaledText(
-                  _formatAmount(context, value),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.5),
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: ScaledText(
+                      _formatAmount(context, value),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                      maxLines: 1,
+                    ),
                   ),
                 );
               },
@@ -1474,13 +1499,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
               child: avatar != null && avatar.isNotEmpty
                   ? ClipOval(
-                      child: Image.network(avatar, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) {
-                        return Icon(
-                          Icons.person,
-                          color: Colors.white.withValues(alpha: 0.6),
-                          size: 24,
-                        );
-                      }),
+                      child: CachedNetworkImage(
+                        imageUrl: avatar,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) {
+                          return Icon(
+                            Icons.person,
+                            color: Colors.white.withValues(alpha: 0.6),
+                            size: 24,
+                          );
+                        },
+                      ),
                     )
                   : Icon(
                       Icons.person,
@@ -1496,22 +1525,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      ScaledText(
-                        memberName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      Expanded(
+                        child: ScaledText(
+                          memberName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
-                      ScaledText(
-                        amount,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: _type == TransactionType.expense
-                              ? ThemeHelper.expenseColor(context)
-                              : ThemeHelper.primary(context),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: ScaledText(
+                            amount,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _type == TransactionType.expense
+                                  ? ThemeHelper.expenseColor(context)
+                                  : ThemeHelper.primary(context),
+                            ),
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                     ],
@@ -1883,18 +1923,21 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ),
                 Expanded(
-                  child: ScaledText(
-                    '${AppLocalizations.of(context)!.netIncome}: ${_formatCurrency(context, net)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: net >= 0 
-                          ? ThemeHelper.primary(context)
-                          : ThemeHelper.expenseColor(context),
-                      fontWeight: FontWeight.bold,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: ScaledText(
+                      '${AppLocalizations.of(context)!.netIncome}: ${_formatCurrency(context, net)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: net >= 0 
+                            ? ThemeHelper.primary(context)
+                            : ThemeHelper.expenseColor(context),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
                     ),
-                    textAlign: TextAlign.right,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
                   ),
                 ),
               ],
@@ -1913,14 +1956,17 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: ScaledText(
-                          '${AppLocalizations.of(context)!.incomeAmount}: ${_formatCurrency(context, income)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.8),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: ScaledText(
+                            '${AppLocalizations.of(context)!.incomeAmount}: ${_formatCurrency(context, income)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                            maxLines: 1,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
                         ),
                       ),
                     ],
@@ -1937,20 +1983,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: ScaledText(
-                          '${AppLocalizations.of(context)!.expenseAmount}: ${_formatCurrency(context, expense)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.8),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: ScaledText(
+                            '${AppLocalizations.of(context)!.expenseAmount}: ${_formatCurrency(context, expense)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
                           ),
-                          textAlign: TextAlign.right,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   constraints: const BoxConstraints(maxWidth: 80),
                   child: ScaledText(
@@ -2054,12 +2104,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '${AppLocalizations.of(context)!.currencySymbol}$total',
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                SizedBox(
+                  width: centerSpaceRadius * 2 - 12,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${AppLocalizations.of(context)!.currencySymbol}$total',
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -2168,10 +2226,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     switch (_period) {
       case 'week':
-        final weekStart = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
-        final weekEnd = weekStart.add(const Duration(days: 6));
+        final weekRange = _getWeekRange();
         final rangeFormat = DateFormat.MMMd(locale);
-        return '${rangeFormat.format(weekStart)} - ${rangeFormat.format(weekEnd)}';
+        return '${rangeFormat.format(weekRange['start']!)} - ${rangeFormat.format(weekRange['end']!)}';
       case 'year':
         return '${_selectedDate.year}';
       case 'month':
@@ -2297,13 +2354,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 selectedYear = years[index];
                                 
                                 // 计算该年月的最大天数
-                                int maxDays = DateTime(selectedYear, selectedMonth + 1, 0).day;
+                                int maxDays = DateUtils.getDaysInMonth(selectedYear, selectedMonth);
                                 
                                 // 如果是当前年份，月份和日期不能超过今天
                                 if (selectedYear == now.year) {
                                   if (selectedMonth > now.month) {
                                     selectedMonth = now.month;
-                                    maxDays = DateTime(selectedYear, selectedMonth + 1, 0).day;
+                                    maxDays = DateUtils.getDaysInMonth(selectedYear, selectedMonth);
                                   }
                                   if (selectedMonth == now.month) {
                                     maxDays = now.day;
@@ -2336,7 +2393,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 selectedMonth = index + 1;
                                 
                                 // 计算该年月的最大天数
-                                int maxDays = DateTime(selectedYear, selectedMonth + 1, 0).day;
+                                int maxDays = DateUtils.getDaysInMonth(selectedYear, selectedMonth);
                                 
                                 // 如果是当前年月，日期不能超过今天
                                 if (selectedYear == now.year && selectedMonth == now.month) {
@@ -2367,7 +2424,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                                 selectedDay = index + 1;
                                 
                                 // 计算该年月的最大天数
-                                int maxDays = DateTime(selectedYear, selectedMonth + 1, 0).day;
+                                int maxDays = DateUtils.getDaysInMonth(selectedYear, selectedMonth);
                                 
                                 // 如果是当前年月，日期不能超过今天
                                 if (selectedYear == now.year && selectedMonth == now.month) {

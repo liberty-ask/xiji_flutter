@@ -7,6 +7,8 @@ import '../../widgets/common/custom_snackbar.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/constants.dart';
+import '../../utils/error_helper.dart';
+import '../../utils/validators.dart';
 import '../../l10n/app_localizations.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -40,7 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _sendCode() async {
     final phone = _phoneController.text.trim();
-    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(phone)) {
+    if (!Validators.isChinaMobile(phone)) {
       CustomSnackBar.showError(context, AppLocalizations.of(context)!.pleaseEnterCorrectPhone);
       return;
     }
@@ -74,7 +76,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
         String errorMessage = AppLocalizations.of(context)!.error;
         if (e.toString().contains('Exception:')) {
-          errorMessage = e.toString().replaceFirst('Exception: ', '');
+          errorMessage = ErrorHelper.extractErrorMessage(
+              e, defaultMessage: AppLocalizations.of(context)!.error);
         }
         CustomSnackBar.showError(context, errorMessage);
       }
@@ -109,7 +112,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) {
         String errorMessage = AppLocalizations.of(context)!.error;
         if (e.toString().contains('Exception:')) {
-          errorMessage = e.toString().replaceFirst('Exception: ', '');
+          errorMessage = ErrorHelper.extractErrorMessage(
+              e, defaultMessage: AppLocalizations.of(context)!.error);
         }
         CustomSnackBar.showError(context, errorMessage);
       }
@@ -148,7 +152,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return AppLocalizations.of(context)!.pleaseEnterPhone;
                     }
-                    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(value)) {
+                    if (!Validators.isChinaMobile(value)) {
                       return AppLocalizations.of(context)!.pleaseEnterCorrectPhone;
                     }
                     return null;

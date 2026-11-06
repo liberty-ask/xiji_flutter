@@ -7,6 +7,7 @@ import '../../widgets/common/error_widget.dart' as custom;
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../utils/amount_format.dart';
+import '../../utils/transaction_type_style.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../utils/icon_constants.dart';
@@ -143,7 +144,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   // 获取月份的天数
   int _getDaysInMonth(DateTime date) {
-    return DateTime(date.year, date.month + 1, 0).day;
+    return DateUtils.getDaysInMonth(date.year, date.month);
   }
 
   String get _localeTag => Localizations.localeOf(context).toString();
@@ -199,13 +200,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     
     if (net == 0) return null;
     
-    // 格式化金额（简化显示，不显示小数）
-    final amount = net.abs();
-    if (amount >= 10000) {
-      return '${net > 0 ? '+' : '-'}${(amount / 10000).toStringAsFixed(1)}w';
-    } else {
-      return '${net > 0 ? '+' : '-'}${amount.toStringAsFixed(0)}';
-    }
+    // 完整金额（千分位 + 2 位小数），格子内由 FittedBox 等比缩放
+    return '${net > 0 ? '+' : '-'}${AmountFormat.format(net.abs())}';
   }
 
   // 获取指定日期的交易列表
@@ -241,8 +237,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         title: Row(
           children: [
             Icon(
-              isIncome ? Icons.arrow_upward : Icons.arrow_downward,
-              color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context),
+              TransactionTypeStyle.icon(isIncome),
+              color: TransactionTypeStyle.color(context, isIncome),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -258,8 +254,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailRow(AppLocalizations.of(context)!.type, isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense,
-                  color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context)),
+              _buildDetailRow(AppLocalizations.of(context)!.type,
+                  TransactionTypeStyle.label(AppLocalizations.of(context)!, isIncome),
+                  color: TransactionTypeStyle.color(context, isIncome)),
               _buildDetailRow(AppLocalizations.of(context)!.name, transaction['name'] as String? ?? ''),
               _buildDetailRow(AppLocalizations.of(context)!.category, transaction['cat'] as String? ?? ''),
               _buildDetailRow(AppLocalizations.of(context)!.amount, transaction['amount'] as String? ?? ''),
@@ -1092,17 +1089,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ),
                         if (dateAmount != null) ...[
                           const SizedBox(height: 2),
-                          ScaledText(
-                            dateAmount,
-                            style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: isSelected
-                                  ? ThemeHelper.background(context).withValues(alpha: 0.8)
-                                  : (amountColor ?? Colors.white.withValues(alpha: 0.6)),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: ScaledText(
+                              dateAmount,
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected
+                                    ? ThemeHelper.background(context).withValues(alpha: 0.8)
+                                    : (amountColor ?? Colors.white.withValues(alpha: 0.6)),
+                              ),
+                              maxLines: 1,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ] else if (hasActivity) ...[
                           const SizedBox(height: 4),

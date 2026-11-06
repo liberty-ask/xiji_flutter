@@ -4,6 +4,7 @@ import '../../services/api/auth_service.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/validators.dart';
 import '../../utils/theme_helper.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../l10n/app_localizations.dart';
@@ -37,7 +38,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _sendCode() async {
     final phone = _phoneController.text.trim();
-    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(phone)) {
+    if (!Validators.isChinaMobile(phone)) {
       CustomSnackBar.showError(context, AppLocalizations.of(context)!.pleaseEnterCorrectPhone);
       return;
     }
@@ -142,7 +143,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     if (value == null || value.isEmpty) {
                       return AppLocalizations.of(context)!.pleaseEnterPhone;
                     }
-                    if (!RegExp(r'^1[3-9]\d{9}$').hasMatch(value)) {
+                    if (!Validators.isChinaMobile(value)) {
                       return AppLocalizations.of(context)!.pleaseEnterCorrectPhone;
                     }
                     return null;

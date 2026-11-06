@@ -1,16 +1,18 @@
-import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/material.dart';
 
 import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../data/local/local_user.dart';
+import '../../data/local/member_nicknames.dart';
 import '../../data/local/statistics_repository.dart';
+import '../../utils/amount_format.dart';
 
 /// 统计数据门面：本地优先架构下的统计页唯一数据源。
 ///
 /// 对外保持既有 Service 签名与响应 JSON 结构（页面零改动），内部全部
 /// 走本地库聚合（聚合下推 SQLite），不发任何网络请求。
-/// 一期单成员语义：本地库全部交易归属当前用户，memberId 参数忽略。
+/// 成员统计按交易真实归属 user_id 聚合（家庭成员交易随同步落地）；
+/// 其余统计方法的 memberId 参数暂不参与过滤，响应结构保持兼容。
 class StatisticsService {
   // 单例实例
   static StatisticsService? _instance;
@@ -98,16 +100,13 @@ class StatisticsService {
     }
   }
 
-  // ---------- 格式化（对齐服务端 NumberFormat：千分位、无小数）----------
+  // ---------- 格式化（千分位 + 2 位小数，统一走 AmountFormat）----------
 
-  // en_US 分组符同为 ,，输出与服务端 zh-CN 一致
-  static final NumberFormat _grouped = NumberFormat('#,##0', 'en_US');
+  // 金额格式化（带 ¥）
+  String _formatAmount(double v) => '¥${AmountFormat.format(v)}';
 
-  // 金额格式化（带 ¥，对齐服务端 formatAmount）
-  String _formatAmount(double v) => '¥${_grouped.format(v)}';
-
-  // 总金额格式化（无 ¥，对齐服务端 formatTotalAmount）
-  String _formatTotal(double v) => _grouped.format(v);
+  // 总金额格式化（无 ¥）
+  String _formatTotal(double v) => AmountFormat.format(v);
 
   // 环比字符串（对齐 calculateChangePercentage：整数百分比带符号）
   String _changeString(double current, double previous) {
@@ -243,7 +242,7 @@ class StatisticsService {
       ];
     } else if (period == 'month') {
       // 月维度：按天聚合
-      final lastDay = DateTime(year, month! + 1, 0).day;
+      final lastDay = DateUtils.getDaysInMonth(year, month!);
       final rows = await _stats.dailyTotals(
           familyId: familyId,
           type: type,
@@ -329,7 +328,7 @@ class StatisticsService {
     };
   }
 
-  // 获取成员统计（一期单成员：本人即唯一成员）
+  // 获取成员统计：按交易真实归属 user_id 聚合
   Future<Map<String, dynamic>> getByMember({
     required int type, // 0-收入，1-支出
     required int year,
@@ -342,34 +341,43 @@ class StatisticsService {
     final cur =
         _currentRange(period, year, month, weekStartDate, weekEndDate);
     final familyId = await CurrentFamilyStore.get();
-    final totals = await _stats.typeTotals(
+    final rows = await _stats.memberTotals(
         familyId: familyId,
         type: type,
         categoryId: categoryId,
         start: cur.start,
         end: cur.end);
 
-    final items = <Map<String, dynamic>>[];
-    if (totals.count > 0) {
-      final user = await LocalUser.load();
-      final amount = totals.amount;
-      // 单成员占比：金额非 0 即 100%
-      final percentage = amount == 0 ? 0.0 : 100.0;
-      items.add({
-        'memberId': user?.id ?? '',
-        'memberName': user?.nickname ?? '',
-        'avatar': user?.avatar,
-        'amount': amount,
-        'amountStr': _formatAmount(amount),
+    // 昵称回退链：成员昵称缓存 → 本人 LocalUser 资料 → 未知用户
+    // （与近期动态归属者共用 MemberNicknames.displayName）
+    final nicknameMap = await MemberNicknames.loadAll();
+    final user = await LocalUser.load();
+    final totalAmount = rows.fold<double>(0, (sum, r) => sum + r.amount);
+
+    final items = rows.map((r) {
+      final isMe = user != null && r.userId == user.id;
+      final memberName =
+          MemberNicknames.displayName(nicknameMap, r.userId, user);
+      // 成员占比：该成员金额 / 成员合计 × 100
+      final percentage =
+          totalAmount == 0 ? 0.0 : r.amount / totalAmount * 100;
+      return <String, dynamic>{
+        'memberId': r.userId,
+        'memberName': memberName,
+        // 头像仅本人可取本地缓存资料，他人留空由页面回退默认图标
+        'avatar': isMe ? user.avatar : null,
+        'amount': r.amount,
+        'amountStr': _formatAmount(r.amount),
         'percentage': percentage,
         'percentageStr': '${percentage.round()}%',
-        'count': totals.count,
+        'count': r.count,
         // 对齐服务端：均值保留 2 位（HALF_UP）
-        'avgAmount': (amount / totals.count * 100).round() / 100,
-      });
-    }
+        'avgAmount':
+            r.count == 0 ? 0.0 : (r.amount / r.count * 100).round() / 100,
+      };
+    }).toList();
 
-    return {'total': _formatTotal(totals.amount), 'items': items};
+    return {'total': _formatTotal(totalAmount), 'items': items};
   }
 
   // 获取日期统计（日历视图）

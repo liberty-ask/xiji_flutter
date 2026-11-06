@@ -186,11 +186,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             file,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              // 文件读取失败，尝试网络图片
-              return Image.network(
-                _avatarPreview!,
+              // 文件读取失败，尝试网络图片（磁盘缓存，离线可显示）
+              return CachedNetworkImage(
+                imageUrl: _avatarPreview!,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
+                errorWidget: (context, url, error) {
                   return Container(
                     color: ThemeHelper.surfaceLight(context),
                     child: Icon(

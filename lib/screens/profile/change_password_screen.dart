@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../widgets/common/scaled_text.dart';
+import '../../utils/error_helper.dart';
 import '../../utils/responsive_helper.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -56,7 +57,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (mounted) {
         String errorMessage = AppLocalizations.of(context)!.error;
         if (e.toString().contains('Exception:')) {
-          errorMessage = e.toString().replaceFirst('Exception: ', '');
+          errorMessage = ErrorHelper.extractErrorMessage(
+              e, defaultMessage: AppLocalizations.of(context)!.error);
         }
         CustomSnackBar.showError(context, errorMessage);
       }

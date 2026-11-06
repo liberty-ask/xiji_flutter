@@ -15,7 +15,9 @@ import '../../models/category.dart';
 import '../../parser/bill_csv_parser.dart';
 import '../../parser/bill_xlsx_parser.dart';
 import '../../services/api/category_service.dart';
+import '../../utils/error_helper.dart';
 import '../../utils/icon_constants.dart';
+import '../../utils/amount_format.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
 import '../../widgets/common/custom_snackbar.dart';
@@ -284,8 +286,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
         if (errorStr.contains('User cancelled') || errorStr.contains('取消')) {
           return;
         }
-        CustomSnackBar.showError(
-            context, errorStr.replaceFirst('Exception: ', ''));
+        CustomSnackBar.showError(context, ErrorHelper.extractErrorMessage(e));
       }
     }
   }
@@ -476,12 +477,14 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
               AppLocalizations.of(context)!.total, '${parse.totalCount}'),
           _buildStatRow(
               '${AppLocalizations.of(context)!.income}${AppLocalizations.of(context)!.total}',
-              '${AppLocalizations.of(context)!.currencySymbol}${parse.totalIncome.toStringAsFixed(2)}',
-              color: Colors.green),
+              '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(parse.totalIncome)}',
+              color: Colors.green,
+              autoFit: true),
           _buildStatRow(
               '${AppLocalizations.of(context)!.expense}${AppLocalizations.of(context)!.total}',
-              '${AppLocalizations.of(context)!.currencySymbol}${parse.totalExpense.toStringAsFixed(2)}',
-              color: ThemeHelper.expenseColor(context)),
+              '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(parse.totalExpense)}',
+              color: ThemeHelper.expenseColor(context),
+              autoFit: true),
           if (parse.errors.isNotEmpty)
             _buildStatRow(AppLocalizations.of(context)!.fail,
                 '${parse.errors.length}',
@@ -699,7 +702,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
           ),
           const SizedBox(width: 6),
           ScaledText(
-            '${AppLocalizations.of(context)!.currencySymbol}${item.row.amount.toStringAsFixed(2)}',
+            '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(item.row.amount)}',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -938,7 +941,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
     );
   }
 
-  Widget _buildStatRow(String label, String value, {Color? color}) {
+  Widget _buildStatRow(String label, String value, {Color? color, bool autoFit = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -951,14 +954,31 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
               color: Colors.white70,
             ),
           ),
-          ScaledText(
-            value,
-            style: ResponsiveHelper.responsiveTextStyle(
-              context,
-              fontWeight: FontWeight.bold,
-              color: color ?? Colors.white,
+          if (autoFit)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: ScaledText(
+                  value,
+                  style: ResponsiveHelper.responsiveTextStyle(
+                    context,
+                    fontWeight: FontWeight.bold,
+                    color: color ?? Colors.white,
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            )
+          else
+            ScaledText(
+              value,
+              style: ResponsiveHelper.responsiveTextStyle(
+                context,
+                fontWeight: FontWeight.bold,
+                color: color ?? Colors.white,
+              ),
             ),
-          ),
         ],
       ),
     );

@@ -15,8 +15,10 @@ import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
 import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/theme_helper.dart';
+import '../../utils/transaction_type_style.dart';
 import '../../utils/error_helper.dart';
 import '../../utils/icon_constants.dart';
+import '../../utils/amount_format.dart';
 import '../../services/api/family_service.dart';
 import '../../data/local/current_family_store.dart';
 import '../../data/local/local_family_cache.dart';
@@ -869,18 +871,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                       Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          ScaledText(
-                                            '$currency${budget['used'] ?? 0}',
-                                            style: const TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
+                                          FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: ScaledText(
+                                              '$currency${AmountFormat.format(budget['used'] as num?)}',
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                              maxLines: 1,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           ScaledText(
-                                            ' / ${budget['budget'] ?? budget['total'] ?? 0}',
+                                            ' / ${AmountFormat.format((budget['budget'] ?? budget['total']) as num?)}',
                                             style: TextStyle(
                                               fontSize: 10,
                                               color: Colors.white.withValues(alpha: 0.2),
@@ -975,16 +980,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 : ThemeHelper.primary(context),
                                           ),
                                           const SizedBox(width: 4),
-                                          ScaledText(
-                                            expenseDiff >= 0
-                                                ? '+$currency${expenseDiff.toStringAsFixed(2)}'
-                                                : '$currency${expenseDiff.toStringAsFixed(2)}',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: expenseDiff >= 0
-                                                  ? ThemeHelper.expenseColor(context)
-                                                  : ThemeHelper.primary(context),
+                                          Flexible(
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerLeft,
+                                              child: ScaledText(
+                                                expenseDiff >= 0
+                                                    ? '+$currency${AmountFormat.format(expenseDiff)}'
+                                                    : '$currency${AmountFormat.format(expenseDiff)}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: expenseDiff >= 0
+                                                      ? ThemeHelper.expenseColor(context)
+                                                      : ThemeHelper.primary(context),
+                                                ),
+                                                maxLines: 1,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -1144,9 +1156,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 格式化金额：千分位 + 两位小数（后端返回数值，格式化由客户端负责）
+  // 格式化金额：千分位 + 两位小数（复用全局 AmountFormat）
   String _formatAmount(num value) {
-    return NumberFormat('#,##0.00').format(value);
+    return AmountFormat.format(value);
   }
 
   Widget _buildFamilyAvatarPlaceholder() {
@@ -1234,8 +1246,8 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             Icon(
-              isIncome ? Icons.arrow_upward : Icons.arrow_downward,
-              color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context),
+              TransactionTypeStyle.icon(isIncome),
+              color: TransactionTypeStyle.color(context, isIncome),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1253,8 +1265,8 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildDetailRow(
                 AppLocalizations.of(context)!.type,
-                isIncome ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense,
-                color: isIncome ? ThemeHelper.primary(context) : ThemeHelper.expenseColor(context)
+                TransactionTypeStyle.label(AppLocalizations.of(context)!, isIncome),
+                color: TransactionTypeStyle.color(context, isIncome)
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.category,
@@ -1262,8 +1274,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.amount,
-                '${AppLocalizations.of(context)!.currencySymbol}${amount.toStringAsFixed(2)}',
-                color: isIncome ? ThemeHelper.primary(context) : Colors.white
+                '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(amount)}',
+                color: isIncome ? ThemeHelper.primary(context) : Colors.white,
+                autoFit: true
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.date,
@@ -1299,7 +1312,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
   
-  Widget _buildDetailRow(String label, String value, {Color? color}) {
+  Widget _buildDetailRow(String label, String value, {Color? color, bool autoFit = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -1313,14 +1326,29 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          ScaledText(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              color: color ?? Colors.white,
-              fontWeight: FontWeight.bold,
+          if (autoFit)
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: ScaledText(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: color ?? Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+              ),
+            )
+          else
+            ScaledText(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                color: color ?? Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
         ],
       ),
     );

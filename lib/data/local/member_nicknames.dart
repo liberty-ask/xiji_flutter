@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../models/user.dart';
 import 'local_user.dart';
 
 /// 家庭成员昵称缓存（userId -> nickname）。
@@ -44,6 +45,23 @@ class MemberNicknames {
     } catch (_) {
       return {};
     }
+  }
+
+  /// 交易归属者显示名回退链：成员昵称缓存 → 本人昵称 → 「未知用户」。
+  /// 近期动态与成员统计共用同一口径；空昵称/空 userId 均落到「未知用户」。
+  static String displayName(
+    Map<String, String> nicknames,
+    String userId,
+    User? currentUser,
+  ) {
+    final cached = nicknames[userId];
+    if (cached != null && cached.isNotEmpty) return cached;
+    if (currentUser != null &&
+        userId == currentUser.id &&
+        currentUser.nickname.isNotEmpty) {
+      return currentUser.nickname;
+    }
+    return '未知用户';
   }
 
   /// 登出时清除（由调用方携带当前 userId 执行）
