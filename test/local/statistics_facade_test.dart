@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/utils/money.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
+import 'package:xiji_flutter/data/local/member_nicknames.dart';
 import 'package:xiji_flutter/data/local/statistics_repository.dart';
 import 'package:xiji_flutter/data/local/transaction_repository.dart';
 import 'package:xiji_flutter/models/user.dart';
@@ -24,7 +25,7 @@ void main() {
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    // 本地用户缓存 mock：一期单成员语义下的成员身份来源
+    // 本地用户缓存 mock：成员统计的本人身份来源
     SharedPreferences.setMockInitialValues({
       LocalUser.profileKey: jsonEncode(User(
         id: 'u1',
@@ -48,13 +49,14 @@ void main() {
     double amount,
     DateTime date, {
     String categoryId = diningId,
+    String userId = 'u1',
   }) =>
       txRepo.insert(TransactionsCompanion.insert(
         type: type,
         categoryId: categoryId,
         amountCents: Money.yuanToCents(amount),
         date: date,
-        userId: 'u1',
+        userId: userId,
       ));
 
   group('任务 2.6：统计门面（对齐服务端响应结构）', () {
@@ -67,17 +69,17 @@ void main() {
       final data = await service.getStatistics(
           type: 1, year: 2026, period: 'month', month: 10);
 
-      expect(data['total'], '12,600', reason: '千分位、无小数、无¥');
+      expect(data['total'], '12,600.00', reason: '千分位、固定 2 位小数、无¥');
       expect(data['change'], '+5%'); // (12600-12000)/12000*100
       final items = data['items'] as List;
       expect(items.length, 2, reason: '收入交易不计入支出统计');
       expect(items[0]['name'], '购物', reason: '按金额降序');
-      expect(items[0]['amount'], '¥12,345');
+      expect(items[0]['amount'], '¥12,345.00');
       expect(items[0]['pct'], '98%'); // 12345/12600 = 97.98
       expect(items[0]['color'], '#13ec5b');
       expect(items[0]['icon'], isNotNull);
       expect(items[1]['name'], '餐饮');
-      expect(items[1]['amount'], '¥255');
+      expect(items[1]['amount'], '¥255.00');
       expect(items[1]['pct'], '2%'); // 255/12600 = 2.02
       expect(items[1]['color'], '#fbbf24');
 
@@ -119,7 +121,7 @@ void main() {
           period: 'week',
           weekStartDate: '2026-10-19',
           weekEndDate: '2026-10-25');
-      expect(stats['total'], '70');
+      expect(stats['total'], '70.00');
       expect(stats['change'], '+133%'); // (70-30)/30*100 = 133.33
 
       final overview = await service.getOverview(
@@ -226,19 +228,19 @@ void main() {
       expect(sun['expenseChange'], 100.0, reason: '前一日支出为 0 时 +100');
     });
 
-    test('成员统计：一期单成员，含分类过滤与空月', () async {
+    test('成员统计：单成员占比 100%，含分类过滤与空月', () async {
       await seed(1, 30, DateTime(2026, 10, 2));
       await seed(1, 70, DateTime(2026, 10, 3), categoryId: shoppingId);
 
       final data = await service.getByMember(
           type: 1, year: 2026, period: 'month', month: 10);
       final items = data['items'] as List;
-      expect(items.length, 1, reason: '一期单成员：本人即唯一成员');
+      expect(items.length, 1, reason: '按真实归属聚合：仅 u1 一条');
       final m = items[0] as Map<String, dynamic>;
       expect(m['memberId'], 'u1');
       expect(m['memberName'], '测试用户');
       expect(m['amount'], 100);
-      expect(m['amountStr'], '¥100');
+      expect(m['amountStr'], '¥100.00');
       expect(m['percentage'], 100.0);
       expect(m['percentageStr'], '100%');
       expect(m['count'], 2);
@@ -253,8 +255,72 @@ void main() {
 
       final empty = await service.getByMember(
           type: 1, year: 2026, period: 'month', month: 11);
-      expect(empty['total'], '0');
+      expect(empty['total'], '0.00');
       expect(empty['items'] as List, isEmpty);
+    });
+
+    test('成员统计：按真实归属分为多行，占比与昵称回退正确', () async {
+      // 昵称缓存：u2 有缓存；u3 未命中且非本人 → 未知用户
+      await MemberNicknames.cacheAll({'u2': '小明'});
+      await seed(1, 60, DateTime(2026, 10, 2)); // u1（本人）
+      await seed(1, 30, DateTime(2026, 10, 3),
+          userId: 'u2', categoryId: shoppingId);
+      await seed(1, 10, DateTime(2026, 10, 4), userId: 'u3');
+
+      final data = await service.getByMember(
+          type: 1, year: 2026, period: 'month', month: 10);
+      expect(data['total'], '100.00');
+      final items = data['items'] as List;
+      expect(items.length, 3, reason: '按 userId 分组，不合并到当前登录人');
+
+      final me = items[0] as Map<String, dynamic>;
+      expect(me['memberId'], 'u1');
+      expect(me['memberName'], '测试用户', reason: '缓存未命中时回退本人资料');
+      expect(me['amount'], 60);
+      expect(me['amountStr'], '¥60.00');
+      expect(me['percentageStr'], '60%');
+      expect(me['count'], 1);
+      expect(me['avgAmount'], 60);
+
+      final cached = items[1] as Map<String, dynamic>;
+      expect(cached['memberId'], 'u2');
+      expect(cached['memberName'], '小明');
+      expect(cached['amount'], 30);
+      expect(cached['percentageStr'], '30%');
+      expect(cached['avatar'], isNull, reason: '头像仅本人可取本地资料');
+
+      final unknown = items[2] as Map<String, dynamic>;
+      expect(unknown['memberId'], 'u3');
+      expect(unknown['memberName'], '未知用户');
+      expect(unknown['percentageStr'], '10%');
+
+      // 分类过滤仍按成员分组：仅餐饮 → u1 与 u3
+      final filtered = await service.getByMember(
+          type: 1, year: 2026, period: 'month', month: 10, categoryId: diningId);
+      final filteredItems = filtered['items'] as List;
+      expect(filteredItems.length, 2);
+      expect(filteredItems[0]['memberId'], 'u1');
+      expect(filteredItems[1]['memberId'], 'u3');
+      expect(filtered['total'], '70.00');
+    });
+
+    test('成员统计：空 userId 脏数据归入未知用户，不并入当前用户', () async {
+      await seed(1, 80, DateTime(2026, 10, 2)); // u1
+      await seed(1, 20, DateTime(2026, 10, 3), userId: ''); // 历史备份缺归属
+
+      final data = await service.getByMember(
+          type: 1, year: 2026, period: 'month', month: 10);
+      final items = data['items'] as List;
+      expect(items.length, 2, reason: '空 userId 独立成组，不并入 u1');
+      final me = items[0] as Map<String, dynamic>;
+      expect(me['memberId'], 'u1');
+      expect(me['amount'], 80);
+      expect(me['percentageStr'], '80%');
+      final dirty = items[1] as Map<String, dynamic>;
+      expect(dirty['memberId'], '');
+      expect(dirty['memberName'], '未知用户');
+      expect(dirty['amount'], 20);
+      expect(dirty['percentageStr'], '20%');
     });
 
     test('日历：逐日生成、type=2 与墓碑排除、热力值与汇总', () async {
@@ -327,6 +393,32 @@ void main() {
       final yearData = await service.getByDate(year: 2026, period: 'year');
       expect(yearData['days'] as List, hasLength(365));
       expect(yearData.containsKey('month'), false);
+    });
+
+    test('金额格式：统一千分位 + 固定 2 位小数（0/小金额/千元/过万）', () async {
+      Future<String> totalOf(int month) async {
+        final data = await service.getStatistics(
+            type: 1, year: 2026, period: 'month', month: month);
+        return data['total'] as String;
+      }
+
+      expect(await totalOf(1), '0.00', reason: '无数据按 0.00 展示');
+
+      await seed(1, 0.5, DateTime(2026, 2, 3));
+      expect(await totalOf(2), '0.50', reason: '小金额补足两位小数');
+
+      await seed(1, 999.99, DateTime(2026, 3, 3));
+      expect(await totalOf(3), '999.99');
+
+      await seed(1, 1234.5, DateTime(2026, 4, 3));
+      expect(await totalOf(4), '1,234.50', reason: '千元以上带分组符');
+
+      await seed(1, 12345.67, DateTime(2026, 5, 3));
+      expect(await totalOf(5), '12,345.67', reason: '过万带分组符');
+      final items = (await service.getStatistics(
+              type: 1, year: 2026, period: 'month', month: 5))['items'] as List;
+      expect((items[0] as Map<String, dynamic>)['amount'], '¥12,345.67',
+          reason: '分类金额同样 2 位小数');
     });
   });
 }

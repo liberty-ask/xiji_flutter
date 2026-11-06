@@ -10,9 +10,11 @@ import 'package:xiji_flutter/data/local/category_engine.dart';
 import 'package:xiji_flutter/data/local/category_repository.dart';
 import 'package:xiji_flutter/data/local/category_rule_repository.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
+import 'package:xiji_flutter/data/local/statistics_repository.dart';
 import 'package:xiji_flutter/data/local/transaction_repository.dart';
 import 'package:xiji_flutter/models/user.dart';
 import 'package:xiji_flutter/parser/bill_xlsx_parser.dart';
+import 'package:xiji_flutter/utils/money.dart';
 
 void main() {
   final parser = BillXlsxParser();
@@ -82,7 +84,7 @@ void main() {
       expect(result.rows[2].type, 1,
           reason: '收/支「/」不计收支 → 默认支出（对齐服务端微信解析口径）');
       expect(result.rows[3].type, 1,
-          reason: '已全额退款行解析层按「/」默认支出，导入服务修正为收入');
+          reason: '已全额退款行「/」默认支出，导入服务不按退款文本改写明确方向的行');
       expect(result.rows[3].status, '已全额退款');
       expect(result.rows[4].amount, 1234.56, reason: '千分位金额清理');
       expect(result.rows[4].tradeNo,
@@ -125,16 +127,18 @@ void main() {
     });
   });
 
-  group('微信 XLSX 导入链路（同单号去重与退款修正）', () {
+  group('微信 XLSX 导入链路（同单号去重与退款守卫）', () {
     late AppDatabase db;
+    late TransactionRepository transactions;
     late BillImportService service;
 
     setUp(() async {
       db = AppDatabase(NativeDatabase.memory());
+      transactions = TransactionRepository(db);
       final rules = CategoryRuleRepository(db);
       final categories = CategoryRepository(db);
       service = BillImportService.withRepos(
-        TransactionRepository(db),
+        transactions,
         rules,
         CategoryEngine(rules, categories, const []),
       );
@@ -164,11 +168,43 @@ void main() {
       expect(outcome.skipCount, 1);
     });
 
-    test('已全额退款行经导入服务修正为收入', () async {
+    test('「/」已全额退款行保持支出：退款文本不转收入、不参与冲抵', () async {
       final parsed = parser.parse(wechatXlsx())!;
+      final rawRefund =
+          parsed.rows.firstWhere((r) => r.tradeNo == '4200001237');
+      expect(rawRefund.type, 1, reason: '「/」解析层兜底支出');
+      expect(rawRefund.status, '已全额退款');
+      expect(Money.yuanToCents(rawRefund.amount), 3500);
+
       final preview = await service.prepare(parsed.rows);
-      final refund = preview.firstWhere((i) => i.row.status == '已全额退款');
-      expect(refund.row.type, 0, reason: '状态含「退款」→ 收入（导入服务修正）');
+      final refundItem =
+          preview.firstWhere((i) => i.row.tradeNo == '4200001237');
+      expect(refundItem.row.type, 1, reason: '明确标注方向的行不被退款文本改写');
+      expect(refundItem.refund, false, reason: '仅 type=2 未标注方向的行才是退款候选');
+      expect(refundItem.refundLinked, false, reason: 'type=1 不进净额冲抵链路');
+      expect(Money.yuanToCents(refundItem.row.amount), 3500);
+
+      final outcome = await service.importRows(preview);
+      expect(outcome.successCount, 5);
+      expect(outcome.skipCount, 0);
+
+      final saved = await transactions.listAll('');
+      final refund =
+          saved.firstWhere((t) => t.tradeNo == '4200001237');
+      expect(refund.type, 1, reason: '按真实消费以支出入账，不得变成收入(0)');
+      expect(refund.amountCents, 3500);
+      expect(refund.refundOfId, isNull, reason: '未关联原支出');
+      expect(refund.refundedCents, 0, reason: '无任何支出被冲抵');
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(Money.yuanToCents(summary.expense), 130506,
+          reason: '25.50 + 10.00 + 35.00 + 1234.56，退款行全额计入支出');
+      expect(Money.yuanToCents(summary.income), 10000,
+          reason: '收入仅转账 100.00，退款不进收入');
     });
   });
 }
