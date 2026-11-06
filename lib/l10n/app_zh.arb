@@ -477,5 +477,12 @@
   "uploadImageFailed": "上传图片失败: {error}",
   "taskUploadParse": "上传解析",
   "taskImport": "导入",
-  "taskInProgress": "{task}中"
+  "taskInProgress": "{task}中",
+  "categoryNotFound": "分类不存在",
+  "categoryNameExists": "该类型下分类名称已存在",
+  "builtinCategoryNotDeletable": "内置分类不可删除",
+  "builtinCategoryNotEditable": "内置分类不可修改",
+  "transactionNotFound": "交易记录不存在",
+  "refundTypeChangeNotAllowed": "退款记录不支持修改收支类型",
+  "refundToNeutralConfirm": "该笔已退款 {amount}，改为不计收支后整笔不再计入支出统计。"
 }

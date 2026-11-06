@@ -1077,7 +1077,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         ScaledText(
-                                          item['title'] as String? ?? '',
+                                          item['title'] as String? ??
+                                              (isIncome
+                                                  ? AppLocalizations.of(context)!.income
+                                                  : AppLocalizations.of(context)!.expense),
                                           style: const TextStyle(
                                             fontSize: 14,
                                             fontWeight: FontWeight.bold,
@@ -1270,7 +1273,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.category,
-                item['title'] as String? ?? ''
+                item['title'] as String? ??
+                    (isIncome
+                        ? AppLocalizations.of(context)!.income
+                        : AppLocalizations.of(context)!.expense)
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.amount,

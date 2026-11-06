@@ -257,7 +257,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               _buildDetailRow(AppLocalizations.of(context)!.type,
                   TransactionTypeStyle.label(AppLocalizations.of(context)!, isIncome),
                   color: TransactionTypeStyle.color(context, isIncome)),
-              _buildDetailRow(AppLocalizations.of(context)!.name, transaction['name'] as String? ?? ''),
+              _buildDetailRow(AppLocalizations.of(context)!.name, transaction['name'] as String? ?? (transaction['type'] == 0 ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense)),
               _buildDetailRow(AppLocalizations.of(context)!.category, transaction['cat'] as String? ?? ''),
               _buildDetailRow(AppLocalizations.of(context)!.amount, transaction['amount'] as String? ?? ''),
               _buildDetailRow(AppLocalizations.of(context)!.time, transaction['time'] as String? ?? ''),
@@ -735,7 +735,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ScaledText(
-                            item['name'] as String? ?? '',
+                            item['name'] as String? ?? (item['type'] == 0 ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense),
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,

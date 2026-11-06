@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:async';
 import '../../utils/constants.dart';
+import '../../utils/error_helper.dart';
 
 /// 会话过期异常：refresh token被服务端确认无效（HTTP 401）
 class SessionExpiredException implements Exception {
@@ -223,7 +224,7 @@ class ApiClient {
           filename: fileName,
         );
       } else {
-        throw Exception('不支持的文件类型');
+        throw const LocalizedException(LocalizedErrorCode.unsupportedFileType);
       }
 
       final formData = FormData.fromMap({
@@ -237,7 +238,8 @@ class ApiClient {
         return data;
       }
       // 如果后端返回的是对象，可能需要从data字段中获取
-      throw Exception('上传文件失败：返回格式错误');
+      throw const LocalizedException(
+          LocalizedErrorCode.uploadFailedFormatError);
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -276,7 +278,7 @@ class ApiClient {
           filename: name,
         );
       } else {
-        throw Exception('不支持的文件类型：需要提供 file、fileBytes+fileName 或 file 对象');
+        throw const LocalizedException(LocalizedErrorCode.unsupportedFileType);
       }
 
       final formDataMap = <String, dynamic>{

@@ -506,5 +506,18 @@
       "count": {"type": "int"}
     }
   },
-  "billGroupCount": "{count} transactions"
+  "billGroupCount": "{count} transactions",
+  "categoryNotFound": "Category not found",
+  "categoryNameExists": "A category with this name already exists in this type",
+  "builtinCategoryNotDeletable": "Built-in categories cannot be deleted",
+  "builtinCategoryNotEditable": "Built-in categories cannot be edited",
+  "transactionNotFound": "Transaction not found",
+  "refundTypeChangeNotAllowed": "Refund records cannot change between income and expense",
+  "refundToNeutralConfirm": "This record has been refunded {amount}. Changing it to non-income/expense will exclude the entire record from expense statistics.",
+  "@refundToNeutralConfirm": {
+    "description": "Confirmation before changing a refunded expense transaction to non-income/expense",
+    "placeholders": {
+      "amount": {"type": "String"}
+    }
+  }
 }

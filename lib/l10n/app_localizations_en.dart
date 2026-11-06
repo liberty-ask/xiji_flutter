@@ -1431,4 +1431,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String billGroupCount(Object count) {
     return '$count transactions';
   }
+
+  @override
+  String get categoryNotFound => 'Category not found';
+
+  @override
+  String get categoryNameExists =>
+      'A category with this name already exists in this type';
+
+  @override
+  String get builtinCategoryNotDeletable =>
+      'Built-in categories cannot be deleted';
+
+  @override
+  String get builtinCategoryNotEditable =>
+      'Built-in categories cannot be edited';
+
+  @override
+  String get transactionNotFound => 'Transaction not found';
+
+  @override
+  String get refundTypeChangeNotAllowed =>
+      'Refund records cannot change between income and expense';
+
+  @override
+  String refundToNeutralConfirm(String amount) {
+    return 'This record has been refunded $amount. Changing it to non-income/expense will exclude the entire record from expense statistics.';
+  }
 }

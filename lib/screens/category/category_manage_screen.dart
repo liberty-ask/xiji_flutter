@@ -93,7 +93,7 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
         }
       } catch (e) {
         if (mounted) {
-          final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.deleteFailed);
+          final errorMessage = ErrorHelper.resolveMessage(context, e, defaultMessage: AppLocalizations.of(context)!.deleteFailed);
           CustomSnackBar.showError(context, errorMessage);
         }
       }
@@ -331,7 +331,7 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                           isLoading = false;
                         });
                         if (context.mounted) {
-                          final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.addFailed);
+                          final errorMessage = ErrorHelper.resolveMessage(context, e, defaultMessage: AppLocalizations.of(context)!.addFailed);
                           CustomSnackBar.showError(context, errorMessage);
                         }
                       }
@@ -585,7 +585,7 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                           isLoading = false;
                         });
                         if (context.mounted) {
-                          final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.updateFailed);
+                          final errorMessage = ErrorHelper.resolveMessage(context, e, defaultMessage: AppLocalizations.of(context)!.updateFailed);
                           CustomSnackBar.showError(context, errorMessage);
                         }
                       }

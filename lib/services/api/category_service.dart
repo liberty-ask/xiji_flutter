@@ -8,6 +8,7 @@ import '../../data/local/category_repository.dart';
 import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../models/category.dart';
+import '../../utils/error_helper.dart';
 import '../../sync/sync_scheduler.dart';
 
 /// 分类数据门面：内置分类 + 自定义分类的本地读写，不发起任何网络请求。
@@ -63,7 +64,7 @@ class CategoryService {
     final trimmed = name.trim();
     final familyId = await CurrentFamilyStore.get();
     if (await _categories.countByName(familyId, trimmed, type) > 0) {
-      throw Exception('该类型下分类名称已存在');
+      throw const LocalizedException(LocalizedErrorCode.categoryNameExists);
     }
 
     final row = await _categories.insert(
@@ -89,10 +90,10 @@ class CategoryService {
   Future<void> deleteCategory(String id) async {
     final category = await _categories.findById(id);
     if (category == null) {
-      throw Exception('分类不存在');
+      throw const LocalizedException(LocalizedErrorCode.categoryNotFound);
     }
     if (category.isBuiltin) {
-      throw Exception('内置分类不可删除');
+      throw const LocalizedException(LocalizedErrorCode.builtinCategoryNotDeletable);
     }
     await _categories.softDelete(id);
     // 发件箱后台推送（fire-and-forget）
@@ -110,10 +111,10 @@ class CategoryService {
   }) async {
     final category = await _categories.findById(id);
     if (category == null) {
-      throw Exception('分类不存在');
+      throw const LocalizedException(LocalizedErrorCode.categoryNotFound);
     }
     if (category.isBuiltin) {
-      throw Exception('内置分类不可修改');
+      throw const LocalizedException(LocalizedErrorCode.builtinCategoryNotEditable);
     }
 
     final trimmed = name.trim();
@@ -125,7 +126,7 @@ class CategoryService {
           excludeId: id,
         ) >
             0) {
-      throw Exception('该类型下分类名称已存在');
+      throw const LocalizedException(LocalizedErrorCode.categoryNameExists);
     }
 
     final row = await _categories.update(

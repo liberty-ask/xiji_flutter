@@ -459,7 +459,7 @@
   "serverError": "服務器錯誤，請稍後重試",
   "requestCanceled": "請求已取消",
   "certificateError": "證書驗證失敗",
-  "unsupportedFileType": "不支持的文件類型",
+  "unsupportedFileType": "不支援的檔案類型",
   "uploadFailed": "上傳失敗",
   "uploadFailedFormatError": "上傳失敗：返回格式錯誤",
   "themePreviewDescription": "選擇主題後可以即時預覽效果，確認後保存。主題設定會保存到本機，即使退出登入也會保留。",
@@ -485,5 +485,12 @@
   "billNoTransactions": "未在{platform}帳單中發現交易記錄",
   "billHeaderUnrecognized": "無法識別帳單表頭，請確認檔案完整",
   "billRowsUnparsed": "解析到{count}行資料但均無法讀取",
-  "billGroupCount": "{count}筆"
+  "billGroupCount": "{count}筆",
+  "categoryNotFound": "分類不存在",
+  "categoryNameExists": "該類型下分類名稱已存在",
+  "builtinCategoryNotDeletable": "內建分類無法刪除",
+  "builtinCategoryNotEditable": "內建分類無法修改",
+  "transactionNotFound": "交易記錄不存在",
+  "refundTypeChangeNotAllowed": "退款記錄不支援修改收支類型",
+  "refundToNeutralConfirm": "該筆已退款 {amount}，改為不計收支後整筆不再計入支出統計。"
 }

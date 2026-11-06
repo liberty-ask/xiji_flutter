@@ -1359,11 +1359,56 @@ class _DetailScreenState extends State<DetailScreen> {
       } catch (e) {
         // 在异步操作后使用 mounted 检查，确保 widget 仍然存在
         if (mounted) {
-          final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.deleteFailed);
+          final errorMessage = ErrorHelper.resolveMessage(
+            context,
+            e,
+            defaultMessage: AppLocalizations.of(context)!.deleteFailed,
+          );
           CustomSnackBar.showError(context, errorMessage);
         }
       }
     }
+  }
+
+  /// 编辑对话框的收支类型分段按钮：三段等宽，
+  /// FittedBox(scaleDown) 保证小屏/大字号下不挤压、不换行。
+  Widget _buildEditTypeButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final effectiveColor =
+        selected ? color : Colors.white.withValues(alpha: 0.54);
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: selected ? color.withValues(alpha: 0.2) : Colors.transparent,
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: effectiveColor),
+                const SizedBox(width: 4),
+                ScaledText(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(fontSize: 14, color: effectiveColor),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showEditDialog(Transaction transaction) async {
@@ -1423,87 +1468,44 @@ class _DetailScreenState extends State<DetailScreen> {
                     ),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedType = TransactionType.expense;
-                                selectedCategory = null;
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: selectedType == TransactionType.expense
-                                    ? ThemeHelper.expenseColor(statefulContext).withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.arrow_downward,
-                                    size: 16,
-                                    color: selectedType == TransactionType.expense
-                                        ? ThemeHelper.expenseColor(statefulContext)
-                                        : Colors.white.withValues(alpha: 0.54),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ScaledText(
-                                    AppLocalizations.of(context)!.expense,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: selectedType == TransactionType.expense
-                                          ? ThemeHelper.expenseColor(statefulContext)
-                                          : Colors.white.withValues(alpha: 0.54),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                        _buildEditTypeButton(
+                          label: AppLocalizations.of(context)!.expense,
+                          icon: Icons.arrow_downward,
+                          color: ThemeHelper.expenseColor(statefulContext),
+                          selected: selectedType == TransactionType.expense,
+                          onTap: () {
+                            setDialogState(() {
+                              selectedType = TransactionType.expense;
+                              selectedCategory = null;
+                            });
+                          },
                         ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedType = TransactionType.income;
+                        _buildEditTypeButton(
+                          label: AppLocalizations.of(context)!.income,
+                          icon: Icons.arrow_upward,
+                          color: ThemeHelper.primary(statefulContext),
+                          selected: selectedType == TransactionType.income,
+                          onTap: () {
+                            setDialogState(() {
+                              selectedType = TransactionType.income;
+                              selectedCategory = null;
+                            });
+                          },
+                        ),
+                        _buildEditTypeButton(
+                          label: AppLocalizations.of(context)!.noCount,
+                          icon: Icons.remove,
+                          color: Colors.white70,
+                          selected: selectedType == TransactionType.neutral,
+                          onTap: () {
+                            setDialogState(() {
+                              // 支出→不计收支保留原分类；收入→不计收支需重选支出分类
+                              if (selectedType != TransactionType.expense) {
                                 selectedCategory = null;
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: selectedType == TransactionType.income
-                                    ? ThemeHelper.primary(statefulContext).withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.arrow_upward,
-                                    size: 16,
-                                    color: selectedType == TransactionType.income
-                                        ? ThemeHelper.primary(statefulContext)
-                                        : Colors.white.withValues(alpha: 0.54),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ScaledText(
-                                    AppLocalizations.of(context)!.income,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: selectedType == TransactionType.income
-                                          ? ThemeHelper.primary(statefulContext)
-                                          : Colors.white.withValues(alpha: 0.54),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                              }
+                              selectedType = TransactionType.neutral;
+                            });
+                          },
                         ),
                       ],
                     ),
@@ -1547,9 +1549,10 @@ class _DetailScreenState extends State<DetailScreen> {
                   const SizedBox(height: 8),
                   Builder(
                     builder: (categoryContext) {
-                      final categories = selectedType == TransactionType.expense
-                          ? categoryProvider.expenseCategories
-                          : categoryProvider.incomeCategories;
+                      // 不计收支沿用支出分类组（与账单导入口径一致）
+                      final categories = selectedType == TransactionType.income
+                          ? categoryProvider.incomeCategories
+                          : categoryProvider.expenseCategories;
                       
                       return Container(
                         constraints: const BoxConstraints(maxHeight: 200),
@@ -1682,6 +1685,51 @@ class _DetailScreenState extends State<DetailScreen> {
                         CustomSnackBar.showError(dialogContext, AppLocalizations.of(context)!.pleaseSelectCategory);
                         return;
                       }
+                      // 已退款的原支出改为不计收支：二次确认
+                      // （退款字段不在页面模型中，由门面按 id 查询完整行）
+                      if (selectedType == TransactionType.neutral &&
+                          transaction.type != TransactionType.neutral) {
+                        final refundedCents = await _transactionService
+                            .getRefundedCents(transaction.id);
+                        if (!dialogContext.mounted) return;
+                        if (refundedCents > 0) {
+                          final confirmed = await showDialog<bool>(
+                            context: dialogContext,
+                            builder: (confirmContext) => AlertDialog(
+                              backgroundColor: ThemeHelper.surface(confirmContext),
+                              content: ScaledText(
+                                AppLocalizations.of(context)!
+                                    .refundToNeutralConfirm(
+                                  AmountFormat.format(refundedCents / 100),
+                                ),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, false),
+                                  child: ScaledText(
+                                    AppLocalizations.of(context)!.cancel,
+                                    style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.6)),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, true),
+                                  child: ScaledText(
+                                    AppLocalizations.of(context)!.confirm,
+                                    style: TextStyle(
+                                        color: ThemeHelper.primary(confirmContext)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+                        }
+                      }
+                      if (!dialogContext.mounted) return;
                       setDialogState(() {
                         isLoading = true;
                       });
@@ -1709,6 +1757,7 @@ class _DetailScreenState extends State<DetailScreen> {
                               id: transaction.id,
                               type: selectedType,
                               category: selectedCategory!.name,
+                              icon: transaction.icon,
                               amount: double.parse(amountController.text),
                               date: selectedDate,
                               userId: transaction.userId,
@@ -1724,7 +1773,13 @@ class _DetailScreenState extends State<DetailScreen> {
                         
                         // 在异步操作前保存 dialogContext 到局部变量
                         final localDialogContext = dialogContext;
-                        final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(localContext)!.editFailed);
+                        if (!localDialogContext.mounted) return;
+                        final errorMessage = ErrorHelper.resolveMessage(
+                          localDialogContext,
+                          e,
+                          defaultMessage:
+                              AppLocalizations.of(localDialogContext)!.editFailed,
+                        );
                         CustomSnackBar.showError(localDialogContext, errorMessage);
                       }
                     },

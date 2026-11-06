@@ -430,7 +430,8 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
         });
         CustomSnackBar.showError(
           context,
-          ErrorHelper.extractErrorMessage(
+          ErrorHelper.resolveMessage(
+            context,
             e,
             defaultMessage: AppLocalizations.of(context)!.transactionFailed,
           ),

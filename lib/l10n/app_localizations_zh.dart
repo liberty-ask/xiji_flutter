@@ -1386,6 +1386,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String billGroupCount(Object count) {
     return '$count transactions';
   }
+
+  @override
+  String get categoryNotFound => '分类不存在';
+
+  @override
+  String get categoryNameExists => '该类型下分类名称已存在';
+
+  @override
+  String get builtinCategoryNotDeletable => '内置分类不可删除';
+
+  @override
+  String get builtinCategoryNotEditable => '内置分类不可修改';
+
+  @override
+  String get transactionNotFound => '交易记录不存在';
+
+  @override
+  String get refundTypeChangeNotAllowed => '退款记录不支持修改收支类型';
+
+  @override
+  String refundToNeutralConfirm(String amount) {
+    return '该笔已退款 $amount，改为不计收支后整笔不再计入支出统计。';
+  }
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -2757,6 +2780,29 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String billGroupCount(Object count) {
     return '$count笔';
   }
+
+  @override
+  String get categoryNotFound => '分类不存在';
+
+  @override
+  String get categoryNameExists => '该类型下分类名称已存在';
+
+  @override
+  String get builtinCategoryNotDeletable => '内置分类不可删除';
+
+  @override
+  String get builtinCategoryNotEditable => '内置分类不可修改';
+
+  @override
+  String get transactionNotFound => '交易记录不存在';
+
+  @override
+  String get refundTypeChangeNotAllowed => '退款记录不支持修改收支类型';
+
+  @override
+  String refundToNeutralConfirm(String amount) {
+    return '该笔已退款 $amount，改为不计收支后整笔不再计入支出统计。';
+  }
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -4032,7 +4078,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get certificateError => '證書驗證失敗';
 
   @override
-  String get unsupportedFileType => '不支持的文件類型';
+  String get unsupportedFileType => '不支援的檔案類型';
 
   @override
   String get uploadFailed => '上傳失敗';
@@ -4131,5 +4177,28 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String billGroupCount(Object count) {
     return '$count筆';
+  }
+
+  @override
+  String get categoryNotFound => '分類不存在';
+
+  @override
+  String get categoryNameExists => '該類型下分類名稱已存在';
+
+  @override
+  String get builtinCategoryNotDeletable => '內建分類無法刪除';
+
+  @override
+  String get builtinCategoryNotEditable => '內建分類無法修改';
+
+  @override
+  String get transactionNotFound => '交易記錄不存在';
+
+  @override
+  String get refundTypeChangeNotAllowed => '退款記錄不支援修改收支類型';
+
+  @override
+  String refundToNeutralConfirm(String amount) {
+    return '該筆已退款 $amount，改為不計收支後整筆不再計入支出統計。';
   }
 }

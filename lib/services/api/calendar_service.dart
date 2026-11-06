@@ -109,14 +109,12 @@ class CalendarService {
       final category = categoryById[tx.categoryId];
       dailyDetails.putIfAbsent('${tx.date.day}', () => <dynamic>[]);
 
-      // name：优先描述，其次分类名，最后按类型兜底（对齐服务端）
-      String name;
+      // name：优先描述，其次分类名；兜底文案由 UI 按当前语言补全
+      String? name;
       if ((tx.description ?? '').isNotEmpty) {
         name = tx.description!;
       } else if (category != null) {
         name = category.name;
-      } else {
-        name = tx.type == 0 ? '收入' : '支出';
       }
 
       (dailyDetails['${tx.date.day}'] as List<dynamic>).add({

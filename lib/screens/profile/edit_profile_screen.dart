@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../utils/theme_helper.dart';
+import '../../utils/error_helper.dart';
 import '../../utils/responsive_helper.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../l10n/app_localizations.dart';
@@ -287,8 +288,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         context.pop();
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = ErrorHelper.resolveMessage(context, e);
       });
     } finally {
       if (mounted) {

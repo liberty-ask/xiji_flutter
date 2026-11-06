@@ -14,6 +14,7 @@ import '../../data/local/statistics_repository.dart';
 import '../../data/local/transaction_repository.dart';
 import '../../models/transaction.dart';
 import '../../sync/sync_scheduler.dart';
+import '../../utils/error_helper.dart';
 import '../../utils/money.dart';
 
 /// 交易数据门面：本地优先架构下的唯一读写入口。
@@ -83,7 +84,7 @@ class TransactionService {
     final familyId = await CurrentFamilyStore.get();
     final cat = await _categories.findByName(familyId, category, type);
     if (cat == null) {
-      throw Exception('分类不存在');
+      throw const LocalizedException(LocalizedErrorCode.categoryNotFound);
     }
     final user = await LocalUser.load();
 
@@ -160,12 +161,32 @@ class TransactionService {
   }) async {
     final existing = await _transactions.findById(id);
     if (existing == null) {
-      throw Exception('交易记录不存在');
+      throw const LocalizedException(LocalizedErrorCode.transactionNotFound);
+    }
+    // 退款行不得改收支类型：否则退款金额会被重复计入收入/支出，
+    // 且冲抵链条断裂
+    if (existing.refundOfId != null &&
+        existing.refundOfId!.isNotEmpty &&
+        type != existing.type) {
+      throw const LocalizedException(LocalizedErrorCode.refundTypeChangeNotAllowed);
     }
     final familyId = await CurrentFamilyStore.get();
-    final cat = await _categories.findByName(familyId, category, type);
+    local.Category? cat;
+    if (type == 2) {
+      // 不计收支不做分类 type 强校验（与账单导入口径一致）：
+      // 分类名未变沿用原分类，改名时支出组优先、收入组兜底
+      final currentCat = await _categories.findById(existing.categoryId);
+      if (currentCat != null && currentCat.name == category) {
+        cat = currentCat;
+      } else {
+        cat = await _categories.findByName(familyId, category, 1) ??
+            await _categories.findByName(familyId, category, 0);
+      }
+    } else {
+      cat = await _categories.findByName(familyId, category, type);
+    }
     if (cat == null) {
-      throw Exception('分类不存在');
+      throw const LocalizedException(LocalizedErrorCode.categoryNotFound);
     }
 
     await _transactions.update(
@@ -184,11 +205,18 @@ class TransactionService {
     return <String, dynamic>{};
   }
 
+  /// 交易已累计退款额（分）。页面模型不含退款字段，
+  /// 编辑改类型前按 id 查询完整行用于二次确认。
+  Future<int> getRefundedCents(String id) async {
+    final row = await _transactions.findById(id);
+    return row?.refundedCents ?? 0;
+  }
+
   /// 删除交易（软删除墓碑，参与后续同步）
   Future<void> deleteTransaction(String id) async {
     final existing = await _transactions.findById(id);
     if (existing == null) {
-      throw Exception('交易记录不存在');
+      throw const LocalizedException(LocalizedErrorCode.transactionNotFound);
     }
     await _transactions.softDelete(id);
     // 发件箱后台推送（fire-and-forget）
@@ -220,9 +248,8 @@ class TransactionService {
 
     final activities = recent.map((r) {
       final category = categoryById[r.categoryId];
-      // 标题：分类名 > 描述 > 默认（与服务端一致）
-      final title =
-          category?.name ?? r.description ?? '支出';
+      // 标题：分类名 > 描述（兜底文案由 UI 按当前语言补全）
+      final title = category?.name ?? r.description;
       final icon = category?.icon ?? 'payments';
       // 归属者：按记录 userId 走统一回退链
       final ownerName =

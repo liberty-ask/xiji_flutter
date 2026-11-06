@@ -190,7 +190,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final errorMessage = ErrorHelper.extractErrorMessage(
+        final errorMessage = ErrorHelper.resolveMessage(
+          context,
           e,
           defaultMessage: editId != null ? l10n.editFailed : l10n.addFailed,
         );

@@ -336,4 +336,120 @@ void main() {
       expect(first['icon'], 'payments', reason: '图标兜底默认值');
     });
   });
+
+  group('交易编辑：不计收支与退款守卫', () {
+    test('支出改不计收支：分类 ID 不变、落库 type=2', () async {
+      final id = (await txService.addTransaction(
+        type: 1,
+        category: '餐饮',
+        amount: 30,
+        date: '2026-11-15',
+        note: '午餐',
+      ))['id'] as String;
+      final before = await txRepo.findById(id);
+
+      await txService.updateTransaction(
+        id: id,
+        type: 2,
+        category: '餐饮',
+        amount: 30,
+        date: '2026-11-15',
+        note: '午餐',
+      );
+
+      final after = await txRepo.findById(id);
+      expect(after!.type, 2);
+      expect(after.categoryId, before!.categoryId,
+          reason: '分类名未变沿用原分类 ID');
+    });
+
+    test('导入产生的不计收支交易再次编辑保存成功（原缺陷回归）', () async {
+      await seedRaw(
+          desc: '转账', type: 2, amount: 50, date: DateTime(2026, 11, 15));
+      final row = (await txRepo.listAll('')).single;
+
+      await txService.updateTransaction(
+        id: row.id,
+        type: 2,
+        category: '餐饮',
+        amount: 50,
+        date: '2026-11-15',
+        note: '理财转出',
+      );
+
+      final after = await txRepo.findById(row.id);
+      expect(after!.type, 2);
+      expect(after.categoryId, row.categoryId);
+      expect(after.description, '理财转出');
+      expect(after.version, row.version + 1);
+    });
+
+    test('退款行改收支类型被拒且原值不变', () async {
+      await txRepo.insert(TransactionsCompanion.insert(
+        type: 2,
+        categoryId: diningId,
+        amountCents: Money.yuanToCents(20),
+        date: DateTime(2026, 11, 15),
+        userId: 'u1',
+        description: const Value('退款'),
+        refundOfId: const Value('expense-1'),
+      ));
+      final row = (await txRepo.listAll('')).single;
+
+      await expectLater(
+        txService.updateTransaction(
+          id: row.id,
+          type: 1,
+          category: '餐饮',
+          amount: 20,
+          date: '2026-11-15',
+          note: '退款',
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      final after = await txRepo.findById(row.id);
+      expect(after!.type, 2, reason: '被拒后类型保持原值');
+      expect(after.version, row.version);
+    });
+
+    test('改不计收支后退出统计与近期动态，改回支出后恢复', () async {
+      final now = DateTime(2026, 11, 15, 12);
+      final id = (await txService.addTransaction(
+        type: 1,
+        category: '餐饮',
+        amount: 30,
+        date: '2026-11-15',
+        note: '午餐',
+      ))['id'] as String;
+
+      var home = await txService.getHomeData(now);
+      expect(home['expense'], 30);
+      expect(home['activities'] as List, hasLength(1));
+
+      await txService.updateTransaction(
+        id: id,
+        type: 2,
+        category: '餐饮',
+        amount: 30,
+        date: '2026-11-15',
+        note: '午餐',
+      );
+      home = await txService.getHomeData(now);
+      expect(home['expense'], 0, reason: '不计收支不进统计');
+      expect(home['activities'] as List, isEmpty, reason: '不计收支不进近期动态');
+
+      await txService.updateTransaction(
+        id: id,
+        type: 1,
+        category: '餐饮',
+        amount: 30,
+        date: '2026-11-15',
+        note: '午餐',
+      );
+      home = await txService.getHomeData(now);
+      expect(home['expense'], 30, reason: '改回支出后统计恢复');
+      expect(home['activities'] as List, hasLength(1));
+    });
+  });
 }

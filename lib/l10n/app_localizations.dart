@@ -2758,6 +2758,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} transactions'**
   String billGroupCount(Object count);
+
+  /// No description provided for @categoryNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Category not found'**
+  String get categoryNotFound;
+
+  /// No description provided for @categoryNameExists.
+  ///
+  /// In en, this message translates to:
+  /// **'A category with this name already exists in this type'**
+  String get categoryNameExists;
+
+  /// No description provided for @builtinCategoryNotDeletable.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in categories cannot be deleted'**
+  String get builtinCategoryNotDeletable;
+
+  /// No description provided for @builtinCategoryNotEditable.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in categories cannot be edited'**
+  String get builtinCategoryNotEditable;
+
+  /// No description provided for @transactionNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction not found'**
+  String get transactionNotFound;
+
+  /// No description provided for @refundTypeChangeNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Refund records cannot change between income and expense'**
+  String get refundTypeChangeNotAllowed;
+
+  /// Confirmation before changing a refunded expense transaction to non-income/expense
+  ///
+  /// In en, this message translates to:
+  /// **'This record has been refunded {amount}. Changing it to non-income/expense will exclude the entire record from expense statistics.'**
+  String refundToNeutralConfirm(String amount);
 }
 
 class _AppLocalizationsDelegate
