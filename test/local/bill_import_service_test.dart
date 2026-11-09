@@ -63,9 +63,11 @@ void main() {
     int? type = 1,
     String? status,
     DateTime? date,
+    String platformCode = 'alipay',
+    double? refundedAmount,
   }) {
     return ParsedBillRow(
-      platformCode: 'alipay',
+      platformCode: platformCode,
       tradeNo: tradeNo,
       merchantOrderNo: merchantOrderNo,
       date: date ?? DateTime(2026, 9, 1, 10, 0, 0),
@@ -74,6 +76,7 @@ void main() {
       counterparty: counterparty,
       description: description,
       status: status,
+      refundedAmount: refundedAmount,
     );
   }
 
@@ -163,7 +166,7 @@ void main() {
       expect(await transactions.listAll(''), hasLength(2));
     });
 
-    test('预览即判定退款冲抵：可关联行标记不计收支，无原支出保持收入', () async {
+    test('预览即判定退款冲抵：可关联行标记不计收支，无原支出仅不关联', () async {
       final items = await service.prepare([
         row(
             tradeNo: 'JD9',
@@ -194,7 +197,7 @@ void main() {
             amount: 5,
             type: 2),
       ]);
-      expect(orphan.single.refundLinked, false, reason: '无原支出时降级为收入展示');
+      expect(orphan.single.refundLinked, false, reason: '无原支出时不猜测关联');
     });
 
     test('跨月退款仍冲抵原支出所属月份，不在退款当月计负支出', () async {
@@ -276,24 +279,266 @@ void main() {
           50.0);
     });
 
-    test('退款额超过剩余可退额时不关联，降级为独立收入行', () async {
+    test('京东：退款额超过剩余可退额时封顶冲抵，超出部分留不计收支', () async {
       final outcome = await service.importRows(await service.prepare([
-        row(tradeNo: 'JD4', merchantOrderNo: 'M_ORDER', amount: 10, type: 1),
+        row(
+            tradeNo: 'JD4',
+            merchantOrderNo: 'M_ORDER',
+            amount: 10,
+            type: 1,
+            platformCode: 'jd'),
         row(
             tradeNo: 'JD4',
             merchantOrderNo: 'M_REFUND',
             counterparty: '京东金融',
             description: '退款-商品',
             amount: 15,
-            type: 2),
+            type: 2,
+            platformCode: 'jd'),
       ]));
       expect(outcome.successCount, 2);
       final saved = await transactions.listAll('');
       final refund = saved.firstWhere((t) => t.merchantOrderNo == 'M_REFUND');
-      expect(refund.refundOfId, isNull, reason: '超额退款不猜关联');
-      expect(refund.type, 0, reason: '降级为独立收入行');
       final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
-      expect(pay.refundedCents, 0);
+      expect(refund.refundOfId, pay.id, reason: '同单号唯一命中即关联');
+      expect(refund.type, 2, reason: '京东退款行恒为不计收支，不降级成收入');
+      expect(pay.refundedCents, 1000, reason: '封顶在原支出金额，超出 5.00 不冲抵');
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 0.0, reason: '净支出封顶为 0，不会变负');
+      expect(summary.income, 0.0);
+    });
+
+    test('京东：原行金额括号锚定退款额，独立退款行不重复冲抵', () async {
+      final outcome = await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'JD5',
+            merchantOrderNo: 'M_ORDER',
+            amount: 158.80,
+            type: 1,
+            platformCode: 'jd',
+            refundedAmount: 8.80),
+        row(
+            tradeNo: 'JD5',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东金融',
+            description: '价保退款',
+            amount: 8.80,
+            type: 2,
+            platformCode: 'jd'),
+      ]));
+      expect(outcome.successCount, 2);
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.merchantOrderNo == 'M_ORDER');
+      expect(pay.refundedCents, 880, reason: '括号标注的已退款额直接锚定原支出');
+      final refund = saved.firstWhere((t) => t.merchantOrderNo == 'M_REFUND');
+      expect(refund.type, 2, reason: '独立退款行只做不计收支');
+      expect(refund.refundOfId, isNull, reason: '原行已锚定，不再重复关联冲抵');
+
+      final stats = StatisticsRepository(db);
+      final summary = await stats.rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 150.00, reason: '158.80 - 8.80，只扣一次');
+      expect(summary.income, 0.0);
+    });
+
+    test('京东：退款行交易单号等于原单商家订单号时反向关联', () async {
+      final outcome = await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'JD_TICKET_PAY',
+            merchantOrderNo: 'M_TICKET_1',
+            amount: 66,
+            type: 1,
+            platformCode: 'jd'),
+        row(
+            tradeNo: 'M_TICKET_1',
+            merchantOrderNo: 'M_TICKET_2',
+            counterparty: '某票务平台',
+            description: '退款-车票',
+            amount: 66,
+            type: 2,
+            platformCode: 'jd',
+            date: DateTime(2026, 9, 5, 10)),
+      ]));
+      expect(outcome.successCount, 2);
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.tradeNo == 'JD_TICKET_PAY');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'M_TICKET_1');
+      expect(refund.refundOfId, pay.id, reason: '按原单商家订单号反向命中');
+      expect(refund.type, 2);
+      expect(pay.refundedCents, 6600);
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 0.0, reason: '全额退回，净额 0');
+      expect(summary.income, 0.0, reason: '退款永不进收入');
+    });
+
+    test('京东：退款行商家订单号尾段为原单交易单号时可关联', () async {
+      final outcome = await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'QD9000001',
+            merchantOrderNo: 'M_SERIAL_1',
+            amount: 23.80,
+            type: 1,
+            platformCode: 'jd'),
+        row(
+            tradeNo: 'M_SERIAL_2',
+            merchantOrderNo: '9900123-QD9000001',
+            counterparty: '京东',
+            description: '价保退款',
+            amount: 3,
+            type: 2,
+            platformCode: 'jd',
+            date: DateTime(2026, 9, 8, 10)),
+      ]));
+      expect(outcome.successCount, 2);
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.tradeNo == 'QD9000001');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'M_SERIAL_2');
+      expect(refund.refundOfId, pay.id, reason: '按商家订单号 `流水号-原单号` 尾段命中');
+      expect(refund.type, 2);
+      expect(pay.refundedCents, 300);
+    });
+
+    test('京东：不计收支的全额退款原单与退款行都不进收入', () async {
+      final items = await service.prepare([
+        row(
+            tradeNo: 'JD7',
+            merchantOrderNo: 'M_ORDER',
+            amount: 60.00,
+            type: 2,
+            platformCode: 'jd'),
+        row(
+            tradeNo: 'JD7',
+            merchantOrderNo: 'M_REFUND',
+            counterparty: '京东',
+            description: '退款-商品',
+            amount: 60.00,
+            type: 2,
+            platformCode: 'jd',
+            date: DateTime(2026, 9, 4, 10)),
+      ]);
+      expect(items.every((i) => i.row.type == 2), true,
+          reason: '不计收支全额退款原单保持 2，不改写为支出');
+      final outcome = await service.importRows(items);
+      expect(outcome.successCount, 2);
+
+      final saved = await transactions.listAll('');
+      expect(saved.every((t) => t.type == 2), true);
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.income, 0.0, reason: '退款不产生收入');
+      expect(summary.expense, 0.0);
+    });
+
+    test('支付宝：退款行保持不计收支，不被改写为收入', () async {
+      final items = await service.prepare([
+        row(
+            tradeNo: 'ALI_REFUND_PAY',
+            amount: 88,
+            type: 1,
+            status: '交易成功'),
+        row(
+            tradeNo: 'ALI_REFUND_PAY_4197',
+            counterparty: '某商户',
+            description: '退款-某商品',
+            amount: 88,
+            type: 2,
+            status: '退款成功'),
+      ]);
+      final refund =
+          items.firstWhere((i) => i.row.tradeNo!.contains('_4197'));
+      expect(refund.row.type, 2, reason: '支付宝明确标注不计收支 → 不做收入改写');
+      expect(refund.refund, true, reason: '仍作为退款候选参与关联');
+      expect(refund.refundLinked, true, reason: '按基单号命中原支出');
+      expect(refund.categoryId, items.first.categoryId,
+          reason: '沿用原支出分类');
+    });
+
+    test('支付宝：拆分两笔部分退款按基单号累加冲抵，净额归零', () async {
+      final csv = [
+        row(
+            tradeNo: 'ALI_SPLIT',
+            merchantOrderNo: 'MER_SPLIT',
+            counterparty: '某电商商家',
+            description: '某电商-多笔订单',
+            amount: 90,
+            type: 1,
+            date: DateTime(2025, 7, 30, 20, 52, 56)),
+        row(
+            tradeNo: 'ALI_SPLIT_INP1',
+            merchantOrderNo: 'MER_SPLIT',
+            counterparty: '某电商商家',
+            description: '退款-某电商',
+            amount: 40,
+            type: 2,
+            status: '退款成功',
+            date: DateTime(2025, 7, 30, 20, 56, 41)),
+        row(
+            tradeNo: 'ALI_SPLIT_INP2',
+            merchantOrderNo: 'MER_SPLIT',
+            counterparty: '某电商商家',
+            description: '退款-某电商',
+            amount: 50,
+            type: 2,
+            status: '退款成功',
+            date: DateTime(2025, 7, 30, 20, 56, 28)),
+      ];
+      final outcome = await service.importRows(await service.prepare(csv));
+      expect(outcome.successCount, 3);
+
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.type == 1);
+      expect(pay.refundedCents, 9000, reason: '40 + 50 逐笔累加至原额');
+      final refunds = saved.where((t) => t.refundOfId == pay.id).toList();
+      expect(refunds, hasLength(2));
+      expect(refunds.every((r) => r.type == 2), true, reason: '退款不计收支');
+
+      final stats = StatisticsRepository(db);
+      final summary = await stats.rangeSummary(
+        familyId: '',
+        start: DateTime(2025, 7, 1),
+        end: DateTime(2025, 7, 31),
+      );
+      expect(summary.expense, 0.0, reason: '90 - 40 - 50 净额归零');
+      expect(summary.income, 0.0, reason: '退款不进收入');
+    });
+
+    test('支付宝：退款日期早于原支出时不关联', () async {
+      final outcome = await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'ALI_DATE',
+            amount: 50,
+            type: 1,
+            date: DateTime(2025, 8, 10)),
+        row(
+            tradeNo: 'ALI_DATE_M1',
+            counterparty: '某商户',
+            description: '退款-商品',
+            amount: 50,
+            type: 2,
+            status: '退款成功',
+            date: DateTime(2025, 8, 9)),
+      ]));
+      expect(outcome.successCount, 2);
+      final saved = await transactions.listAll('');
+      expect(saved.firstWhere((t) => t.tradeNo == 'ALI_DATE_M1').refundOfId,
+          isNull);
+      expect(saved.firstWhere((t) => t.tradeNo == 'ALI_DATE').refundedCents, 0);
     });
 
     test('删除退款行恢复原支出金额', () async {
@@ -463,7 +708,20 @@ void main() {
       expect(preview.first.row.type, 0, reason: '账单明确标注收入 → 保持收入');
     });
 
-    test('收/支未标注的退款行仍转收入（type=2 唯一合法服务对象）', () async {
+    test('京东口径：退款行恒为不计收支，不转收入', () async {
+      final preview = await service.prepare([
+        row(
+            counterparty: '瑞幸咖啡',
+            description: '退款-拿铁',
+            type: 2,
+            status: '退款成功',
+            platformCode: 'jd'),
+      ]);
+      expect(preview.first.row.type, 2, reason: '京东无「退款收入」，退款只做负向冲抵');
+      expect(preview.first.refundLinked, false, reason: '无原支出时不猜测关联');
+    });
+
+    test('支付宝口径：官方标注不计收支的退款行不转收入', () async {
       final preview = await service.prepare([
         row(
             counterparty: '瑞幸咖啡',
@@ -471,9 +729,221 @@ void main() {
             type: 2,
             status: '退款成功'),
       ]);
-      expect(preview.first.row.type, 0, reason: '收/支未标注 + 退款佐证 → 收入');
-      expect(preview.first.categoryId, uncategorizedIncomeId,
-          reason: '收入类型不命中支出关键词规则');
+      expect(preview.first.row.type, 2, reason: '支付宝退款行保持不计收支');
+    });
+  });
+
+  group('微信退款：原行状态锚定 + 独立退款行唯一关联', () {
+    test('部分退款：原行「已退款(¥45.30)」锚定，净支出 254.70', () async {
+      final preview = await service.prepare([
+        row(
+            tradeNo: 'WX_PAY',
+            counterparty: '某某医院',
+            amount: 300,
+            type: 1,
+            status: '已退款(¥45.30)',
+            date: DateTime(2025, 8, 21, 7, 35),
+            platformCode: 'wechat'),
+        row(
+            tradeNo: 'WX_REFUND',
+            counterparty: '某某医院',
+            amount: 45.30,
+            type: 0,
+            status: '已退款¥45.30',
+            date: DateTime(2025, 8, 24, 8, 44),
+            platformCode: 'wechat'),
+      ]);
+      final refundItem =
+          preview.firstWhere((i) => i.row.tradeNo == 'WX_REFUND');
+      expect(refundItem.row.type, 2, reason: '独立退款行不落普通收入');
+      expect(refundItem.refund, true);
+      expect(refundItem.refundLinked, false,
+          reason: '原行状态已锚定退款额，不重复关联');
+
+      final outcome = await service.importRows(preview);
+      expect(outcome.successCount, 2);
+
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.tradeNo == 'WX_PAY');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'WX_REFUND');
+      expect(pay.amountCents, 30000);
+      expect(pay.refundedCents, 4530, reason: '原行状态锚定已退额');
+      expect(refund.type, 2);
+      expect(refund.refundOfId, isNull, reason: '状态锚定优先，不跨行重复冲抵');
+      expect(refund.refundedCents, 0);
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2025, 8, 1),
+        end: DateTime(2025, 8, 31),
+      );
+      expect(summary.expense, closeTo(254.70, 0.001),
+          reason: '300 - 45.30 = 254.70');
+      expect(summary.income, 0.0, reason: '退款不计收入');
+    });
+
+    test('已全额退款与「对方已退还」均按原行金额全额锚定', () async {
+      await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'WX_FULL',
+            counterparty: '某商户',
+            amount: 100,
+            type: 1,
+            status: '已全额退款',
+            date: DateTime(2026, 9, 1),
+            platformCode: 'wechat'),
+        row(
+            tradeNo: 'WX_RETURN',
+            counterparty: '某联系人',
+            amount: 50,
+            type: 1,
+            status: '对方已退还',
+            date: DateTime(2026, 9, 2),
+            platformCode: 'wechat'),
+        row(
+            tradeNo: 'WX_RETURN_REFUND',
+            counterparty: '/',
+            amount: 50,
+            type: 0,
+            status: '已全额退款',
+            date: DateTime(2026, 9, 3),
+            platformCode: 'wechat'),
+      ]));
+
+      final saved = await transactions.listAll('');
+      expect(saved.firstWhere((t) => t.tradeNo == 'WX_FULL').refundedCents, 10000);
+      expect(
+          saved.firstWhere((t) => t.tradeNo == 'WX_RETURN').refundedCents, 5000,
+          reason: '「对方已退还」纳入退款语义');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'WX_RETURN_REFUND');
+      expect(refund.type, 2);
+      expect(refund.refundOfId, isNull, reason: '对方「/」无法匹配，不得虚增收入');
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 0.0, reason: '两笔支出全额退款，净额归零');
+      expect(summary.income, 0.0, reason: '退款行不落收入');
+    });
+
+    test('同对方唯一命中时关联原支出冲抵，退款行不计收支', () async {
+      final preview = await service.prepare([
+        row(
+            tradeNo: 'WX_PAY2',
+            counterparty: '某商户',
+            amount: 100,
+            type: 1,
+            status: '支付成功',
+            date: DateTime(2026, 9, 1),
+            platformCode: 'wechat'),
+        row(
+            tradeNo: 'WX_REFUND2',
+            counterparty: '某商户-退款',
+            amount: 100,
+            type: 0,
+            status: '退款成功',
+            date: DateTime(2026, 9, 2),
+            platformCode: 'wechat'),
+      ]);
+      expect(
+          preview
+              .firstWhere((i) => i.row.tradeNo == 'WX_REFUND2')
+              .refundLinked,
+          true,
+          reason: '取舍 -退款 后缀后唯一命中');
+
+      await service.importRows(preview);
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.tradeNo == 'WX_PAY2');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'WX_REFUND2');
+      expect(refund.type, 2);
+      expect(refund.refundOfId, pay.id);
+      expect(refund.categoryId, pay.categoryId, reason: '沿用原支出分类');
+      expect(pay.refundedCents, 10000);
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 0.0);
+      expect(summary.income, 0.0);
+    });
+
+    test('同对方多笔候选不唯一时不关联，退款行落不计收支', () async {
+      await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'WX_A',
+            counterparty: '某团购商户',
+            amount: 100,
+            type: 1,
+            status: '支付成功',
+            date: DateTime(2026, 9, 1),
+            platformCode: 'wechat'),
+        row(
+            tradeNo: 'WX_B',
+            counterparty: '某团购商户',
+            amount: 100,
+            type: 1,
+            status: '支付成功',
+            date: DateTime(2026, 9, 2),
+            platformCode: 'wechat'),
+        row(
+            tradeNo: 'WX_R',
+            counterparty: '某团购商户',
+            amount: 30,
+            type: 0,
+            status: '退款成功',
+            date: DateTime(2026, 9, 3),
+            platformCode: 'wechat'),
+      ]));
+
+      final saved = await transactions.listAll('');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'WX_R');
+      expect(refund.type, 2, reason: '多候选不猜关联，也不计收入');
+      expect(refund.refundOfId, isNull);
+      expect(saved.where((t) => t.type == 1).every((t) => t.refundedCents == 0),
+          true);
+
+      final summary = await StatisticsRepository(db).rangeSummary(
+        familyId: '',
+        start: DateTime(2026, 9, 1),
+        end: DateTime(2026, 9, 30),
+      );
+      expect(summary.expense, 200.0, reason: '两笔原支出均不冲抵');
+      expect(summary.income, 0.0);
+    });
+
+    test('跨次导入：原支出已在库中，退款行按对方唯一命中关联', () async {
+      await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'WX_PRE',
+            counterparty: '某商户',
+            amount: 60,
+            type: 1,
+            status: '支付成功',
+            date: DateTime(2026, 9, 1),
+            platformCode: 'wechat'),
+      ]));
+      await service.importRows(await service.prepare([
+        row(
+            tradeNo: 'WX_REFUND3',
+            counterparty: '某商户-退款',
+            amount: 60,
+            type: 0,
+            status: '退款成功',
+            date: DateTime(2026, 9, 10),
+            platformCode: 'wechat'),
+      ]));
+
+      final saved = await transactions.listAll('');
+      final pay = saved.firstWhere((t) => t.tradeNo == 'WX_PRE');
+      final refund = saved.firstWhere((t) => t.tradeNo == 'WX_REFUND3');
+      expect(refund.type, 2);
+      expect(refund.refundOfId, pay.id, reason: '库中原支出亦参与唯一匹配');
+      expect(pay.refundedCents, 6000);
     });
   });
 }

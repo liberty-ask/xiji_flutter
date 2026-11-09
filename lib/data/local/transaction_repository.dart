@@ -209,6 +209,42 @@ class TransactionRepository {
         .get();
   }
 
+  /// 京东退款关联候选原支出：退款行的交易订单号可能等于原单商家订单号
+  /// （部分票务类场景方向相反），按商家订单号批量拉取支出行。
+  /// 家庭维度：仅当前家庭
+  Future<List<Transaction>> findLinkableExpensesByMerchantOrderNo(
+      String familyId, Set<String> merchantOrderNos) async {
+    if (merchantOrderNos.isEmpty) return const [];
+    return (_db.select(_db.transactions)
+          ..where((t) =>
+              t.merchantOrderNo.isIn(merchantOrderNos) &
+              t.familyId.equals(familyId) &
+              t.type.equals(1) &
+              t.deleted.equals(false))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.asc),
+          ]))
+        .get();
+  }
+
+  /// 微信退款关联候选原支出：微信退款行与原单无共同单号，改按交易对方
+  /// 批量拉取支出行，由导入服务结合金额/日期/剩余可退额做唯一命中判定。
+  /// 家庭维度：仅当前家庭
+  Future<List<Transaction>> findLinkableExpensesByCounterparty(
+      String familyId, Set<String> counterparties) async {
+    if (counterparties.isEmpty) return const [];
+    return (_db.select(_db.transactions)
+          ..where((t) =>
+              t.counterparty.isIn(counterparties) &
+              t.familyId.equals(familyId) &
+              t.type.equals(1) &
+              t.deleted.equals(false))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.asc),
+          ]))
+        .get();
+  }
+
   /// 批量累加原支出的已退款额（导入关联退款时用，单事务）。
   /// 上限为原支出金额，version+1 进发件箱
   Future<void> addRefundedCents(Map<String, int> deltasByExpenseId) {

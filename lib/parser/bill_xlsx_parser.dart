@@ -9,10 +9,13 @@ import 'bill_csv_parser.dart';
 /// xlsx 首部为「微信支付账单明细」等说明文字行，表头行需扫描定位：
 /// 首 30 行内单元格精确命中微信关键字段 ≥5 个即认定（对齐服务端 HeaderDetector）。
 /// 字段映射与收/支语义逐条对齐服务端 WechatBillParser：
-/// - 收/支：收入/收款/转入→0，支出/付款/转出→1，「/」（不计收支）等其余值默认支出
+/// - 收/支：收入/收款/转入→0，支出/付款/转出→1，
+///   「/」等其余值→2（不计收支：充值、提现、理财通、零钱通、信用卡还款）
 /// - 商品列为空或「/」时回退「交易类型/交易对方」
 /// - 交易单号缺失时以「时间_金额_对方」生成兜底单号
-/// 去重（tradeNo 单键）与退款修正（仅收/支未标注行凭「退款」佐证转收入）由导入服务统一处理。
+/// - 商户单号「/」归一为空，避免去重键出现「交易单号|/」
+/// 去重（tradeNo 单键）与微信退款净额（原行状态锚定退款额、独立退款行不计收支）
+/// 由导入服务统一处理。
 class BillXlsxParser {
   /// 微信表头关键字段（对齐服务端 HeaderDetector.PLATFORM_KEYWORDS）
   static const _wechatKeywords = {
@@ -103,8 +106,9 @@ class BillXlsxParser {
     final amount = BillCsvParser.parseAmount(amountRaw);
     if (date == null || amount == null) return null;
 
-    // 微信：收入/收款/转入→0，支出/付款/转出→1，「/」不计收支默认支出（对齐服务端，
-    // 微信不产生 type=2；退款守卫后导入服务不覆盖明确标注的收支类型）
+    // 微信：收入/收款/转入→0，支出/付款/转出→1；
+    // 其余（「/」及空值）→2 不计收支——微信官方把充值/提现/理财通/
+    // 零钱通/信用卡还款等资金转移标为「/」，不得兜底为支出
     final incomeExpense = cell(['收/支']);
     int type;
     if (incomeExpense == '收入' ||
@@ -116,7 +120,7 @@ class BillXlsxParser {
         incomeExpense == '转出') {
       type = 1;
     } else {
-      type = 1;
+      type = 2;
     }
 
     // 交易单号缺失时以 时间+金额+对方 生成兜底单号（对齐服务端）
@@ -130,10 +134,13 @@ class BillXlsxParser {
       description = '${cell(['交易类型']) ?? ''}/${cell(['交易对方']) ?? ''}';
     }
 
+    // 商户单号「/」是微信的无值占位，归一为空避免污染去重键
+    final merchantOrderNo = cell(['商户单号']);
+
     return ParsedBillRow(
       platformCode: 'wechat',
       tradeNo: tradeNo,
-      merchantOrderNo: cell(['商户单号']),
+      merchantOrderNo: merchantOrderNo == '/' ? null : merchantOrderNo,
       date: date,
       amount: amount,
       type: type,

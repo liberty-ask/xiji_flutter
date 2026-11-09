@@ -70,6 +70,28 @@ void main() {
       expect(result.endDate, DateTime(2026, 9, 6, 9, 0, 0));
     });
 
+    test('支付宝：交易关闭/已关闭行归为不计收支（回单汇总剔除，记录保留）', () {
+      const content = '''
+支付宝交易（2026-09-01 00:00:00 至 2026-09-30 00:00:00）[全部]
+支付宝账号:[test@example.com]
+起始日期:2026-09-01 00:00:00    终止日期:2026-09-30 00:00:00
+支付宝账户:[test@example.com]
+-----------------------------交易记录明细列表------------------------------
+交易订单号,商家订单号,交易时间,付款方式,交易来源地,类型,交易对方,商品说明,收/付款方式,金额,收/支,交易状态,交易分类,备注
+A1,M1,2026-09-01 10:00:00,2026-09-01 10:00:00,手机,即时到账,某商户,已退款订单,余额宝,69.00,支出,交易关闭,交通出行,/
+A2,M2,2026-09-01 11:00:00,2026-09-01 11:00:00,手机,即时到账,某视频,售出周卡,余额,2.00,收入,已关闭,收入,/
+A3,M3,2026-09-01 12:00:00,2026-09-01 12:00:00,手机,即时到账,某商户,正常订单,余额宝,10.00,支出,交易成功,餐饮,/
+''';
+      final result = parser.parse(Uint8List.fromList(gbk.encode(content)))!;
+      expect(result.rows, hasLength(3), reason: '关闭行保留可见，不静默丢弃');
+      expect(result.rows[0].type, 2, reason: '交易关闭的支出不计收支');
+      expect(result.rows[1].type, 2, reason: '已关闭的收入不计收支');
+      expect(result.rows[2].type, 1);
+      expect(result.rows[0].status, '交易关闭');
+      expect(result.totalExpense, 10.0);
+      expect(result.totalIncome, 0.0);
+    });
+
     test('不支持的平台/非账单文件返回 null', () {
       final junk = Uint8List.fromList(utf8.encode('随便什么,内容\n1,2'));
       expect(parser.parse(junk), isNull);
@@ -94,6 +116,7 @@ void main() {
 2026-09-04 12:00:00,某商户,订单已全额退款,19.88(已全额退款),白条,退款成功,不计收支,餐饮,JD123459,M004,/
 2026-09-05 13:00:00,某超市,,,,京东支付,交易成功,支出,日用品,JD123460,M005,/
 2026-09-06 14:00:00,某商户,,30.00,京东支付,交易成功,支出,其他,JD123461,M006,备注当描述
+2026-09-07 15:00:00,某商户,日用品,158.80(已退款8.80),白条,交易成功,支出,日用品,JD123462,M007,/
 ''';
     final content = [...preamble, header, ...dataRows.split('\n')].join('\n');
     return Uint8List.fromList(gbk.encode(content));
@@ -106,7 +129,7 @@ void main() {
       expect(result, isNotNull);
       expect(result!.platform, '京东');
       expect(result.platformCode, 'jd');
-      expect(result.rows, hasLength(5), reason: '金额缺失行为异常行');
+      expect(result.rows, hasLength(6), reason: '金额缺失行为异常行');
       expect(result.errors, hasLength(1));
       expect(result.errors.first.row, 27, reason: '异常行行号对应文件实际行');
       expect(result.errors.first.reason, '数据不完整');
@@ -124,18 +147,24 @@ void main() {
       expect(first.status, '交易成功');
     });
 
-    test('京东：收入/不计收支/已全额退款转支出/金额括号清理/备注回退描述', () {
+    test('京东：收入/不计收支保持 2/金额括号清理/退款额解析/备注回退描述', () {
       final result = parser.parse(jdCsv())!;
 
       expect(result.rows[1].type, 0, reason: '收入 → 0');
       expect(result.rows[2].type, 2, reason: '不计收支 → 2');
-      expect(result.rows[3].type, 1, reason: '不计收支且金额含「已全额退款」→ 1');
+      expect(result.rows[3].type, 2,
+          reason: '不计收支且金额含「已全额退款」仍保持 2（京东官方口径）');
       expect(result.rows[3].amount, 19.88, reason: '金额括号内退款标记被清理');
+      expect(result.rows[3].refundedAmount, 19.88,
+          reason: '「已全额退款」视为全额已退，净额归零');
       expect(result.rows[4].description, '备注当描述',
           reason: '交易说明为空回退备注列');
+      expect(result.rows[5].amount, 158.80, reason: '部分退款行金额取括号前数值');
+      expect(result.rows[5].refundedAmount, 8.80,
+          reason: '括号内部分退款额单独解析，作为原支出行退款锚点');
 
       expect(result.totalIncome, 8000.0);
-      expect(result.totalExpense, 74.88);
+      expect(result.totalExpense, 213.80);
     });
   });
 }

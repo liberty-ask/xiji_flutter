@@ -75,16 +75,16 @@ void main() {
       expect(first.status, '支付成功');
     });
 
-    test('收入/不计收支「/」默认支出/已全额退款/千分位金额/单号兜底/商品回退', () {
+    test('收入/不计收支「/」→2/千分位金额/单号兜底/商品回退', () {
       final result = parser.parse(wechatXlsx())!;
 
       expect(result.rows[1].type, 0, reason: '收入 → 0');
       expect(result.rows[1].description, '转账/张三',
           reason: '商品「/」回退 交易类型/交易对方（对齐服务端）');
-      expect(result.rows[2].type, 1,
-          reason: '收/支「/」不计收支 → 默认支出（对齐服务端微信解析口径）');
-      expect(result.rows[3].type, 1,
-          reason: '已全额退款行「/」默认支出，导入服务不按退款文本改写明确方向的行');
+      expect(result.rows[2].type, 2,
+          reason: '收/支「/」→ 不计收支（零钱通/理财/提现等资金转移）');
+      expect(result.rows[3].type, 2,
+          reason: '「/」+ 已全额退款同样是不计收支，不再兜底为支出');
       expect(result.rows[3].status, '已全额退款');
       expect(result.rows[4].amount, 1234.56, reason: '千分位金额清理');
       expect(result.rows[4].tradeNo,
@@ -92,7 +92,21 @@ void main() {
           reason: '交易单号缺失时以 时间+金额+对方 生成兜底单号（对齐服务端）');
 
       expect(result.totalIncome, 100.0);
-      expect(result.totalExpense, closeTo(1305.06, 0.01));
+      expect(result.totalExpense, closeTo(1260.06, 0.01),
+          reason: '「/」行退出支出合计：25.50 + 1234.56');
+    });
+
+    test('商户单号「/」归一为空（去重键不出现「单号|/」）', () {
+      final result = parser.parse(wechatXlsx(dataRows: [
+        [
+          '2026-09-01 10:00:00', '零钱通转入', '零钱通', '/', '/', '¥10.00',
+          '零钱', '转账成功', '4200009001', '/', '/',
+        ],
+      ]))!;
+
+      expect(result.rows.single.type, 2, reason: '「/」→ 不计收支');
+      expect(result.rows.single.merchantOrderNo, isNull,
+          reason: '「/」是微信无值占位，归一为空');
     });
 
     test('说明行数量变化时表头仍可定位（前 30 行扫描）', () {
@@ -168,21 +182,20 @@ void main() {
       expect(outcome.skipCount, 1);
     });
 
-    test('「/」已全额退款行保持支出：退款文本不转收入、不参与冲抵', () async {
+    test('「/」已全额退款行落不计收支：不转收入、不参与冲抵', () async {
       final parsed = parser.parse(wechatXlsx())!;
       final rawRefund =
           parsed.rows.firstWhere((r) => r.tradeNo == '4200001237');
-      expect(rawRefund.type, 1, reason: '「/」解析层兜底支出');
+      expect(rawRefund.type, 2, reason: '「/」解析层即不计收支');
       expect(rawRefund.status, '已全额退款');
       expect(Money.yuanToCents(rawRefund.amount), 3500);
 
       final preview = await service.prepare(parsed.rows);
       final refundItem =
           preview.firstWhere((i) => i.row.tradeNo == '4200001237');
-      expect(refundItem.row.type, 1, reason: '明确标注方向的行不被退款文本改写');
-      expect(refundItem.refund, false, reason: '仅 type=2 未标注方向的行才是退款候选');
-      expect(refundItem.refundLinked, false, reason: 'type=1 不进净额冲抵链路');
-      expect(Money.yuanToCents(refundItem.row.amount), 3500);
+      expect(refundItem.row.type, 2, reason: '退款文本不再改写为收入(0)');
+      expect(refundItem.refund, true, reason: '状态「已全额退款」是退款候选');
+      expect(refundItem.refundLinked, false, reason: '无同对方原支出 → 不关联');
 
       final outcome = await service.importRows(preview);
       expect(outcome.successCount, 5);
@@ -191,7 +204,7 @@ void main() {
       final saved = await transactions.listAll('');
       final refund =
           saved.firstWhere((t) => t.tradeNo == '4200001237');
-      expect(refund.type, 1, reason: '按真实消费以支出入账，不得变成收入(0)');
+      expect(refund.type, 2, reason: '无法关联原单的退款行不得计入收入');
       expect(refund.amountCents, 3500);
       expect(refund.refundOfId, isNull, reason: '未关联原支出');
       expect(refund.refundedCents, 0, reason: '无任何支出被冲抵');
@@ -201,10 +214,10 @@ void main() {
         start: DateTime(2026, 9, 1),
         end: DateTime(2026, 9, 30),
       );
-      expect(Money.yuanToCents(summary.expense), 130506,
-          reason: '25.50 + 10.00 + 35.00 + 1234.56，退款行全额计入支出');
+      expect(Money.yuanToCents(summary.expense), 126006,
+          reason: '25.50 + 1234.56，「/」行（含退款）全部退出支出');
       expect(Money.yuanToCents(summary.income), 10000,
-          reason: '收入仅转账 100.00，退款不进收入');
+          reason: '收入仅转账 100.00，退款不计收入');
     });
   });
 }

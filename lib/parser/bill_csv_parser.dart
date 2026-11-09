@@ -18,6 +18,9 @@ class ParsedBillRow {
   final String? description; // 商品说明
   final String? payMethod; // 收/付款方式
   final String? status; // 交易状态（退款判定线索）
+  /// 京东原支出行金额括号内的已退款额（`100.00(已退款10.00)` → 10.00）。
+  /// 账单自带的退款锚点，导入时直接记入该行已退额，无需再跨行匹配
+  final double? refundedAmount;
 
   const ParsedBillRow({
     required this.platformCode,
@@ -30,6 +33,7 @@ class ParsedBillRow {
     this.description,
     this.payMethod,
     this.status,
+    this.refundedAmount,
   });
 }
 
@@ -196,14 +200,19 @@ class BillCsvParser {
       'alipay' => ['金额', '金额（元）'],
       _ => ['金额'],
     });
-    // 京东金额可能带括号退款标记（如 19.88(已退款2)），取括号前数值
+    // 京东金额可能带括号退款标记（如 20.00(已退款2.00)），取括号前数值；
+    // 括号内的退款额单独解析，作为该行自身的退款锚点
     final amount = parseAmount(
         platformCode == 'jd' && amountRaw != null
             ? amountRaw.replaceAll(RegExp(r'\([^)]*\)'), '').trim()
             : amountRaw);
+    final jdRefundedAmount = platformCode == 'jd' && amountRaw != null
+        ? _parseJdRefundedAmount(amountRaw, amount)
+        : null;
     if (date == null || amount == null) return null;
 
     final incomeExpense = cell(['收/支']);
+    final status = cell(['交易状态']);
     int? type;
     if (platformCode == 'alipay') {
       // 支付宝：收入/收款→0，支出/付款→1，不计收支→2，其余金额为正默认支出
@@ -216,9 +225,17 @@ class BillCsvParser {
       } else if (amount > 0) {
         type = 1;
       }
+      // 支付宝回单汇总剔除「交易关闭/已关闭」行（收入、支出均不计），
+      // 这里同步归为不计收支：记录仍保留可见，但不进收支统计
+      if (type != null &&
+          type != 2 &&
+          (status == '交易关闭' || status == '已关闭')) {
+        type = 2;
+      }
     } else if (platformCode == 'jd') {
       // 京东：收入/收款/收→0，支出/付款/支→1；
-      // 不计收支→金额含「已全额退款」记支出（原消费退款冲抵），否则 2；
+      // 不计收支一律→2（个人资金互转、全额退款按官方口径都不进收支，
+      // 全额退款原单不转支出，净额由原行已退额/退款行抵为 0）；
       // 收/支未标识不猜测，由导入阶段判失败
       if (incomeExpense == '收入' ||
           incomeExpense == '收款' ||
@@ -229,7 +246,7 @@ class BillCsvParser {
           incomeExpense == '支') {
         type = 1;
       } else if (incomeExpense == '不计收支') {
-        type = amountRaw != null && amountRaw.contains('已全额退款') ? 1 : 2;
+        type = 2;
       }
     }
 
@@ -261,10 +278,22 @@ class BillCsvParser {
         description: cell(['交易说明', '备注']),
         payMethod: cell(['收/付款方式']),
         status: cell(['交易状态']),
+        refundedAmount: jdRefundedAmount,
       );
     }
 
     return null; // 不可达：平台识别仅产出 alipay/jd
+  }
+
+  /// 京东金额括号内的已退款额：`100.00(已退款10.00)` → 10.00。
+  /// `(已全额退款)` 视为全额，取该行金额（净额归零，仍落不计收支）
+  static double? _parseJdRefundedAmount(String raw, double? amount) {
+    if (raw.contains('已全额退款')) return amount;
+    final match =
+        RegExp(r'\(已退款\s*[¥￥]?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\)')
+            .firstMatch(raw);
+    if (match == null) return null;
+    return parseAmount(match.group(1));
   }
 
   /// 日期解析：yyyy-MM-dd[ HH:mm[:ss]] 及 yyyy/M/d、yyyy年M月d日（CSV/XLSX 共用）
