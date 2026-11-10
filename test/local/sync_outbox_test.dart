@@ -38,7 +38,6 @@ void main() {
         id: Value(id),
         name: '自定义分类',
         icon: 'star',
-        type: 1,
         familyId: Value(familyId),
       ));
 
@@ -161,6 +160,82 @@ void main() {
     });
   });
 
+  group('阶段 4：批量加解密（encryptBatch/decryptBatch）', () {
+    // 全部为合成数据：合成 ID / 金额 / 描述，无真实账单特征
+    final dataKey =
+        Uint8List.fromList(List.generate(32, (i) => (i * 7 + 3) % 256));
+
+    SyncPendingRow syntheticRow(int i) => SyncPendingRow(
+          recordType: 'transaction',
+          id: 'tx-batch-$i',
+          version: 1,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(1700000000000 + i),
+          deleted: false,
+          familyId: 'f1',
+          payload: <String, dynamic>{
+            'recordType': 'transaction',
+            'type': 1,
+            'categoryId': 'cat-synthetic',
+            'amountCents': 1000 + i,
+            SyncOutbox.kDateMsField: 1700000000000 + i,
+            'userId': 'user-synthetic',
+            'familyId': 'f1',
+            'description': '合成记录 $i',
+            'refundedCents': 0,
+          },
+        );
+
+    test('批量加密与单条结果一致（字段 + 明文往返）', () async {
+      final rows = List.generate(20, syntheticRow);
+      final singles = <Map<String, dynamic>>[
+        for (final row in rows) await SyncOutbox.encryptRecord(dataKey, row),
+      ];
+      final batch = await SyncOutbox.encryptBatch(dataKey, rows);
+
+      expect(batch, hasLength(singles.length));
+      for (var i = 0; i < rows.length; i++) {
+        expect(batch[i]['id'], singles[i]['id']);
+        expect(batch[i]['version'], singles[i]['version']);
+        expect(batch[i]['updatedAt'], singles[i]['updatedAt']);
+        expect(batch[i]['deleted'], singles[i]['deleted']);
+        expect(base64Decode(batch[i]['nonce'] as String), hasLength(12));
+        expect(await SyncOutbox.decryptRecord(dataKey, batch[i]),
+            rows[i].payload);
+      }
+    });
+
+    test('批量解密跨 500 分块完整且顺序一致', () async {
+      final rows = List.generate(1200, syntheticRow);
+      final records = await SyncOutbox.encryptBatch(dataKey, rows);
+      final plain = await SyncOutbox.decryptBatch(dataKey, records);
+
+      expect(plain, hasLength(rows.length));
+      for (var i = 0; i < rows.length; i++) {
+        expect(plain[i], isNotNull);
+        expect(plain[i]!['amountCents'], rows[i].payload['amountCents']);
+        expect(plain[i]!['description'], rows[i].payload['description']);
+      }
+    });
+
+    test('批量解密单条认证失败返回 null 占位，不中断整批', () async {
+      final rows = List.generate(5, syntheticRow);
+      final records = await SyncOutbox.encryptBatch(dataKey, rows);
+      // 换 ID 破坏 AAD（模拟密文换位/他人密文）
+      records[2] = Map<String, dynamic>.from(records[2])
+        ..['id'] = 'tx-forged';
+
+      final plain = await SyncOutbox.decryptBatch(dataKey, records);
+      expect(plain, hasLength(5));
+      expect(plain[2], isNull);
+      expect(plain.whereType<Map<String, dynamic>>(), hasLength(4));
+    });
+
+    test('空列表直接返回空（不发 isolate）', () async {
+      expect(await SyncOutbox.encryptBatch(dataKey, const []), isEmpty);
+      expect(await SyncOutbox.decryptBatch(dataKey, const []), isEmpty);
+    });
+  });
+
   group('任务 7.3：清标记（clearPending）', () {
     test('只清传入行，批次内部分失败条目保留', () async {
       await insertTx(id: 'tx-1');
@@ -175,6 +250,29 @@ void main() {
       expect(await pendingCount('transactions'), 1);
       final rest = await SyncOutbox.collectAll(db, 'f1');
       expect(rest.single.id, 'tx-2');
+    });
+
+    test('推送在途时被本地编辑（version 已变）不清标记', () async {
+      final tx = await insertTx(id: 'tx-1');
+      final rows = await SyncOutbox.collectAll(db, 'f1');
+      expect(rows, hasLength(1));
+
+      // 模拟推送请求在途期间用户编辑了同一笔（仓储写路径：version+1、
+      // updatedAt 前进、sync_pending 保持 true）
+      await (db.update(db.transactions)..where((t) => t.id.equals('tx-1')))
+          .write(TransactionsCompanion(
+        version: const Value(2),
+        updatedAt: Value(tx.updatedAt.add(const Duration(seconds: 5))),
+        amountCents: const Value(5000),
+      ));
+
+      // 回执按出栈快照清理：版本已变，必须保留待推
+      await SyncOutbox.clearPending(db, rows);
+
+      expect(await pendingCount('transactions'), 1);
+      final rest = await SyncOutbox.collectAll(db, 'f1');
+      expect(rest.single.version, 2);
+      expect(rest.single.payload['amountCents'], 5000);
     });
   });
 }

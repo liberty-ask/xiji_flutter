@@ -249,7 +249,6 @@ void main() {
         id: const Value('cat-x'),
         name: '宠物开销',
         icon: 'pets',
-        type: 1,
         familyId: const Value('f1'),
       ));
       await deviceA.into(deviceA.budgets).insertReturning(

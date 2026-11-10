@@ -28,28 +28,149 @@ abstract class SyncPushPort {
   );
 }
 
+/// 服务端以确定性理由拒绝了这批记录（参数超限、字段校验失败等）：
+/// 同一批原样重放不会成功，调度器据此拆半定位到具体坏记录。
+/// 网络异常 / 5xx / 超时 / 登录态与权限问题不走此异常（按暂时性保留）。
+class SyncPushDeterministicException implements Exception {
+  const SyncPushDeterministicException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'SyncPushDeterministicException: $message';
+}
+
 /// 生产端口：走 ApiClient 调用 POST /v1/sync/push。
-/// 网络失败 / 业务 code!=200 / 401 刷新失败均以异常上抛，
-/// 由调度器按「失败保留标记待重试」处理。
+///
+/// 失败分类依据实际接口契约：
+/// - HTTP 200 + 业务 code!=200：服务端用它表达请求级拒绝，其中参数校验/
+///   超限属确定性错误（抛 [SyncPushDeterministicException]），未登录/
+///   无权限/系统异常仍保留标记待重试；
+/// - HTTP 4xx（400/413/422）确定性；401/403/5xx/超时/断网暂时性，
+///   原样上抛由调度器按家庭收敛。
 class ApiSyncPushPort implements SyncPushPort {
   @override
   Future<Set<String>> push(
     String familyId,
     List<Map<String, dynamic>> records,
   ) async {
-    final data = await ApiClient().post<Map<String, dynamic>>(
-      '/v1/sync/push',
-      data: <String, dynamic>{
-        'familyId': familyId,
-        'records': records,
-      },
-    );
+    try {
+      final data = await ApiClient().post<Map<String, dynamic>>(
+        '/v1/sync/push',
+        data: <String, dynamic>{
+          'familyId': familyId,
+          'records': records,
+        },
+      );
+      return collectDoneIds(data, records);
+    } on ApiException catch (e) {
+      if (isDeterministic(e)) {
+        throw SyncPushDeterministicException(e.message);
+      }
+      rethrow;
+    }
+  }
+
+  /// 契约里与「请求内容」无关、重放有救的业务错误文案：登录态、权限、
+  /// 服务端内部异常（GlobalExceptionHandler 同样返回 HTTP 200 + code=500，
+  /// 无法仅凭 code 与参数校验区分）。
+  static const List<String> _transientBusinessMessages = <String>[
+    '未登录',
+    '登录',
+    '权限',
+    '系统异常',
+    '请求失败',
+  ];
+
+  /// 是否为确定性错误：重放同一批不会成功，需要拆半/隔离。
+  @visibleForTesting
+  static bool isDeterministic(ApiException e) {
+    final status = e.statusCode;
+    if (status == 400 || status == 413 || status == 422) return true;
+    if (status == 401 ||
+        status == 403 ||
+        status == 408 ||
+        status == 429 ||
+        (status != null && status >= 500)) {
+      return false;
+    }
+    final code = e.code;
+    if (code == null) return false; // 传输层失败/无业务码：暂时性
+    if (code == 400 || code == 413 || code == 422) return true;
+    if (code == 401 || code == 403) return false;
+    // HTTP 200 + 业务 code：登录态/权限/系统异常可重试，其余按请求级
+    // 校验拒绝处理（如「单次推送最多500条记录」「记录ID长度不能超过36」）
+    for (final text in _transientBusinessMessages) {
+      if (e.message.contains(text)) return false;
+    }
+    return true;
+  }
+
+  /// 从推送响应里提取「使命完成」的记录 ID。
+  ///
+  /// 正常契约：results 逐条返回 accepted=true/false（rejected 也带 id）。
+  /// 兜底：若服务端只回 accepted 行，用 total/accepted/rejected 计数把
+  /// 未回执的 rejected 行也视为完成，避免被永久重发；计数不闭合时
+  /// 不臆测，只清已明确回执的行（剩余标记保留待下轮）。
+  @visibleForTesting
+  static Set<String> collectDoneIds(
+    Map<String, dynamic> data,
+    List<Map<String, dynamic>> records,
+  ) {
     final done = <String>{};
     for (final item in (data['results'] as List? ?? const [])) {
-      done.add((item as Map<String, dynamic>)['id'] as String);
+      if (item is Map<String, dynamic>) {
+        final id = item['id'];
+        if (id is String) done.add(id);
+      }
+    }
+    final total = data['total'];
+    final accepted = data['accepted'];
+    final rejected = data['rejected'];
+    if (total is int &&
+        accepted is int &&
+        rejected is int &&
+        total == records.length &&
+        accepted + rejected == total &&
+        rejected > 0 &&
+        done.length == accepted) {
+      for (final record in records) {
+        final id = record['id'];
+        if (id is String) done.add(id);
+      }
     }
     return done;
   }
+}
+
+/// 同步阶段（P1-6 进度呈现）
+enum SyncPhase {
+  /// 正在上传（存量重推 / 首轮全量上云）：可算总量，进度条确定态
+  pushing,
+
+  /// 正在拉取恢复：协议不返回云端总量，进度条不确定态
+  restoring,
+}
+
+/// 同步进度快照。仅在「用户可感知的批量搬运」时产生：
+/// 日常小增量全程静默（不产生任何快照）。
+class SyncProgress {
+  const SyncProgress({
+    required this.phase,
+    required this.processed,
+    this.total,
+  });
+
+  final SyncPhase phase;
+
+  /// 已完成条数（推送为已上传条数，拉取为已恢复条数）
+  final int processed;
+
+  /// 总量（仅推送可算；拉取协议无总量，为 null）
+  final int? total;
+
+  /// 是否首轮全量恢复（下拉方向）
+  bool get isFullRestore => phase == SyncPhase.restoring;
 }
 
 /// 同步调度器（tasks.md 7.3/7.4）：推-拉-对账循环。
@@ -61,10 +182,12 @@ class ApiSyncPushPort implements SyncPushPort {
 /// - 单飞：运行中再触发仅记重跑标记，结束后补跑一轮（天然防抖合并）
 /// - 门控：备份开关开 → 已登录 → 密钥已解锁（任一不满足静默跳过，
 ///   标记与游标保留；解锁/登录后的下一次触发自动补推）
-/// - 失败重试不丢：任何环节异常终止本轮、标记与游标保留，
-///   靠下次触发重推/重拉（LWW 幂等，重拉无害）
-/// - 分批：每家庭每批 ≤ [batchSize]（对齐服务端 500 上限）；
-///   跨家庭记录不能同批（服务端按家庭校验归属）
+/// - 失败重试不丢：暂时性失败（网络/5xx/超时）保留标记与游标，
+///   靠下次触发重推/重拉（LWW 幂等，重拉无害）；推送失败不阻断拉取
+/// - 确定性拒绝（参数超限/字段校验）：批内拆半定位到单条后隔离，
+///   队列继续前进，不因单条坏数据永久卡在队头
+/// - 分批：每家庭每批 ≤ [batchSize]（默认 400，与服务端 500 上限留余量）；
+///   跨家庭记录不能同批（服务端按家庭校验归属），单家庭失败互不影响
 class SyncScheduler {
   SyncScheduler({
     AppDatabase? db,
@@ -75,7 +198,7 @@ class SyncScheduler {
     Future<String?> Function()? currentFamilyId,
     SyncPuller? puller,
     Future<List<({String id, int role})>> Function()? membersProvider,
-    this.batchSize = 500,
+    this.batchSize = 400,
   })  : _injectedDb = db,
         _injectedPuller = puller,
         _pullPort = pullPort,
@@ -121,6 +244,22 @@ class SyncScheduler {
   bool _running = false;
   bool _rerun = false;
 
+  /// 批量进度（P1-6）：null 表示无可见任务。只在首轮全量恢复与
+  /// 存量重推（待推条数 ≥ [kSyncProgressMinRows]）时非空，日常增量
+  /// 保持 null（UI 全程静默）。
+  final ValueNotifier<SyncProgress?> _progress =
+      ValueNotifier<SyncProgress?>(null);
+
+  SyncProgress? get currentProgress => _progress.value;
+  ValueListenable<SyncProgress?> get progress => _progress;
+
+  /// 「同步执行中」信号：备份页据此在同步期间禁用「重置密钥 /
+  /// 关闭备份」（其他交互一律不禁）。
+  final ValueNotifier<bool> _syncing = ValueNotifier<bool>(false);
+
+  bool get isSyncing => _syncing.value;
+  ValueListenable<bool> get syncing => _syncing;
+
   /// 同步轮完成广播：门控通过且整轮成功（含拉取入库）后触发一次；
   /// 门控跳过/失败不触发。页面 Provider 是拉取一次模式（非响应式
   /// watch 本地库），恢复/增量同步落库后须靠此事件主动重拉——
@@ -132,27 +271,35 @@ class SyncScheduler {
   /// 订阅同步完成（广播流，多页面可同时订阅）
   Stream<void> get onRoundCompleted => _roundCompletedController.stream;
 
+  /// 推送进度呈现门限：待推条数达到一个推送批次（500）才视为
+  /// 「存量重推 / 首轮上云」并显示进度；日常小增量静默。
+  static const int kSyncProgressMinRows = 500;
+
   /// 尽力而为同步：调用方一律 fire-and-forget（unawaited），
   /// 任何异常不出函数边界（后台任务的既定语义，真机日志可查
   /// debugPrint 输出）。
   Future<void> maybePush() async {
+    // 单飞：运行中再触发仅记重跑标记
+    if (_running) {
+      _rerun = true;
+      return;
+    }
+    _running = true;
     try {
-      if (_running) {
-        _rerun = true;
-        return;
-      }
-      _running = true;
-      try {
-        await _syncOnce();
-      } finally {
-        _running = false;
-      }
-      if (_rerun) {
+      await _syncOnce();
+      // 运行期间再次触发：合并补跑一轮（不递归，避免深层嵌套）
+      while (_rerun) {
         _rerun = false;
-        await maybePush();
+        await _syncOnce();
       }
     } catch (e) {
       debugPrint('[SyncScheduler] 同步中断，标记与游标保留待重试: $e');
+    } finally {
+      // 进度与「同步中」状态必须在 finally 复位：账号切换、断网、
+      // 密钥锁定等任何中断都不能在 UI 留下永挂的进度条
+      _running = false;
+      _progress.value = null;
+      _syncing.value = false;
     }
   }
 
@@ -162,6 +309,7 @@ class SyncScheduler {
       debugPrint('[SyncScheduler] 门控未通过，本轮跳过');
       return;
     }
+    _syncing.value = true;
     debugPrint('[SyncScheduler] 门控通过，开始同步');
     final familyId = await _currentFamilyId();
     // vault 托管补位（6.7）：每轮幂等推送最新 vault 到当前家庭通道，
@@ -211,21 +359,65 @@ class SyncScheduler {
       }
     }
 
-    await _pushAll();
-    await _puller.pullAll(
-      gate.personal,
-      // 惰性家庭密钥源：fkey 记录可能在本轮拉取中途送达 F（后加入
-      // 成员首拉），解出后同页后续业务记录立即可解
-      familyDataKeyProvider: familyId == null
-          ? null
-          : () async => await _vault.familyDataKey(familyId),
-    );
+    // 三段各自兜住异常：推送失败不连坐拉取，拉取失败也不阻断对账补推。
+    // 暂时性推送失败由 _pushAll 在家庭级收敛并保留标记；这里只兜
+    // 发件箱读取等意外异常，避免整轮直接终止。
+    var pushOk = true;
+    try {
+      pushOk = await _pushAll();
+    } catch (e) {
+      pushOk = false;
+      debugPrint('[SyncScheduler] 推送阶段异常，继续拉取: $e');
+    }
+
+    Object? pullError;
+    try {
+      await _puller.pullAll(
+        gate.personal,
+        // 惰性家庭密钥源：fkey 记录可能在本轮拉取中途送达 F（后加入
+        // 成员首拉），解出后同页后续业务记录立即可解
+        familyDataKeyProvider: familyId == null
+            ? null
+            : () async => await _vault.familyDataKey(familyId),
+        // 每页进度（P1-6）：仅首轮全量恢复对外呈现；日常增量拉取
+        // （有游标）不上报，保持全程静默
+        onPage: (processed, isFullRestore) {
+          if (isFullRestore) {
+            _progress.value = SyncProgress(
+              phase: SyncPhase.restoring,
+              processed: processed,
+            );
+          }
+        },
+      );
+    } catch (e) {
+      pullError = e;
+      debugPrint('[SyncScheduler] 拉取阶段异常，继续对账补推: $e');
+    }
+
+    // 拉取结束即撤下恢复进度（对账补推若量大再按推送阶段呈现）
+    if (_progress.value?.phase == SyncPhase.restoring) {
+      _progress.value = null;
+    }
     // 对账补推：拉取仲裁跳过的本地高版本记录（或推送环节部分
     // 失败遗留）推上去，一轮收敛；已推净则空转返回
-    await _pushAll();
-    debugPrint('[SyncScheduler] 一轮同步完成');
-    // 通知停留页面重拉数据（拉取模式 Provider 不感知本地库变更）
-    _roundCompletedController.add(null);
+    try {
+      if (!await _pushAll()) pushOk = false;
+    } catch (e) {
+      pushOk = false;
+      debugPrint('[SyncScheduler] 对账补推异常: $e');
+    }
+
+    // 拉取失败本轮未完成：游标保留，上抛给 maybePush 记录并按需重试
+    if (pullError != null) throw pullError;
+
+    if (pushOk) {
+      debugPrint('[SyncScheduler] 一轮同步完成');
+      // 通知停留页面重拉数据（拉取模式 Provider 不感知本地库变更）
+      _roundCompletedController.add(null);
+    } else {
+      debugPrint('[SyncScheduler] 一轮同步完成（部分推送失败，标记保留待重试）');
+    }
   }
 
   /// 当前家庭成员（分发 F 的检测范围）。注入（测试）优先；
@@ -344,11 +536,40 @@ class SyncScheduler {
     return (personal: personal, family: family);
   }
 
-  Future<void> _pushAll() async {
-    final rows = await SyncOutbox.collectAll(_db, await _currentFamilyId());
+  /// 确定性失败记录隔离账本键前缀：值记录 version + updatedAt 指纹，
+  /// 记录被本地编辑（版本或时间变化）后指纹失配，自动重新尝试。
+  static const String _isolateKeyPrefix = 'xiji_sync_isolated_v1';
+
+  static String _isolateKey(SyncPendingRow row) =>
+      '$_isolateKeyPrefix@${row.recordType}@${row.id}';
+
+  static String _isolateFingerprint(SyncPendingRow row) =>
+      '${row.version}@${row.updatedAt.millisecondsSinceEpoch}';
+
+  static bool _isIsolated(SharedPreferences prefs, SyncPendingRow row) =>
+      prefs.getString(_isolateKey(row)) == _isolateFingerprint(row);
+
+  /// 单条记录被服务端确定性拒绝：转入本地隔离账本（不删除本地数据、
+  /// 不动 syncPending），本版本不再重试，队列继续前进。
+  /// 选择隔离而非保留待推：确定性错误每轮原样重放只会反复拆批浪费
+  /// RTT；隔离后用户编辑该记录（version/updatedAt 变化）即自动解除。
+  Future<void> _isolate(SyncPendingRow row, String reason) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_isolateKey(row), _isolateFingerprint(row));
+    debugPrint('[SyncScheduler] 单条记录被确定性拒绝，已隔离（本地保留，'
+        '编辑后自动重试）：${row.recordType}/${row.id}，原因：$reason');
+  }
+
+  /// 推送全部待推行；返回 false 表示存在暂时性失败（标记保留待下轮）。
+  /// 确定性拒绝在批内拆半定位到单条后隔离，不视为整轮失败。
+  Future<bool> _pushAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rows = (await SyncOutbox.collectAll(_db, await _currentFamilyId()))
+        .where((row) => !_isIsolated(prefs, row))
+        .toList(growable: false);
     if (rows.isEmpty) {
       debugPrint('[SyncScheduler] 发件箱为空，无需推送');
-      return;
+      return true;
     }
 
     // 按家庭分组推送（服务端按家庭整批校验，跨家庭不能同批）
@@ -358,33 +579,105 @@ class SyncScheduler {
     }
 
     // 8.4：行级加密键选择——该家庭有 F 用家庭密钥（家庭数据共享），
-    // 无 F（未获分发的家庭）跳过推送，标记保留待拿到 F 后重推
+    // 无 F（未获分发的家庭）跳过推送，标记保留待拿到 F 后重推。
+    // 预取各家庭密钥：无 F 家庭整组跳过，不计入进度总量（否则进度
+    // 永远到不了 100% 才消失）。
+    final familyKeys = <String, Uint8List>{};
     for (final entry in byFamily.entries) {
-      final familyDataKey = await _vault.familyDataKey(entry.key);
-      if (familyDataKey == null) {
+      final key = await _vault.familyDataKey(entry.key);
+      if (key == null) {
         debugPrint('[SyncScheduler] 家庭 ${entry.key} 未获 F，'
             '业务推送跳过（标记保留）');
         continue;
       }
-      var start = 0;
-      while (start < entry.value.length) {
-        final batch =
-            entry.value.skip(start).take(batchSize).toList(growable: false);
-        final records = <Map<String, dynamic>>[];
-        for (final row in batch) {
-          records.add(await SyncOutbox.encryptRecord(familyDataKey, row));
+      familyKeys[entry.key] = key;
+    }
+
+    // 存量重推 / 首轮上云的进度呈现（P1-6）：待推量达到一个批次才
+    // 显示；日常小增量保持静默
+    final totalToPush = byFamily.entries
+        .where((e) => familyKeys.containsKey(e.key))
+        .fold<int>(0, (sum, e) => sum + e.value.length);
+    final showProgress = totalToPush >= kSyncProgressMinRows;
+    var processed = 0;
+    var pushOk = true;
+    if (showProgress) {
+      _progress.value = SyncProgress(
+        phase: SyncPhase.pushing,
+        processed: 0,
+        total: totalToPush,
+      );
+    }
+
+    try {
+      for (final entry in byFamily.entries) {
+        final familyDataKey = familyKeys[entry.key];
+        if (familyDataKey == null) continue;
+        var start = 0;
+        try {
+          while (start < entry.value.length) {
+            final batch = entry.value
+                .skip(start)
+                .take(batchSize)
+                .toList(growable: false);
+            debugPrint('[SyncScheduler] 推送家庭 ${entry.key} '
+                '批次 ${start ~/ batchSize + 1}：${batch.length} 条');
+            await _pushBatchIsolated(entry.key, familyDataKey, batch);
+            start += batch.length;
+            processed += batch.length;
+            if (showProgress) {
+              _progress.value = SyncProgress(
+                phase: SyncPhase.pushing,
+                processed: processed,
+                total: totalToPush,
+              );
+            }
+          }
+        } catch (e) {
+          // 家庭隔离：单家庭暂时性失败不中止其他家庭与本轮流程，
+          // 该家庭剩余批次标记保留，下一轮继续
+          pushOk = false;
+          debugPrint('[SyncScheduler] 家庭 ${entry.key} 推送中断，'
+              '标记保留待重试: $e');
         }
-        debugPrint('[SyncScheduler] 推送家庭 ${entry.key} '
-            '批次 ${start ~/ batchSize + 1}：${records.length} 条');
-        final done = await _port.push(entry.key, records);
-        debugPrint('[SyncScheduler] 服务端回执：${done.length} 条完成');
-        final cleared =
-            batch.where((row) => done.contains(row.id)).toList();
-        if (cleared.isNotEmpty) {
-          await SyncOutbox.clearPending(_db, cleared);
-        }
-        start += batch.length;
       }
+    } finally {
+      if (showProgress) {
+        _progress.value = null;
+      }
+    }
+    return pushOk;
+  }
+
+  /// 推送一批并清理成功行；确定性拒绝时拆半重试到单条，单条仍失败
+  /// 则隔离，让队列继续前进。暂时性异常原样上抛，由家庭级边界收敛。
+  Future<void> _pushBatchIsolated(
+    String familyId,
+    Uint8List familyDataKey,
+    List<SyncPendingRow> batch,
+  ) async {
+    try {
+      // 批量加密下放 isolate（P1-5）：整批纯 CPU 计算在后台隔离线程
+      // 完成，主隔离只等结果。
+      final records = await SyncOutbox.encryptBatch(familyDataKey, batch);
+      final done = await _port.push(familyId, records);
+      debugPrint('[SyncScheduler] 家庭 $familyId 回执：'
+          '${done.length}/${batch.length} 条完成');
+      final cleared = batch.where((row) => done.contains(row.id)).toList();
+      if (cleared.isNotEmpty) {
+        await SyncOutbox.clearPending(_db, cleared);
+      }
+    } on SyncPushDeterministicException catch (e) {
+      if (batch.length <= 1) {
+        await _isolate(batch.single, e.message);
+        return;
+      }
+      // 拆半：确定性拒绝通常只由个别坏记录触发，二分定位到单条后
+      // 其余记录照常推净
+      final mid = batch.length ~/ 2;
+      await _pushBatchIsolated(
+          familyId, familyDataKey, batch.sublist(0, mid));
+      await _pushBatchIsolated(familyId, familyDataKey, batch.sublist(mid));
     }
   }
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../crypto/key_vault.dart';
 import '../data/local/app_database.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/local_user.dart';
+import '../data/local/transaction_fts.dart';
 import '../services/api/api_client.dart';
 import 'sync_cursor_store.dart';
 import 'sync_ingest.dart';
@@ -85,6 +87,7 @@ class SyncPuller {
   Future<void> pullAll(
     Uint8List personalDataKey, {
     Future<Uint8List?> Function()? familyDataKeyProvider,
+    void Function(int processed, bool isFullRestore)? onPage,
   }) async {
     final familyId = await _currentFamilyId();
     if (familyId == null) return;
@@ -102,6 +105,11 @@ class SyncPuller {
     );
     var cursor = await SyncCursorStore.load(familyId, userId);
     Uint8List? familyKey = await familyDataKeyProvider?.call();
+
+    // 无游标 = 首轮全量恢复（新设备 / 重装 / 清游标迁移），供进度
+    // 呈现区分「首轮恢复」与「日常增量」
+    final isFullRestore = cursor == null;
+    onPage?.call(0, isFullRestore);
 
     // 拉取统计（8.8 可观测性）：拉到但解不开/仲裁跳过的记录
     // 此前完全不可见，切账号死锁排查全靠排除法
@@ -128,23 +136,26 @@ class SyncPuller {
       if (records.isNotEmpty) {
         pulled += records.length;
         await _db.transaction(() async {
-          for (final record in records) {
-            final result = await ingest.applyRecord(personalDataKey, record,
-                familyDataKey: familyKey);
-            if (result == IngestResult.skipped) {
-              skipped++;
-            } else {
-              applied++;
-            }
-            // 刚解出自己的包裹份拿到 F：重读家庭 key，同页后续业务
-            // 记录立即可解（只在 F 从无到有时发生一次，常态零开销）
-            if (familyKey == null &&
-                result == IngestResult.updated &&
-                (record['id'] as String).startsWith('fk-')) {
-              familyKey = await familyDataKeyProvider?.call();
-            }
+          // 页级批量仲裁（7.10）：解密仍按记录顺序逐条进行（保证页内
+          // 先送达的 fkey 能立即作用于同页后续业务记录），DB 写入按表
+          // 批量完成——每页 2000 条由约 4000 次 SELECT/写降到个位数
+          // 往返。语义与逐条 applyRecord 等价。
+          final stats = await ingest.applyPage(
+            personalDataKey,
+            records,
+            familyDataKey: familyKey,
+            familyDataKeyProvider: familyDataKeyProvider,
+          );
+          applied += stats.applied;
+          skipped += stats.skipped;
+          // 页内刚解出自己的包裹份拿到 F：同步本地缓存供下一页使用
+          // （只在 F 从无到有时发生一次，常态零开销）
+          if (stats.familyKeyGained) {
+            familyKey = await familyDataKeyProvider?.call();
           }
         });
+        // 每页提交后上报一次进度（P1-6）：条数为累计已拉取数
+        onPage?.call(pulled, isFullRestore);
       }
       final hasMore = page['hasMore'] as bool? ?? false;
       if (hasMore) {
@@ -165,7 +176,31 @@ class SyncPuller {
       }
     }
 
+    // 首轮全量恢复收尾：一次性全量重建搜索索引（每账号每设备一次）。
+    // v8 迁移已覆盖升级用户；这里兜底覆盖「修复版本全新安装 + 首轮恢复」
+    // 期间的任何遗漏（如恢复中途被强杀），代价是一次 O(N) 批量重建。
+    if (isFullRestore) {
+      await _rebuildFtsAfterFirstRestore(userId);
+    }
+
     debugPrint(
         '[SyncPuller] 家庭 $familyId 拉取完成：$pulled 条（入库 $applied / 跳过 $skipped）');
+  }
+
+  /// 首轮恢复后的索引重建标记键（按账号隔离：账号切换各自一个库）
+  static const String _ftsRebuildKeyPrefix = 'xiji_fts_rebuild_after_restore_v1';
+
+  /// 重建失败只打日志不打断同步：索引缺失不应让恢复流程失败，
+  /// 下次首轮恢复（或导入备份/编辑交易）仍会自愈。
+  Future<void> _rebuildFtsAfterFirstRestore(String userId) async {
+    final key = '$_ftsRebuildKeyPrefix@$userId';
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(key) == true) return;
+    try {
+      await TransactionFts.rebuild(_db);
+      await prefs.setBool(key, true);
+    } catch (e) {
+      debugPrint('[SyncPuller] 首轮恢复后索引重建失败（下次重试）：$e');
+    }
   }
 }

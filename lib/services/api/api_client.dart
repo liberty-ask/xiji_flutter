@@ -13,6 +13,24 @@ class SessionExpiredException implements Exception {
   String toString() => 'SessionExpiredException';
 }
 
+/// 统一 API 异常：保留业务 code 与 HTTP 状态，供调用方区分
+/// 「请求本身被拒绝」与「可重试的传输/服务端故障」。
+///
+/// [code] 为统一响应体里的业务 code（仅 HTTP 200 包裹内出现）；
+/// [statusCode] 为 HTTP 状态码，传输层失败（超时/断网）时为 null。
+class ApiException implements Exception {
+  const ApiException(this.message, {this.code, this.statusCode});
+
+  final String message;
+  final int? code;
+  final int? statusCode;
+
+  /// 保持与旧实现 `Exception(message).toString()` 完全一致，
+  /// 避免现有按 `Exception:` 解析错误文案的调用方行为变化。
+  @override
+  String toString() => 'Exception: $message';
+}
+
 class ApiClient {
   // 单例实例
   static ApiClient? _instance;
@@ -304,12 +322,13 @@ class ApiClient {
       // 处理统一响应格式 {code, message, data}
       final code = data['code'];
       if (code != null && code is int && code != 200) {
-        // 如果 code 存在且不是 200，抛出异常，携带错误消息
+        // 如果 code 存在且不是 200，抛出具名异常，携带业务码与 HTTP 状态
         final message = data['message'];
-        if (message != null && message is String) {
-          throw Exception(message);
-        }
-        throw Exception('Request failed');
+        throw ApiException(
+          message is String ? message : 'Request failed',
+          code: code,
+          statusCode: response.statusCode,
+        );
       }
       // code 为 200 或不存在 code 字段，返回 data
       if (data.containsKey('data')) {
@@ -330,52 +349,58 @@ class ApiClient {
     return data as T;
   }
 
-  Exception _handleError(DioException error) {
+  ApiException _handleError(DioException error) {
     // 处理不同类型的DioException
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return Exception('Timeout');
+        return const ApiException('Timeout');
       case DioExceptionType.badResponse:
         if (error.response != null) {
           final data = error.response?.data;
           if (data is Map<String, dynamic>) {
-            // 优先使用响应中的 message
+            // 优先使用响应中的 message，并保留业务 code
             final message = data['message'];
+            final code = data['code'];
             if (message != null && message is String) {
-              return Exception(message);
+              return ApiException(
+                message,
+                code: code is int ? code : null,
+                statusCode: error.response?.statusCode,
+              );
             }
           }
           final statusCode = error.response?.statusCode;
           if (statusCode != null) {
             if (statusCode == 401) {
-              return Exception('Unauthorized');
+              return ApiException('Unauthorized', statusCode: statusCode);
             } else if (statusCode == 403) {
-              return Exception('Forbidden');
+              return ApiException('Forbidden', statusCode: statusCode);
             } else if (statusCode == 404) {
-              return Exception('Not Found');
+              return ApiException('Not Found', statusCode: statusCode);
             } else if (statusCode >= 500) {
-              return Exception('Server Error');
+              return ApiException('Server Error', statusCode: statusCode);
             }
           }
         }
-        return Exception('Request failed');
+        return ApiException('Request failed',
+            statusCode: error.response?.statusCode);
       case DioExceptionType.cancel:
-        return Exception('Canceled');
+        return const ApiException('Canceled');
       case DioExceptionType.connectionError:
-        return Exception('Connection error');
+        return const ApiException('Connection error');
       case DioExceptionType.badCertificate:
-        return Exception('Certificate error');
+        return const ApiException('Certificate error');
       case DioExceptionType.unknown:
         // 检查是否是Socket异常
         if (error.error != null) {
           final errorStr = error.error.toString().toLowerCase();
           if (errorStr.contains('socket') || errorStr.contains('network')) {
-            return Exception('Network error');
+            return const ApiException('Network error');
           }
         }
-        return Exception(error.message ?? 'Unknown error');
+        return ApiException(error.message ?? 'Unknown error');
     }
   }
 

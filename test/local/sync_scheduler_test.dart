@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
+import 'package:xiji_flutter/services/api/api_client.dart';
 import 'package:xiji_flutter/sync/sync_outbox.dart';
 import 'package:xiji_flutter/sync/sync_cursor_store.dart';
 import 'package:xiji_flutter/sync/sync_puller.dart';
@@ -95,6 +96,12 @@ void main() {
   Future<int> pendingCount(String table) => db
       .customSelect('SELECT COUNT(*) AS c FROM $table WHERE sync_pending = 1')
       .map((row) => row.read<int>('c'))
+      .getSingle();
+
+  Future<int> pendingOf(String id) => db
+      .customSelect('SELECT sync_pending FROM transactions WHERE id = ?',
+          variables: [Variable.withString(id)])
+      .map((row) => row.read<int>('sync_pending'))
       .getSingle();
 
   setUp(() async {
@@ -252,7 +259,6 @@ void main() {
         id: const Value('cat-1'),
         name: '自定义分类',
         icon: 'star',
-        type: 1,
         familyId: const Value('f1'),
       ));
       await db.into(db.budgets).insertReturning(BudgetsCompanion.insert(
@@ -326,14 +332,15 @@ void main() {
       await insertTx('tx-2');
       port.handler = (_, __) => throw Exception('网络不可达');
 
-      // fire-and-forget 语义：异常不出函数边界
+      // fire-and-forget 语义：异常不出函数边界；推送失败不终止本轮，
+      // 拉取照常执行，对账补推再试一次（仍失败）
       await scheduler.maybePush();
-      expect(port.calls, hasLength(1));
+      expect(port.calls, hasLength(2));
       expect(await pendingCount('transactions'), 2);
 
       port.handler = null;
       await scheduler.maybePush();
-      expect(port.totalRecords, 4); // 第一次失败 2 条 + 重试成功 2 条
+      expect(port.totalRecords, 6); // 失败两批 2×2 条 + 重试成功 2 条
       expect(await pendingCount('transactions'), 0);
     });
   });
@@ -447,6 +454,156 @@ void main() {
       expect(payload['recordType'], 'transaction');
       expect(() => SyncOutbox.decryptRecord(oldKey!, record),
           throwsA(isA<Exception>()));
+    });
+  });
+
+  group('推送失败语义：确定性拆半隔离 / 暂时性保留 / 边界隔离', () {
+    test('默认批大小 400（服务端上限 500 留余量）', () {
+      expect(scheduler.batchSize, 400);
+    });
+
+    test('确定性拒绝：拆半定位坏记录并隔离，其余继续推净且不再重试', () async {
+      await insertTx('tx-bad');
+      await insertTx('tx-good');
+      port.handler = (familyId, records) async {
+        final ids = records.map((r) => r['id'] as String).toList();
+        if (ids.contains('tx-bad')) {
+          throw const SyncPushDeterministicException('记录ID长度不能超过36');
+        }
+        return ids.toSet();
+      };
+
+      await scheduler.maybePush();
+
+      expect(await pendingOf('tx-bad'), 1,
+          reason: '隔离不删本地数据，待推标记保留');
+      expect(await pendingOf('tx-good'), 0, reason: '同批其余记录照常推净');
+
+      final callsAfterFirstRound = port.calls.length;
+      await scheduler.maybePush();
+      expect(port.calls.length, callsAfterFirstRound,
+          reason: '隔离记录同一版本内不再重复拆批重试');
+    });
+
+    test('暂时性失败：全部标记保留，且拉取照常执行', () async {
+      final pullPort = CountingPullPort();
+      final failing = SyncScheduler(
+        db: db,
+        port: port,
+        pullPort: pullPort,
+        vault: vault,
+        isSignedIn: () async => true,
+        membersProvider: () async => const [],
+      );
+      await insertTx('tx-1');
+      port.handler = (_, __) => throw const ApiException('Connection error');
+
+      await failing.maybePush();
+
+      expect(await pendingCount('transactions'), 1);
+      expect(pullPort.calls, 1, reason: '推送失败不得连坐拉取');
+    });
+
+    test('单家庭失败不影响其他家庭推送', () async {
+      await vault.putFamilyKey('f2', KeyVault.generateFamilyKey());
+      await insertTx('tx-f1', familyId: 'f1');
+      await insertTx('tx-f2', familyId: 'f2');
+      port.handler = (familyId, records) async {
+        if (familyId == 'f1') throw const ApiException('Connection error');
+        return records.map((r) => r['id'] as String).toSet();
+      };
+
+      await scheduler.maybePush();
+
+      expect(port.calls.map((c) => c.familyId), contains('f2'));
+      expect(await pendingOf('tx-f1'), 1, reason: '失败家庭标记保留待重试');
+      expect(await pendingOf('tx-f2'), 0, reason: '其他家庭不受失败家庭影响');
+    });
+  });
+
+  group('ApiSyncPushPort 错误分类与回执兜底（按实际契约）', () {
+    test('HTTP 200 + code=500 参数超限：确定性', () {
+      expect(
+          ApiSyncPushPort.isDeterministic(const ApiException(
+              '单次推送最多500条记录',
+              code: 500,
+              statusCode: 200)),
+          isTrue);
+    });
+
+    test('HTTP 200 + code=500 未登录/无权限/系统异常：暂时性', () {
+      for (final message in <String>[
+        '用户未登录',
+        '无该家庭的访问权限',
+        '系统异常，请联系管理员',
+      ]) {
+        expect(
+            ApiSyncPushPort.isDeterministic(
+                ApiException(message, code: 500, statusCode: 200)),
+            isFalse,
+            reason: message);
+      }
+    });
+
+    test('HTTP 4xx 确定性；5xx/超时/断网暂时性', () {
+      expect(
+          ApiSyncPushPort.isDeterministic(
+              const ApiException('Bad Request', statusCode: 400)),
+          isTrue);
+      expect(
+          ApiSyncPushPort.isDeterministic(
+              const ApiException('Server Error', statusCode: 500)),
+          isFalse);
+      expect(ApiSyncPushPort.isDeterministic(const ApiException('Timeout')),
+          isFalse);
+    });
+
+    test('results 含 rejected id：accepted/rejected 均视为完成', () {
+      final done = ApiSyncPushPort.collectDoneIds(<String, dynamic>{
+        'total': 2,
+        'accepted': 1,
+        'rejected': 1,
+        'results': <Map<String, dynamic>>[
+          <String, dynamic>{'id': 'a', 'accepted': true},
+          <String, dynamic>{'id': 'b', 'accepted': false},
+        ],
+      }, <Map<String, dynamic>>[
+        <String, dynamic>{'id': 'a'},
+        <String, dynamic>{'id': 'b'},
+      ]);
+      expect(done, <String>{'a', 'b'});
+    });
+
+    test('服务端只回 accepted 行：按计数把 rejected 行补为完成，避免永久重发', () {
+      final done = ApiSyncPushPort.collectDoneIds(<String, dynamic>{
+        'total': 3,
+        'accepted': 2,
+        'rejected': 1,
+        'results': <Map<String, dynamic>>[
+          <String, dynamic>{'id': 'a'},
+          <String, dynamic>{'id': 'b'},
+        ],
+      }, <Map<String, dynamic>>[
+        <String, dynamic>{'id': 'a'},
+        <String, dynamic>{'id': 'b'},
+        <String, dynamic>{'id': 'c'},
+      ]);
+      expect(done, <String>{'a', 'b', 'c'});
+    });
+
+    test('回执残缺且计数不闭合：不臆测，仅清已明确回执的行', () {
+      final done = ApiSyncPushPort.collectDoneIds(
+        <String, dynamic>{
+          'results': <Map<String, dynamic>>[
+            <String, dynamic>{'id': 'a'},
+          ],
+        },
+        <Map<String, dynamic>>[
+          <String, dynamic>{'id': 'a'},
+          <String, dynamic>{'id': 'b'},
+        ],
+      );
+      expect(done, <String>{'a'});
     });
   });
 }

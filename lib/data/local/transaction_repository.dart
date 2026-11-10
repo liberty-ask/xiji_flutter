@@ -2,57 +2,40 @@ import 'package:drift/drift.dart';
 
 import 'app_database.dart';
 import 'fts_tokenizer.dart';
+import 'transaction_fts.dart';
 
 /// 交易 Repository：本地库唯一数据真身的读写入口。
 ///
 /// 同步纪律（所有变更方法共同遵守）：
 /// - 每次变更 version+1、updatedAt=now、syncPending=true（进发件箱）
 /// - 删除为软删除墓碑：deleted=true，行保留参与同步，不出现在任何查询结果
-/// - FTS 索引与主表同事务双写；FTS 的 tx_id 列存主表 UUID（UNINDEXED），
-///   规避 INTEGER rowid 与 TEXT 主键的类型错位
+/// - FTS 索引与主表同事务双写，统一经 [TransactionFts]（唯一写入器）；
+///   FTS 的 tx_id 列存主表 UUID（UNINDEXED），规避 INTEGER rowid 与
+///   TEXT 主键的类型错位
 class TransactionRepository {
   final AppDatabase _db;
 
   TransactionRepository(this._db);
 
-  String _ftsText(Transaction row) {
-    final parts = [row.description, row.counterparty]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty);
-    return FtsTokenizer.tokenize(parts.join(' '));
-  }
-
-  Future<void> _ftsInsert(Transaction row) async {
-    final fts = _ftsText(row);
-    if (fts.isEmpty) return;
-    await _db.customInsert(
-      'INSERT INTO transactions_fts(fts_text, tx_id) VALUES (?, ?)',
-      variables: [Variable(fts), Variable(row.id)],
-    );
-  }
-
-  Future<void> _ftsRemove(String id) => _db.customUpdate(
-        'DELETE FROM transactions_fts WHERE tx_id = ?',
-        variables: [Variable(id)],
-      );
-
   /// 新增交易：主表 + FTS 同事务写入，返回完整行（含客户端生成的 UUIDv7）
   Future<Transaction> insert(TransactionsCompanion t) {
     return _db.transaction(() async {
       final row = await _db.into(_db.transactions).insertReturning(t);
-      await _ftsInsert(row);
+      await TransactionFts.sync(_db, [TransactionFtsEntry.fromRow(row)]);
       return row;
     });
   }
 
   /// 批量新增（账单导入用）：单事务整体写入，任一行失败整体回滚，
-  /// FTS 与主表逐行双写。去重过滤由上层完成（BillImportService）
+  /// FTS 一次批量先删后插。去重过滤由上层完成（BillImportService）
   Future<void> insertAll(List<TransactionsCompanion> list) {
     return _db.transaction(() async {
+      final entries = <TransactionFtsEntry>[];
       for (final t in list) {
         final row = await _db.into(_db.transactions).insertReturning(t);
-        await _ftsInsert(row);
+        entries.add(TransactionFtsEntry.fromRow(row));
       }
+      await TransactionFts.sync(_db, entries);
     });
   }
 
@@ -124,8 +107,7 @@ class TransactionRepository {
       ));
 
       final updated = row.single;
-      await _ftsRemove(id);
-      await _ftsInsert(updated);
+      await TransactionFts.sync(_db, [TransactionFtsEntry.fromRow(updated)]);
       return updated;
     });
   }
@@ -141,6 +123,8 @@ class TransactionRepository {
           .getSingleOrNull();
       if (current == null) return;
 
+      // 本次落墓碑的全部 id（含级联的退款行），索引统一摘除
+      final removedIds = <String>[id];
       final refundOfId = current.refundOfId;
       if (refundOfId != null && refundOfId.isNotEmpty) {
         await _restoreExpenseRefunded(refundOfId, current.amountCents);
@@ -157,7 +141,7 @@ class TransactionRepository {
             deleted: const Value(true),
             syncPending: const Value(true),
           ));
-          await _ftsRemove(r.id);
+          removedIds.add(r.id);
         }
       }
 
@@ -169,7 +153,10 @@ class TransactionRepository {
         deleted: const Value(true),
         syncPending: const Value(true),
       ));
-      await _ftsRemove(id);
+      await TransactionFts.sync(_db, [
+        for (final removedId in removedIds)
+          TransactionFtsEntry(id: removedId, deleted: true),
+      ]);
     });
   }
 
@@ -332,13 +319,17 @@ class TransactionRepository {
       variables.add(Variable(userId));
     }
 
-    // 关键词：FTS 短语匹配（中文拆字），空串忽略
+    // 关键词：FTS 短语匹配（中文拆字），空串忽略；分词后为空（纯符号/
+    // 空白）时直接短路返回空结果，不向 FTS5 提交空短语（不同 SQLite
+    // 版本对空短语的容忍度不一致）
     var ftsJoin = '';
     final effectiveKeyword = keyword?.trim() ?? '';
     if (effectiveKeyword.isNotEmpty) {
+      final phrase = FtsTokenizer.phraseOrNull(effectiveKeyword);
+      if (phrase == null) return Future.value(const []);
       ftsJoin = 'JOIN transactions_fts f ON t.id = f.tx_id';
       where.add('f.transactions_fts MATCH ?');
-      variables.add(Variable(FtsTokenizer.phrase(effectiveKeyword)));
+      variables.add(Variable(phrase));
     }
 
     // 分页（pageSize 为空则不分页）
@@ -354,7 +345,8 @@ class TransactionRepository {
     return _db.customSelect(
       'SELECT t.* FROM transactions t $ftsJoin '
       'WHERE ${where.join(' AND ')} '
-      'ORDER BY t.date DESC, t.updated_at DESC $limitClause',
+      // id 兜底：updated_at 仅秒级精度，同日同秒多行时保证翻页顺序稳定
+      'ORDER BY t.date DESC, t.updated_at DESC, t.id DESC $limitClause',
       variables: variables,
       readsFrom: {_db.transactions},
     ).map(_mapRow).get();

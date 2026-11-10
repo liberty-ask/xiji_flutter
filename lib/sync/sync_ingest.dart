@@ -6,6 +6,7 @@ import '../crypto/key_vault.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
 import '../data/local/member_public_key_store.dart';
+import '../data/local/transaction_fts.dart';
 import 'family_key_service.dart';
 import 'sync_outbox.dart';
 import 'vault_sync_service.dart';
@@ -105,6 +106,188 @@ class SyncIngest {
     };
   }
 
+  /// 页级批量仲裁（tasks.md 7.10）：一页（服务端上限 2000 条）内
+  /// 每张表只做「1 次批量 SELECT + 1 批写入」，替代逐条的
+  /// SELECT + INSERT/UPDATE（2000 条从约 4000 次 isolate 往返降到个位数）。
+  ///
+  /// 语义与 [applyRecord] 完全等价，三处顺序约束必须保留：
+  /// 1. 解密按分段批量（[SyncOutbox.decryptBatch] 下放 isolate），分段
+  ///    边界为 fkey 包裹记录——fkey 可能在本页中途才送达 F，同页后续
+  ///    业务记录必须能立即用新 F 解密（否则游标越过后永久错过）；
+  /// 2. vault/fkey 机制记录保持逐条即时处理（涉及网络与密钥库写入，
+  ///    且数量为「每用户 1 条 vault + 每成员 1 条包裹」）；
+  /// 3. 页内重复 id / 重复 matchText 的合并取 LWW 更优的一条，与逐条
+  ///    「后到者与已写入的前者再仲裁」的最终状态一致。
+  ///
+  /// 返回本页 applied/skipped 计数（与逐条路径同口径，供拉取统计日志），
+  /// [familyKeyGained] 表示本页内首次获得家庭密钥（调用方需刷新本地
+  /// 缓存供下一页使用）。
+  Future<({int applied, int skipped, bool familyKeyGained})> applyPage(
+    Uint8List personalDataKey,
+    List<Map<String, dynamic>> records, {
+    Uint8List? familyDataKey,
+    Future<Uint8List?> Function()? familyDataKeyProvider,
+  }) async {
+    var familyKey = familyDataKey;
+    var familyKeyGained = false;
+    var applied = 0;
+    var skipped = 0;
+
+    final items = <_IngestItem>[];
+
+    // vault/fkey 类型记录按机制记录跳过（与逐条路径的 switch 一致）
+    void enqueue(
+      Map<String, dynamic> record,
+      Map<String, dynamic> payload, {
+      required bool markPending,
+    }) {
+      final type = payload['recordType'] as String;
+      if (type == VaultSyncService.kRecordType ||
+          type == FamilyKeyService.kRecordType) {
+        skipped++;
+      } else {
+        items.add(_IngestItem(
+          record: record,
+          payload: payload,
+          markPending: markPending,
+        ));
+      }
+    }
+
+    // 批量解密当前分段：第一轮家庭 key，第二轮个人 key 回落（存量个人
+    // 密文）。markPending 仅在「有 F 却靠个人 key 解开」时为 true，
+    // 与逐条路径的 usedFallbackKey 判定一致。
+    Future<void> flushSegment(List<Map<String, dynamic>> segment) async {
+      if (segment.isEmpty) return;
+      final plain = List<Map<String, dynamic>?>.filled(segment.length, null);
+      final usedPersonal = List<bool>.filled(segment.length, false);
+
+      final key = familyKey;
+      if (key != null) {
+        final withFamily = await SyncOutbox.decryptBatch(key, segment);
+        for (var i = 0; i < segment.length; i++) {
+          plain[i] = withFamily[i];
+        }
+      }
+      final needPersonal = <int>[
+        for (var i = 0; i < segment.length; i++)
+          if (plain[i] == null) i,
+      ];
+      if (needPersonal.isNotEmpty) {
+        final subset = <Map<String, dynamic>>[
+          for (final i in needPersonal) segment[i],
+        ];
+        final withPersonal =
+            await SyncOutbox.decryptBatch(personalDataKey, subset);
+        for (var j = 0; j < needPersonal.length; j++) {
+          if (withPersonal[j] != null) {
+            plain[needPersonal[j]] = withPersonal[j];
+            usedPersonal[needPersonal[j]] = true;
+          }
+        }
+      }
+
+      final fallbackMarksPending = key != null;
+      for (var i = 0; i < segment.length; i++) {
+        final record = segment[i];
+        final payload = plain[i];
+        if (payload == null) {
+          if ((record['id'] as String).startsWith('vault-')) {
+            final result = await _ingestVaultDoc(record);
+            result == IngestResult.skipped ? skipped++ : applied++;
+            continue;
+          }
+          // 其他成员未重密封的旧密文：本人无其个人 key，解不开是预期。
+          // 跳过且游标照常推进（重密封方重推后版本更新可增量拉到可解版）。
+          skipped++;
+          continue;
+        }
+        enqueue(record, payload,
+            markPending: fallbackMarksPending && usedPersonal[i]);
+      }
+    }
+
+    var segment = <Map<String, dynamic>>[];
+    for (final record in records) {
+      final id = record['id'] as String;
+      if (!id.startsWith('fk-')) {
+        segment.add(record);
+        continue;
+      }
+
+      // fkey 包裹是分段边界：先结算前一分段（旧 F），再按逐条路径处理
+      // 包裹本身——若本页中途送出 F，后续分段立即改用新 F 解密。
+      await flushSegment(segment);
+      segment = <Map<String, dynamic>>[];
+
+      Map<String, dynamic>? payload;
+      var usedFallbackKey = false;
+      for (final key in [familyKey, personalDataKey]) {
+        if (key == null) continue;
+        try {
+          payload = await SyncOutbox.decryptRecord(key, record);
+          usedFallbackKey =
+              identical(key, personalDataKey) && familyKey != null;
+          break;
+        } on SecretBoxAuthenticationError {
+          continue;
+        }
+      }
+      if (payload != null) {
+        // 业务 key 意外解开机制记录：与原逐条路径同口径分流
+        enqueue(record, payload, markPending: usedFallbackKey);
+        continue;
+      }
+      final hadNoFamilyKey = familyKey == null;
+      final result = await _ingestFamilyKeyWrap(record);
+      result == IngestResult.skipped ? skipped++ : applied++;
+      if (hadNoFamilyKey && result == IngestResult.updated) {
+        final gained = await familyDataKeyProvider?.call();
+        if (gained != null) {
+          familyKey = gained;
+          familyKeyGained = true;
+        }
+      }
+    }
+    await flushSegment(segment);
+
+    final txItems = <_IngestItem>[];
+    final categoryItems = <_IngestItem>[];
+    final budgetItems = <_IngestItem>[];
+    final ruleItems = <_IngestItem>[];
+    for (final item in items) {
+      switch (item.payload['recordType'] as String) {
+        case SyncOutbox.kTypeTransaction:
+          txItems.add(item);
+          break;
+        case SyncOutbox.kTypeCategory:
+          categoryItems.add(item);
+          break;
+        case SyncOutbox.kTypeBudget:
+          budgetItems.add(item);
+          break;
+        case SyncOutbox.kTypeCategoryRule:
+          ruleItems.add(item);
+          break;
+        default:
+          throw ArgumentError('未知的同步记录类型: ${item.payload['recordType']}');
+      }
+    }
+
+    final txStats = await _applyTransactionsBatch(txItems);
+    final categoryStats = await _applyCategoriesBatch(categoryItems);
+    final budgetStats = await _applyBudgetsBatch(budgetItems);
+    final ruleStats = await _applyCategoryRulesBatch(ruleItems);
+    applied += txStats.$1 + categoryStats.$1 + budgetStats.$1 + ruleStats.$1;
+    skipped += txStats.$2 + categoryStats.$2 + budgetStats.$2 + ruleStats.$2;
+
+    return (
+      applied: applied,
+      skipped: skipped,
+      familyKeyGained: familyKeyGained,
+    );
+  }
+
   /// vaultDoc 记录：按文档归属者的传输密钥解密（id 内嵌 userId——
   /// 机制字段全家庭成员可知，他人 vaultDoc 也可解出 payload）→
   /// 公钥登记（MemberPublicKeyStore：无论归属是否本账号——其他
@@ -187,28 +370,16 @@ class SyncIngest {
     return remoteUpdatedAt.isAfter(localUpdatedAt);
   }
 
-  Future<IngestResult> _applyTransaction(
+  /// 交易行 companion（单条与批量共用）。v7 退款冲抵字段：旧客户端推来的
+  /// payload 无此字段，此时保留本地已有冲抵关联与已退额，避免旧版本编辑
+  /// 原支出把净额冲抵清零。
+  TransactionsCompanion _transactionRow(
     Map<String, dynamic> record,
     Map<String, dynamic> payload, {
-    bool markPending = false,
-  }) async {
+    required bool markPending,
+    Transaction? existing,
+  }) {
     final (version, updatedAt, deleted) = _meta(record);
-    final id = record['id'] as String;
-
-    final existing = await (_db.select(_db.transactions)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
-
-    if (existing != null && !_remoteWins(
-        localVersion: existing.version,
-        localUpdatedAt: existing.updatedAt,
-        remoteVersion: version,
-        remoteUpdatedAt: updatedAt)) {
-      return IngestResult.skipped;
-    }
-
-    // v7 退款冲抵字段：旧客户端推来的 payload 无此字段，此时保留本地已有
-    // 关联与已退额，避免旧版本编辑原支出把净额冲抵清零
     final hasRefundFields = payload.containsKey('refundedCents');
     final refundOfIdValue = !hasRefundFields && existing != null
         ? Value(existing.refundOfId)
@@ -217,8 +388,8 @@ class SyncIngest {
         ? Value(existing.refundedCents)
         : Value((payload['refundedCents'] as num?)?.toInt() ?? 0);
 
-    final row = TransactionsCompanion.insert(
-      id: Value(id),
+    return TransactionsCompanion.insert(
+      id: Value(record['id'] as String),
       type: payload['type'] as int,
       categoryId: payload['categoryId'] as String,
       amountCents: payload['amountCents'] as int,
@@ -239,14 +410,133 @@ class SyncIngest {
       deleted: Value(deleted),
       syncPending: Value(markPending),
     );
+  }
 
-    if (existing == null) {
-      await _db.into(_db.transactions).insert(row);
-      return IngestResult.inserted;
+  Future<IngestResult> _applyTransaction(
+    Map<String, dynamic> record,
+    Map<String, dynamic> payload, {
+    bool markPending = false,
+  }) async {
+    final (version, updatedAt, _) = _meta(record);
+    final id = record['id'] as String;
+
+    // 仲裁读 + 主表写 + 索引写同一事务：与整页批量路径同口径，
+    // 避免单条路径留下「主表已写、索引未写」的半截状态
+    return _db.transaction(() async {
+      final existing = await (_db.select(_db.transactions)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+
+      if (existing != null && !_remoteWins(
+          localVersion: existing.version,
+          localUpdatedAt: existing.updatedAt,
+          remoteVersion: version,
+          remoteUpdatedAt: updatedAt)) {
+        return IngestResult.skipped;
+      }
+
+      final row = _transactionRow(record, payload,
+          markPending: markPending, existing: existing);
+
+      if (existing == null) {
+        await _db.into(_db.transactions).insert(row);
+      } else {
+        await (_db.update(_db.transactions)..where((t) => t.id.equals(id)))
+            .write(row);
+      }
+      await TransactionFts.sync(_db, [_ftsEntryOf(id, row)]);
+      return existing == null ? IngestResult.inserted : IngestResult.updated;
+    });
+  }
+
+  /// 从交易 companion 提取索引素材：与主表写入同源，避免再回查主表
+  static TransactionFtsEntry _ftsEntryOf(
+    String id,
+    TransactionsCompanion row,
+  ) =>
+      TransactionFtsEntry(
+        id: id,
+        deleted: row.deleted.present ? row.deleted.value : false,
+        description: row.description.present ? row.description.value : null,
+        counterparty:
+            row.counterparty.present ? row.counterparty.value : null,
+      );
+
+  /// 整页交易批量仲裁：1 次（分块）id 查询 + 1 批写入
+  Future<(int, int)> _applyTransactionsBatch(List<_IngestItem> items) async {
+    if (items.isEmpty) return (0, 0);
+    final byId = _dedupeById(items);
+    final existing = await _existingTransactions(byId.keys.toList());
+
+    final inserts = <TransactionsCompanion>[];
+    final updates = <({String id, TransactionsCompanion row})>[];
+    // 索引素材随仲裁结果一起收集：主表写入与 FTS 写入同源（同一 companion），
+    // 页级事务内先批量删后批量插，不额外回查主表、不增加 isolate 往返
+    final ftsEntries = <TransactionFtsEntry>[];
+    var applied = 0;
+    var skipped = 0;
+
+    for (final entry in byId.entries) {
+      final item = entry.value;
+      final (version, updatedAt, _) = _meta(item.record);
+      final local = existing[entry.key];
+      if (local != null && !_remoteWins(
+          localVersion: local.version,
+          localUpdatedAt: local.updatedAt,
+          remoteVersion: version,
+          remoteUpdatedAt: updatedAt)) {
+        skipped++;
+        continue;
+      }
+      final row = _transactionRow(item.record, item.payload,
+          markPending: item.markPending, existing: local);
+      if (local == null) {
+        inserts.add(row);
+      } else {
+        updates.add((id: entry.key, row: row));
+      }
+      ftsEntries.add(_ftsEntryOf(entry.key, row));
+      applied++;
     }
-    await (_db.update(_db.transactions)..where((t) => t.id.equals(id)))
-        .write(row);
-    return IngestResult.updated;
+    skipped += items.length - byId.length;
+
+    if (inserts.isNotEmpty || updates.isNotEmpty) {
+      await _db.batch((b) {
+        for (final row in inserts) {
+          b.insert(_db.transactions, row);
+        }
+        for (final update in updates) {
+          b.update(_db.transactions, update.row,
+              where: (t) => t.id.equals(update.id));
+        }
+        // 索引与主表同一页级事务（由 puller 的 page transaction 包裹）
+        TransactionFts.queueInBatch(b, ftsEntries);
+      });
+    }
+    return (applied, skipped);
+  }
+
+  CategoriesCompanion _categoryRow(
+    Map<String, dynamic> record,
+    Map<String, dynamic> payload, {
+    required bool markPending,
+  }) {
+    final (version, updatedAt, deleted) = _meta(record);
+    return CategoriesCompanion.insert(
+      id: Value(record['id'] as String),
+      name: payload['name'] as String,
+      icon: payload['icon'] as String,
+      // 分类已中性化：旧协议里的 type 忽略；nameKey 不同步，
+      // 远端记录一律按自建分类处理（显示原文）
+      nameKey: const Value(null),
+      familyId: Value(payload['familyId'] as String),
+      isBuiltin: Value(payload['isBuiltin'] as bool? ?? false),
+      sortOrder: Value(payload['sortOrder'] as int? ?? 0),
+      version: Value(version),
+      updatedAt: Value(updatedAt),
+      deleted: Value(deleted),
+      syncPending: Value(markPending),
+    );
   }
 
   Future<IngestResult> _applyCategory(
@@ -254,7 +544,7 @@ class SyncIngest {
     Map<String, dynamic> payload, {
     bool markPending = false,
   }) async {
-    final (version, updatedAt, deleted) = _meta(record);
+    final (version, updatedAt, _) = _meta(record);
     final id = record['id'] as String;
 
     final existing = await (_db.select(_db.categories)
@@ -269,19 +559,7 @@ class SyncIngest {
       return IngestResult.skipped;
     }
 
-    final row = CategoriesCompanion.insert(
-      id: Value(id),
-      name: payload['name'] as String,
-      icon: payload['icon'] as String,
-      type: payload['type'] as int,
-      familyId: Value(payload['familyId'] as String),
-      isBuiltin: Value(payload['isBuiltin'] as bool? ?? false),
-      sortOrder: Value(payload['sortOrder'] as int? ?? 0),
-      version: Value(version),
-      updatedAt: Value(updatedAt),
-      deleted: Value(deleted),
-      syncPending: Value(markPending),
-    );
+    final row = _categoryRow(record, payload, markPending: markPending);
 
     if (existing == null) {
       await _db.into(_db.categories).insert(row);
@@ -292,12 +570,79 @@ class SyncIngest {
     return IngestResult.updated;
   }
 
+  Future<(int, int)> _applyCategoriesBatch(List<_IngestItem> items) async {
+    if (items.isEmpty) return (0, 0);
+    final byId = _dedupeById(items);
+    final existing = await _existingCategories(byId.keys.toList());
+
+    final inserts = <CategoriesCompanion>[];
+    final updates = <({String id, CategoriesCompanion row})>[];
+    var applied = 0;
+    var skipped = 0;
+
+    for (final entry in byId.entries) {
+      final item = entry.value;
+      final (version, updatedAt, _) = _meta(item.record);
+      final local = existing[entry.key];
+      if (local != null && !_remoteWins(
+          localVersion: local.version,
+          localUpdatedAt: local.updatedAt,
+          remoteVersion: version,
+          remoteUpdatedAt: updatedAt)) {
+        skipped++;
+        continue;
+      }
+      final row = _categoryRow(item.record, item.payload,
+          markPending: item.markPending);
+      if (local == null) {
+        inserts.add(row);
+      } else {
+        updates.add((id: entry.key, row: row));
+      }
+      applied++;
+    }
+    skipped += items.length - byId.length;
+
+    if (inserts.isNotEmpty || updates.isNotEmpty) {
+      await _db.batch((b) {
+        for (final row in inserts) {
+          b.insert(_db.categories, row);
+        }
+        for (final update in updates) {
+          b.update(_db.categories, update.row,
+              where: (c) => c.id.equals(update.id));
+        }
+      });
+    }
+    return (applied, skipped);
+  }
+
+  BudgetsCompanion _budgetRow(
+    Map<String, dynamic> record,
+    Map<String, dynamic> payload, {
+    required bool markPending,
+  }) {
+    final (version, updatedAt, deleted) = _meta(record);
+    return BudgetsCompanion.insert(
+      id: Value(record['id'] as String),
+      familyId: Value(payload['familyId'] as String),
+      userId: payload['userId'] as String,
+      year: payload['year'] as int,
+      month: payload['month'] as int,
+      amountCents: payload['amountCents'] as int,
+      version: Value(version),
+      updatedAt: Value(updatedAt),
+      deleted: Value(deleted),
+      syncPending: Value(markPending),
+    );
+  }
+
   Future<IngestResult> _applyBudget(
     Map<String, dynamic> record,
     Map<String, dynamic> payload, {
     bool markPending = false,
   }) async {
-    final (version, updatedAt, deleted) = _meta(record);
+    final (version, updatedAt, _) = _meta(record);
     final id = record['id'] as String;
 
     final existing = await (_db.select(_db.budgets)
@@ -312,18 +657,7 @@ class SyncIngest {
       return IngestResult.skipped;
     }
 
-    final row = BudgetsCompanion.insert(
-      id: Value(id),
-      familyId: Value(payload['familyId'] as String),
-      userId: payload['userId'] as String,
-      year: payload['year'] as int,
-      month: payload['month'] as int,
-      amountCents: payload['amountCents'] as int,
-      version: Value(version),
-      updatedAt: Value(updatedAt),
-      deleted: Value(deleted),
-      syncPending: Value(markPending),
-    );
+    final row = _budgetRow(record, payload, markPending: markPending);
 
     if (existing == null) {
       await _db.into(_db.budgets).insert(row);
@@ -332,6 +666,53 @@ class SyncIngest {
     await (_db.update(_db.budgets)..where((b) => b.id.equals(id)))
         .write(row);
     return IngestResult.updated;
+  }
+
+  Future<(int, int)> _applyBudgetsBatch(List<_IngestItem> items) async {
+    if (items.isEmpty) return (0, 0);
+    final byId = _dedupeById(items);
+    final existing = await _existingBudgets(byId.keys.toList());
+
+    final inserts = <BudgetsCompanion>[];
+    final updates = <({String id, BudgetsCompanion row})>[];
+    var applied = 0;
+    var skipped = 0;
+
+    for (final entry in byId.entries) {
+      final item = entry.value;
+      final (version, updatedAt, _) = _meta(item.record);
+      final local = existing[entry.key];
+      if (local != null && !_remoteWins(
+          localVersion: local.version,
+          localUpdatedAt: local.updatedAt,
+          remoteVersion: version,
+          remoteUpdatedAt: updatedAt)) {
+        skipped++;
+        continue;
+      }
+      final row = _budgetRow(item.record, item.payload,
+          markPending: item.markPending);
+      if (local == null) {
+        inserts.add(row);
+      } else {
+        updates.add((id: entry.key, row: row));
+      }
+      applied++;
+    }
+    skipped += items.length - byId.length;
+
+    if (inserts.isNotEmpty || updates.isNotEmpty) {
+      await _db.batch((b) {
+        for (final row in inserts) {
+          b.insert(_db.budgets, row);
+        }
+        for (final update in updates) {
+          b.update(_db.budgets, update.row,
+              where: (bd) => bd.id.equals(update.id));
+        }
+      });
+    }
+    return (applied, skipped);
   }
 
   /// 学习表入库（7.6）。matchText 在密文内、服务端无法按它去重，
@@ -348,8 +729,7 @@ class SyncIngest {
     Map<String, dynamic> payload, {
     bool markPending = false,
   }) async {
-    final (version, updatedAt, deleted) = _meta(record);
-    final id = record['id'] as String;
+    final (version, updatedAt, _) = _meta(record);
     final matchText = payload['matchText'] as String;
 
     final existing = await (_db.select(_db.categoryRules)
@@ -365,7 +745,25 @@ class SyncIngest {
       return IngestResult.skipped;
     }
 
-    final content = CategoryRulesCompanion(
+    if (existing == null) {
+      await _db.into(_db.categoryRules).insert(
+          _ruleInsertRow(record, payload, markPending: markPending));
+      return IngestResult.inserted;
+    }
+    await (_db.update(_db.categoryRules)
+          ..where((r) => r.id.equals(existing.id)))
+        .write(_ruleContentRow(record, payload, markPending: markPending));
+    return IngestResult.updated;
+  }
+
+  /// 学习表内容列（更新用：不含 id/matchText，归并时保留本地 id）
+  CategoryRulesCompanion _ruleContentRow(
+    Map<String, dynamic> record,
+    Map<String, dynamic> payload, {
+    required bool markPending,
+  }) {
+    final (version, updatedAt, deleted) = _meta(record);
+    return CategoryRulesCompanion(
       categoryId: Value(payload['categoryId'] as String),
       source: Value(payload['source'] as int),
       hitCount: Value(payload['hitCount'] as int? ?? 0),
@@ -374,24 +772,187 @@ class SyncIngest {
       deleted: Value(deleted),
       syncPending: Value(markPending),
     );
-
-    if (existing == null) {
-      await _db.into(_db.categoryRules).insert(CategoryRulesCompanion.insert(
-            id: Value(id),
-            matchText: matchText,
-            categoryId: payload['categoryId'] as String,
-            source: payload['source'] as int,
-            hitCount: Value(payload['hitCount'] as int? ?? 0),
-            version: Value(version),
-            updatedAt: Value(updatedAt),
-            deleted: Value(deleted),
-            syncPending: Value(markPending),
-          ));
-      return IngestResult.inserted;
-    }
-    await (_db.update(_db.categoryRules)
-          ..where((r) => r.id.equals(existing.id)))
-        .write(content);
-    return IngestResult.updated;
   }
+
+  CategoryRulesCompanion _ruleInsertRow(
+    Map<String, dynamic> record,
+    Map<String, dynamic> payload, {
+    required bool markPending,
+  }) {
+    final (version, updatedAt, deleted) = _meta(record);
+    return CategoryRulesCompanion.insert(
+      id: Value(record['id'] as String),
+      matchText: payload['matchText'] as String,
+      categoryId: payload['categoryId'] as String,
+      source: payload['source'] as int,
+      hitCount: Value(payload['hitCount'] as int? ?? 0),
+      version: Value(version),
+      updatedAt: Value(updatedAt),
+      deleted: Value(deleted),
+      syncPending: Value(markPending),
+    );
+  }
+
+  /// 整页学习表批量仲裁。页内同 matchText 先去重（保留 LWW 更优的一条），
+  /// 否则两条不同 id 的同文本记录会撞 UNIQUE(match_text) 导致整页回滚；
+  /// 去重后的最终状态与逐条「先插入、再与前者仲裁」完全一致。
+  Future<(int, int)> _applyCategoryRulesBatch(List<_IngestItem> items) async {
+    if (items.isEmpty) return (0, 0);
+
+    final byText = <String, _IngestItem>{};
+    for (final item in items) {
+      final text = item.payload['matchText'] as String;
+      final prev = byText[text];
+      if (prev == null || _recordWins(item.record, prev.record)) {
+        byText[text] = item;
+      }
+    }
+    final existing = await _existingCategoryRules(byText.keys.toList());
+
+    final inserts = <CategoryRulesCompanion>[];
+    final updates = <({String id, CategoryRulesCompanion row})>[];
+    var applied = 0;
+    var skipped = 0;
+
+    for (final entry in byText.entries) {
+      final item = entry.value;
+      final (version, updatedAt, _) = _meta(item.record);
+      final local = existing[entry.key];
+      if (local != null && !_remoteWins(
+          localVersion: local.version,
+          localUpdatedAt: local.updatedAt,
+          remoteVersion: version,
+          remoteUpdatedAt: updatedAt)) {
+        skipped++;
+        continue;
+      }
+      if (local == null) {
+        inserts.add(_ruleInsertRow(item.record, item.payload,
+            markPending: item.markPending));
+      } else {
+        updates.add((
+          id: local.id,
+          row: _ruleContentRow(item.record, item.payload,
+              markPending: item.markPending),
+        ));
+      }
+      applied++;
+    }
+    skipped += items.length - byText.length;
+
+    if (inserts.isNotEmpty || updates.isNotEmpty) {
+      await _db.batch((b) {
+        for (final row in inserts) {
+          b.insert(_db.categoryRules, row);
+        }
+        for (final update in updates) {
+          b.update(_db.categoryRules, update.row,
+              where: (r) => r.id.equals(update.id));
+        }
+      });
+    }
+    return (applied, skipped);
+  }
+
+  /// 页内同 id 去重：保留 LWW 更优的一条。服务端主键唯一，正常不会出现，
+  /// 属防御性处理（避免批量插入撞主键导致整页回滚）。
+  static Map<String, _IngestItem> _dedupeById(List<_IngestItem> items) {
+    final map = <String, _IngestItem>{};
+    for (final item in items) {
+      final id = item.record['id'] as String;
+      final prev = map[id];
+      if (prev == null || _recordWins(item.record, prev.record)) {
+        map[id] = item;
+      }
+    }
+    return map;
+  }
+
+  /// 两条云端记录按 LWW 比较（a 是否胜过 b）
+  static bool _recordWins(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final (versionA, updatedAtA, _) = _meta(a);
+    final (versionB, updatedAtB, _) = _meta(b);
+    return _remoteWins(
+      localVersion: versionB,
+      localUpdatedAt: updatedAtB,
+      remoteVersion: versionA,
+      remoteUpdatedAt: updatedAtA,
+    );
+  }
+
+  Future<Map<String, Transaction>> _existingTransactions(
+      List<String> ids) async {
+    final result = <String, Transaction>{};
+    for (final chunk in _chunks(ids)) {
+      final rows = await (_db.select(_db.transactions)
+            ..where((t) => t.id.isIn(chunk)))
+          .get();
+      for (final row in rows) {
+        result[row.id] = row;
+      }
+    }
+    return result;
+  }
+
+  Future<Map<String, Category>> _existingCategories(List<String> ids) async {
+    final result = <String, Category>{};
+    for (final chunk in _chunks(ids)) {
+      final rows = await (_db.select(_db.categories)
+            ..where((c) => c.id.isIn(chunk)))
+          .get();
+      for (final row in rows) {
+        result[row.id] = row;
+      }
+    }
+    return result;
+  }
+
+  Future<Map<String, Budget>> _existingBudgets(List<String> ids) async {
+    final result = <String, Budget>{};
+    for (final chunk in _chunks(ids)) {
+      final rows = await (_db.select(_db.budgets)
+            ..where((b) => b.id.isIn(chunk)))
+          .get();
+      for (final row in rows) {
+        result[row.id] = row;
+      }
+    }
+    return result;
+  }
+
+  Future<Map<String, CategoryRule>> _existingCategoryRules(
+      List<String> texts) async {
+    final result = <String, CategoryRule>{};
+    for (final chunk in _chunks(texts)) {
+      final rows = await (_db.select(_db.categoryRules)
+            ..where((r) => r.matchText.isIn(chunk)))
+          .get();
+      for (final row in rows) {
+        result[row.matchText] = row;
+      }
+    }
+    return result;
+  }
+
+  /// 按批切分（保守 400 个/批，避开 SQLite 变量个数上限）
+  static Iterable<List<T>> _chunks<T>(List<T> items) sync* {
+    const size = 400;
+    for (var start = 0; start < items.length; start += size) {
+      final end = start + size > items.length ? items.length : start + size;
+      yield items.sublist(start, end);
+    }
+  }
+}
+
+/// 页内待入库条目：解密后的明文载荷 + 是否需以家庭 key 重推
+class _IngestItem {
+  const _IngestItem({
+    required this.record,
+    required this.payload,
+    required this.markPending,
+  });
+
+  final Map<String, dynamic> record;
+  final Map<String, dynamic> payload;
+  final bool markPending;
 }

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
+import 'package:xiji_flutter/data/local/transaction_fts.dart';
 import 'package:xiji_flutter/data/local/transaction_repository.dart';
 
 void main() {
@@ -137,6 +138,62 @@ void main() {
           .getSingle();
       expect(ftsRows.read<int>('c'), 0, reason: '无正文的记录不应产生 FTS 行');
       expect(await repo.findById(row.id), isNotNull);
+    });
+
+    test('纯符号关键词短路：返回空结果且不抛错', () async {
+      await repo.insert(newTx(description: '合成拿铁'));
+
+      expect(await repo.search('f1', '%'), isEmpty);
+      expect(await repo.search('f1', '_'), isEmpty);
+      expect(await repo.search('f1', '""'), isEmpty);
+      expect(await repo.search('f1', '   '), hasLength(1),
+          reason: '空白关键词等同不加条件');
+    });
+
+    test('同日同秒排序补 id 兜底：翻页稳定不重复不漏行', () async {
+      final at = DateTime(2026, 10, 1);
+      for (final id in ['id-a', 'id-b', 'id-c']) {
+        await db.into(db.transactions).insert(TransactionsCompanion.insert(
+              id: Value(id),
+              type: 1,
+              categoryId: diningId,
+              amountCents: 100,
+              date: at,
+              userId: 'user-1',
+              familyId: const Value('f1'),
+              description: const Value('合成同日'),
+              updatedAt: Value(at),
+            ));
+      }
+
+      final first = await repo.query(familyId: 'f1', pageSize: 2, page: 1);
+      final second = await repo.query(familyId: 'f1', pageSize: 2, page: 2);
+      expect(first.map((t) => t.id), ['id-c', 'id-b']);
+      expect(second.map((t) => t.id), ['id-a']);
+    });
+
+    test('全量重建：只索引非墓碑且有文本的行，条数与索引一致', () async {
+      final breakfast =
+          await repo.insert(newTx(description: '合成早餐', counterparty: '合成铺子'));
+      await repo.insert(newTx(description: '合成晚餐'));
+      await repo.insert(newTx()); // 无文本
+      final deleted = await repo.insert(newTx(description: '合成已删'));
+      await repo.softDelete(deleted.id);
+
+      // 模拟 v8 之前的缺口：同步入库不写索引（清空后搜索全空）
+      await db.customStatement('DELETE FROM transactions_fts');
+      expect(await repo.search('f1', '早餐'), isEmpty);
+
+      await TransactionFts.rebuild(db);
+
+      expect(await repo.search('f1', '早餐').then((l) => l.single.id),
+          breakfast.id);
+      expect(await repo.search('f1', '晚餐'), hasLength(1));
+      expect(await repo.search('f1', '已删'), isEmpty, reason: '墓碑不进索引');
+      final count = await db
+          .customSelect('SELECT COUNT(*) AS c FROM transactions_fts')
+          .getSingle();
+      expect(count.read<int>('c'), 2, reason: '仅两条有文本的非墓碑交易');
     });
 
     test('已冲抵退款的支出：编辑金额低于已退额被拒且原值不变', () async {
