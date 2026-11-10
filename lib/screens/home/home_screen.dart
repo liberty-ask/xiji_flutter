@@ -27,6 +27,7 @@ import '../../models/family_member.dart';
 import '../../sync/sync_scheduler.dart';
 import '../../sync/vault_sync_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,6 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
   // 手动刷新转圈：stale-while-revalidate 下静默刷新无任何视觉
   // 反馈，用户显式点击须有反馈（自动刷新保持静默不闪屏）
   bool _manualRefreshing = false;
+  // 同步进度（P1-6）：批量恢复/重推时展示细进度条；日常增量不产生
+  // 进度事件，UI 保持静默
+  DateTime _lastProgressRefresh = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _progressRefreshTimer;
 
   @override
   void initState() {
@@ -65,12 +70,62 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<HomeProvider>().fetchHomeData();
       }
     });
+    SyncScheduler.instance.progress.addListener(_onSyncProgress);
   }
 
   @override
   void dispose() {
     _syncRoundSub?.cancel();
+    _progressRefreshTimer?.cancel();
+    SyncScheduler.instance.progress.removeListener(_onSyncProgress);
     super.dispose();
+  }
+
+  /// 同步进度变化：重绘进度条 / 骨架屏，并在恢复期按页节流刷新首页。
+  /// 节流规则：每页最多触发一次、两次刷新间隔不少于 500ms；间隔不足
+  /// 时用定时器补最后一次，避免最后一页被吞掉导致收尾不刷新。
+  void _onSyncProgress() {
+    if (!mounted) return;
+    setState(() {});
+    final progress = SyncScheduler.instance.currentProgress;
+    if (progress == null || progress.phase != SyncPhase.restoring) return;
+    // processed == 0 只是「恢复开始」标记（用于切骨架屏），无新数据可刷
+    if (progress.processed <= 0) return;
+    const interval = Duration(milliseconds: 500);
+    final elapsed = DateTime.now().difference(_lastProgressRefresh);
+    if (elapsed >= interval) {
+      _refreshFromProgress();
+    } else {
+      _progressRefreshTimer?.cancel();
+      _progressRefreshTimer = Timer(interval - elapsed, () {
+        if (mounted) _refreshFromProgress();
+      });
+    }
+  }
+
+  void _refreshFromProgress() {
+    _lastProgressRefresh = DateTime.now();
+    context.read<HomeProvider>().fetchHomeData();
+  }
+
+  /// 恢复中且本地无数据：骨架屏 + 顶部细进度条。与「无数据且无任务」
+  /// （错误/空态）区分，让用户明确知道数据正在路上。
+  /// 保留底部导航：恢复期间照常可切 tab / 记账，不做任何阻断。
+  Widget _buildRestoringSkeleton(SyncProgress progress) {
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            _SyncProgressBar(progress: progress),
+            const Expanded(child: _HomeSkeleton()),
+          ],
+        ),
+      ),
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: _currentIndex,
+        onTap: _onTabTapped,
+      ),
+    );
   }
 
   /// 首页数据引导：先回填当前家庭再拉数据。
@@ -296,17 +351,24 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Consumer<HomeProvider>(
         builder: (context, provider, _) {
           // 闪屏修复：仅「加载中且无旧数据」才显示 loading（首启场景）；
-          // 静默刷新期间继续渲染旧数据。错误页仅在无数据可兜底时出现
-          if (provider.isLoading && provider.homeData == null) {
-            return LoadingIndicator(message: AppLocalizations.of(context)!.loading);
-          }
-
+          // 静默刷新期间继续渲染旧数据。错误页仅在无数据可兜底时出现。
+          // P1-6：恢复中且本地无数据 → 骨架屏（区别于「无数据且无任务」）
           if (provider.homeData == null) {
+            final progress = SyncScheduler.instance.currentProgress;
+            if (progress != null && progress.phase == SyncPhase.restoring) {
+              return _buildRestoringSkeleton(progress);
+            }
+            if (provider.isLoading) {
+              return LoadingIndicator(
+                  message: AppLocalizations.of(context)!.loading);
+            }
             return custom.CustomErrorWidget(
               message: provider.error ?? AppLocalizations.of(context)!.noData,
               onRetry: () => provider.fetchHomeData(),
             );
           }
+
+          final syncProgress = SyncScheduler.instance.currentProgress;
 
           final data = provider.homeData!;
           final balanceNum = (data['balance'] as num?)?.toDouble() ?? 0.0;
@@ -577,6 +639,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+
+                  // 同步进度（P1-6）：首轮恢复 / 存量重推时页头下方细线，
+                  // 日常增量不出现；不遮罩、不影响记账与切 tab
+                  if (syncProgress != null)
+                    _SyncProgressBar(progress: syncProgress),
 
                   // Content
                   Expanded(
@@ -1077,10 +1144,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         ScaledText(
-                                          item['title'] as String? ??
-                                              (isIncome
-                                                  ? AppLocalizations.of(context)!.income
-                                                  : AppLocalizations.of(context)!.expense),
+                                          CategoryL10n.display(
+                                            AppLocalizations.of(context)!,
+                                            nameKey:
+                                                item['nameKey'] as String?,
+                                            fallbackName: item['title']
+                                                    as String? ??
+                                                (isIncome
+                                                    ? AppLocalizations.of(
+                                                            context)!
+                                                        .income
+                                                    : AppLocalizations.of(
+                                                            context)!
+                                                        .expense),
+                                          ),
                                           style: const TextStyle(
                                             fontSize: 14,
                                             fontWeight: FontWeight.bold,
@@ -1273,10 +1350,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.category,
-                item['title'] as String? ??
-                    (isIncome
-                        ? AppLocalizations.of(context)!.income
-                        : AppLocalizations.of(context)!.expense)
+                CategoryL10n.display(
+                  AppLocalizations.of(context)!,
+                  nameKey: item['nameKey'] as String?,
+                  fallbackName: item['title'] as String? ??
+                      (isIncome
+                          ? AppLocalizations.of(context)!.income
+                          : AppLocalizations.of(context)!.expense),
+                ),
               ),
               _buildDetailRow(
                 AppLocalizations.of(context)!.amount,
@@ -1360,4 +1441,106 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+}
+
+/// 同步进度条（P1-6）：页头下方 2px 细线 + 一行小字。
+/// 不弹模态、不加遮罩、不禁用任何交互。
+class _SyncProgressBar extends StatelessWidget {
+  const _SyncProgressBar({required this.progress});
+
+  final SyncProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final total = progress.total;
+    final double? value = total != null && total > 0
+        ? (progress.processed / total).clamp(0.0, 1.0)
+        : null;
+    final label = progress.phase == SyncPhase.restoring
+        ? l10n.syncRestoringData(progress.processed)
+        : l10n.syncUploadingHistory(progress.processed, total ?? 0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LinearProgressIndicator(
+          value: value,
+          minHeight: 2,
+          backgroundColor: Colors.white.withValues(alpha: 0.06),
+          color: ThemeHelper.primary(context),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 4),
+          child: ScaledText(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.white.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 首页骨架屏：仅「正在恢复且本地尚无数据」时替代空白/错误页，
+/// 用脉冲占位块表示数据正在路上。
+class _HomeSkeleton extends StatefulWidget {
+  const _HomeSkeleton();
+
+  @override
+  State<_HomeSkeleton> createState() => _HomeSkeletonState();
+}
+
+class _HomeSkeletonState extends State<_HomeSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _block(double height, {double radius = 12}) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.45, end: 1).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _block(150, radius: 40),
+            const SizedBox(height: 24),
+            _block(20),
+            const SizedBox(height: 12),
+            _block(16),
+            const SizedBox(height: 24),
+            _block(72),
+            const SizedBox(height: 12),
+            _block(72),
+            const SizedBox(height: 12),
+            _block(72),
+          ],
+        ),
+      ),
+    );
+  }
 }

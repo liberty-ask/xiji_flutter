@@ -21,6 +21,7 @@ import '../../utils/constants.dart';
 import '../../utils/amount_format.dart';
 import '../../models/transaction.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 
 class DetailScreen extends StatefulWidget {
   const DetailScreen({super.key});
@@ -1100,7 +1101,11 @@ class _DetailScreenState extends State<DetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ScaledText(
-                    transaction.category,
+                    CategoryL10n.display(
+                      AppLocalizations.of(context)!,
+                      nameKey: transaction.nameKey,
+                      fallbackName: transaction.category,
+                    ),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -1244,7 +1249,13 @@ class _DetailScreenState extends State<DetailScreen> {
                   color: isNeutral
                       ? Colors.white60
                       : TransactionTypeStyle.color(context, isIncome)),
-              _buildDetailRow(AppLocalizations.of(context)!.category, transaction.category),
+              _buildDetailRow(
+                  AppLocalizations.of(context)!.category,
+                  CategoryL10n.display(
+                    AppLocalizations.of(context)!,
+                    nameKey: transaction.nameKey,
+                    fallbackName: transaction.category,
+                  )),
               _buildDetailRow(AppLocalizations.of(context)!.amount, '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(transaction.amount)}',
                   color: isNeutral ? Colors.white60 : (isIncome ? ThemeHelper.primary(context) : Colors.white),
                   autoFit: true),
@@ -1423,13 +1434,11 @@ class _DetailScreenState extends State<DetailScreen> {
     models.Category? selectedCategory;
     DateTime selectedDate = transaction.date;
 
-    // 查找对应的分类（不计收支交易的分类挂在支出分类组下，与导入兜底口径一致）
-    final categories = selectedType == TransactionType.income
-        ? categoryProvider.incomeCategories
-        : categoryProvider.expenseCategories;
-    
+    // 查找对应的分类（分类中性化：单一列表，按 ID 定位）
+    final categories = categoryProvider.categories;
+
     for (var cat in categories) {
-      if (cat.name == transaction.category) {
+      if (cat.id == transaction.categoryId) {
         selectedCategory = cat;
         break;
       }
@@ -1549,10 +1558,8 @@ class _DetailScreenState extends State<DetailScreen> {
                   const SizedBox(height: 8),
                   Builder(
                     builder: (categoryContext) {
-                      // 不计收支沿用支出分类组（与账单导入口径一致）
-                      final categories = selectedType == TransactionType.income
-                          ? categoryProvider.incomeCategories
-                          : categoryProvider.expenseCategories;
+                      // 分类中性化：单一列表（选择器内部按方向做软提示排序）
+                      final categories = categoryProvider.categories;
                       
                       return Container(
                         constraints: const BoxConstraints(maxHeight: 200),
@@ -1561,7 +1568,7 @@ class _DetailScreenState extends State<DetailScreen> {
                             spacing: 8,
                             runSpacing: 8,
                             children: categories.map((category) {
-                              final isSelected = selectedCategory?.name == category.name;
+                              final isSelected = selectedCategory?.id == category.id;
                               return GestureDetector(
                                 onTap: () {
                                   setDialogState(() {
@@ -1582,7 +1589,9 @@ class _DetailScreenState extends State<DetailScreen> {
                                     ),
                                   ),
                                   child: ScaledText(
-                                    category.name,
+                                    CategoryL10n.ofModel(
+                                        AppLocalizations.of(categoryContext)!,
+                                        category),
                                     style: TextStyle(
                                       color: isSelected
                                           ? ThemeHelper.primary(categoryContext)
@@ -1740,7 +1749,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         await _transactionService.updateTransaction(
                           id: transaction.id,
                           type: selectedType.toInt(),
-                          category: selectedCategory!.name,
+                          categoryId: selectedCategory!.id,
                           amount: double.parse(amountController.text),
                           date: DateFormat('yyyy-MM-dd').format(selectedDate),
                           note: noteController.text.isNotEmpty ? noteController.text : null,
@@ -1757,6 +1766,8 @@ class _DetailScreenState extends State<DetailScreen> {
                               id: transaction.id,
                               type: selectedType,
                               category: selectedCategory!.name,
+                              categoryId: selectedCategory!.id,
+                              nameKey: selectedCategory!.nameKey,
                               icon: transaction.icon,
                               amount: double.parse(amountController.text),
                               date: selectedDate,

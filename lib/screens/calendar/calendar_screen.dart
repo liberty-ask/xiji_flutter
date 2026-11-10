@@ -12,6 +12,7 @@ import '../../utils/theme_helper.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../utils/icon_constants.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -257,8 +258,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
               _buildDetailRow(AppLocalizations.of(context)!.type,
                   TransactionTypeStyle.label(AppLocalizations.of(context)!, isIncome),
                   color: TransactionTypeStyle.color(context, isIncome)),
-              _buildDetailRow(AppLocalizations.of(context)!.name, transaction['name'] as String? ?? (transaction['type'] == 0 ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense)),
-              _buildDetailRow(AppLocalizations.of(context)!.category, transaction['cat'] as String? ?? ''),
+              _buildDetailRow(
+                  AppLocalizations.of(context)!.name,
+                  CategoryL10n.display(
+                    AppLocalizations.of(context)!,
+                    nameKey: transaction['nameKey'] as String?,
+                    fallbackName: transaction['name'] as String? ??
+                        (transaction['type'] == 0
+                            ? AppLocalizations.of(context)!.income
+                            : AppLocalizations.of(context)!.expense),
+                  )),
+              _buildDetailRow(
+                  AppLocalizations.of(context)!.category,
+                  CategoryL10n.display(
+                    AppLocalizations.of(context)!,
+                    nameKey: transaction['catNameKey'] as String?,
+                    fallbackName: transaction['cat'] as String? ?? '',
+                  )),
               _buildDetailRow(AppLocalizations.of(context)!.amount, transaction['amount'] as String? ?? ''),
               _buildDetailRow(AppLocalizations.of(context)!.time, transaction['time'] as String? ?? ''),
               if (transaction['counterparty'] != null && (transaction['counterparty'] as String).isNotEmpty)
@@ -735,7 +751,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ScaledText(
-                            item['name'] as String? ?? (item['type'] == 0 ? AppLocalizations.of(context)!.income : AppLocalizations.of(context)!.expense),
+                            CategoryL10n.display(
+                              AppLocalizations.of(context)!,
+                              nameKey: item['nameKey'] as String?,
+                              fallbackName: item['name'] as String? ??
+                                  (item['type'] == 0
+                                      ? AppLocalizations.of(context)!.income
+                                      : AppLocalizations.of(context)!.expense),
+                            ),
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -746,7 +769,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                           const SizedBox(height: 4),
                           ScaledText(
-                            '${item['cat'] ?? ''} - ${item['time'] ?? ''}',
+                            '${CategoryL10n.display(AppLocalizations.of(context)!, nameKey: item['catNameKey'] as String?, fallbackName: item['cat'] as String? ?? '')} - ${item['time'] ?? ''}',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[400],

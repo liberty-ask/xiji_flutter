@@ -17,6 +17,7 @@ import '../../utils/icon_constants.dart';
 import '../../utils/amount_format.dart';
 import '../../models/transaction.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -818,7 +819,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   // 构建分类列表项
   Widget _buildCategoryItem(BuildContext context, dynamic item) {
     final itemMap = item as Map<String, dynamic>;
-    final name = itemMap['name'] as String? ?? '';
+    final name = CategoryL10n.display(
+      AppLocalizations.of(context)!,
+      nameKey: itemMap['nameKey'] as String?,
+      fallbackName: itemMap['name'] as String? ?? '',
+    );
     final amount = itemMap['amount'] as String? ?? '';
     final pct = itemMap['pct'] as String? ?? '0%';
     final color = itemMap['color'] as String? ?? '#13ec5b';
