@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
-        android:label="玺记"
+        android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -43,7 +43,7 @@
         <receiver
             android:name=".FinanceSummaryWidgetProvider"
             android:exported="true"
-            android:label="本月财务汇总"
+            android:label="@string/finance_summary_widget_name"
             android:icon="@mipmap/ic_launcher">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

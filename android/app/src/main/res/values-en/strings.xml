@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XiJi</string>
+    <string name="finance_summary_widget_name">Monthly Summary</string>
+    <string name="finance_summary_widget_description">Home screen widget showing this month\'s income and expenses</string>
+</resources>
