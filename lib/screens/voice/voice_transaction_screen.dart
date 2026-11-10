@@ -17,6 +17,7 @@ import '../../utils/error_helper.dart';
 import '../../utils/amount_format.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 
 /// 半圆形裁剪器
 class HalfCircleClipper extends CustomClipper<Path> {
@@ -445,7 +446,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     final date = result.date ?? DateTime.now();
     final saved = await TransactionService().addTransaction(
       type: result.type!,
-      category: result.categoryName!,
+      categoryId: result.categoryId!,
       amount: result.amount!,
       date: DateFormat('yyyy-MM-dd').format(date),
       note: text,
@@ -463,9 +464,14 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
     final l10n = AppLocalizations.of(context)!;
     final typeLabel = result.type == 0 ? l10n.income : l10n.expense;
     final amountText = AmountFormat.format(result.amount!);
+    final categoryLabel = CategoryL10n.display(
+      l10n,
+      nameKey: result.categoryNameKey,
+      fallbackName: result.categoryName ?? '',
+    );
     CustomSnackBar.showSuccessWithAction(
       context,
-      l10n.voiceRecordedAs(typeLabel, amountText, result.categoryName!),
+      l10n.voiceRecordedAs(typeLabel, amountText, categoryLabel),
       l10n.edit,
       () {
         // 修改入口：打开编辑模式表单（预填刚入库的交易）
@@ -473,7 +479,7 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
           transactionId: saved['id'] as String,
           type: result.type,
           amount: result.amount,
-          categoryName: result.categoryName,
+          categoryId: result.categoryId,
           date: date,
           note: text,
           voiceMatchText: text,

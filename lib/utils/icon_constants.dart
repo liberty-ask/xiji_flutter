@@ -87,6 +87,8 @@ class IconConstants {
     IconDataItem(name: 'favorite', icon: Icons.favorite),
     IconDataItem(name: 'healing', icon: Icons.healing),
     IconDataItem(name: 'vaccines', icon: Icons.vaccines),
+    // 保障/保险类（「保险」内置分类使用）
+    IconDataItem(name: 'health_and_safety', icon: Icons.health_and_safety),
   ];
 
   // 教育图标

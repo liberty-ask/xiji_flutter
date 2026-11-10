@@ -240,6 +240,7 @@ class StatisticsRepository {
           return CategoryStatisticsItem(
             categoryId: categoryId,
             name: category.name,
+            nameKey: category.nameKey,
             icon: category.icon,
             amount: Money.centsToYuan(amountCents),
             // 比例在分域整数比计算，与元域结果一致且无精度损失
@@ -503,6 +504,9 @@ class MonthlyOverview {
 class CategoryStatisticsItem {
   final String categoryId;
   final String name;
+
+  /// 多语言词条 key（内置分类非空），显示层经 CategoryL10n 渲染
+  final String? nameKey;
   final String icon;
   final double amount;
   final double percentage; // 0-100
@@ -510,6 +514,7 @@ class CategoryStatisticsItem {
   CategoryStatisticsItem({
     required this.categoryId,
     required this.name,
+    this.nameKey,
     required this.icon,
     required this.amount,
     required this.percentage,

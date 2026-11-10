@@ -159,7 +159,9 @@ class StatisticsService {
     ];
     var list = items.asMap().entries.map((e) {
       return {
+        'categoryId': e.value.categoryId,
         'name': e.value.name,
+        'nameKey': e.value.nameKey,
         'amount': _formatAmount(e.value.amount),
         'pct': '${e.value.percentage.round()}%',
         'color': colors[e.key % colors.length],

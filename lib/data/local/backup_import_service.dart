@@ -7,7 +7,7 @@ import 'app_database.dart' as local;
 import 'builtin_categories.dart';
 import 'current_family_store.dart';
 import 'local_user.dart';
-import 'fts_tokenizer.dart';
+import 'transaction_fts.dart';
 import '../../utils/money.dart' show Money;
 
 /// 在线版 -> 离线版 备份导入器（5.8，格式见 openspec design.md D10）。
@@ -62,36 +62,33 @@ class BackupImportService {
       final catIdMap = <String, String>{}; // 服务端分类 ID -> 本地分类 ID
       final customToInsert = <local.CategoriesCompanion>[];
 
-      // 内置 sortOrder 起点：同类型最大值顺延（含内置与已存在自定义）
-      var maxSortExpense = 0, maxSortIncome = 0;
+      // 内置与自定义共用单一 sortOrder 序列
+      var maxSort = 0;
       final existingCats = await _db.select(_db.categories).get();
       for (final c in existingCats) {
-        if (c.type == 1) {
-          maxSortExpense = c.sortOrder > maxSortExpense ? c.sortOrder : maxSortExpense;
-        } else if (c.type == 0) {
-          maxSortIncome = c.sortOrder > maxSortIncome ? c.sortOrder : maxSortIncome;
-        }
+        if (c.sortOrder > maxSort) maxSort = c.sortOrder;
       }
 
       // 幂等索引（全量拉取内存查重，替代逐条单查——万级数据逐条
-      // count 是真机导入小时级卡顿的根因）
+      // count 是真机导入小时级卡顿的根因）。分类中性化：名称全局唯一，
+      // 不再拼接类型做键
       final existingCatById = <String, local.Category>{
         for (final c in existingCats)
           if (!c.deleted) c.id: c,
       };
       final existingCatByName = <String, local.Category>{
         for (final c in existingCats)
-          if (!c.deleted && c.familyId == familyId) '${c.type}:${c.name}': c,
+          if (!c.deleted && c.familyId == familyId)
+            c.name.toLowerCase(): c,
       };
 
       for (final cat in categories) {
         final oldId = cat['id'] as String?;
         final name = cat['name'] as String?;
-        final type = cat['type'] as int?;
-        if (oldId == null || name == null || type == null) continue;
+        if (oldId == null || name == null) continue;
 
-        // 1) 名称+类型命中内置分类 -> 映射固定 UUID
-        final builtin = BuiltinCategories.byName(name, type);
+        // 1) 名称命中内置分类 -> 映射固定 UUID（旧备份的 type 字段忽略）
+        final builtin = BuiltinCategories.byName(name);
         if (builtin != null) {
           catIdMap[oldId] = builtin.id;
           result.categoriesMappedBuiltin++;
@@ -104,21 +101,20 @@ class BackupImportService {
           result.categoriesSkipped++;
           continue;
         }
-        // 3) 同名同型的自定义分类已存在（换设备/重复迁移）-> 映射到已有行
-        final byName = existingCatByName['$type:$name'];
+        // 3) 同名自定义分类已存在（换设备/重复迁移）-> 映射到已有行
+        final byName = existingCatByName[name.toLowerCase()];
         if (byName != null) {
           catIdMap[oldId] = byName.id;
           result.categoriesSkipped++;
           continue;
         }
         // 4) 新自定义分类：保原 ID，sortOrder 顺延，icon 保留服务端值
-        final isExpense = type == 1;
-        final sort = isExpense ? ++maxSortExpense : ++maxSortIncome;
+        final sort = ++maxSort;
         catIdMap[oldId] = oldId;
         customToInsert.add(local.CategoriesCompanion.insert(
           id: Value(oldId),
           name: name,
-          type: type,
+          // 旧备份里的 type 不迁移；自建分类 nameKey 为 NULL（显示原文）
           icon: (cat['icon'] as String?) ?? 'help_outline',
           sortOrder: Value(sort),
           isBuiltin: const Value(false),
@@ -216,32 +212,13 @@ class BackupImportService {
       }
 
       // ---- FTS 全量重建 ----
-      // 导入器直写主表 batch 绕过了 Repository 的 FTS 双写，历史导入
-      // 数据不在搜索索引中（真机 5.8 验证：关键词搜不到任何导入交易）。
+      // 导入器直写主表 batch 绕过了仓储的 FTS 双写，历史导入数据不在
+      // 搜索索引中（真机 5.8 验证：关键词搜不到任何导入交易）。
       // 导入末尾统一重建：回填存量 + 覆盖本次新增，幂等可重复执行。
-      await _rebuildFts();
+      // 重建口径与在线写入同源（TransactionFts），单独改分词不会再漂移。
+      await TransactionFts.rebuild(_db);
     });
     return result;
-  }
-
-  /// 全量重建 FTS 索引：清空后按 Repository 同规则回填全部未删除交易
-  /// （描述 + 交易对方，中文拆字）。墓碑行不进索引。
-  Future<void> _rebuildFts() async {
-    await _db.customStatement('DELETE FROM transactions_fts');
-    final rows = await (_db.select(_db.transactions)
-          ..where((t) => t.deleted.equals(false)))
-        .get();
-    for (final row in rows) {
-      final parts = [row.description, row.counterparty]
-          .whereType<String>()
-          .where((s) => s.isNotEmpty);
-      final fts = FtsTokenizer.tokenize(parts.join(' '));
-      if (fts.isEmpty) continue;
-      await _db.customInsert(
-        'INSERT INTO transactions_fts(fts_text, tx_id) VALUES (?, ?)',
-        variables: [Variable(fts), Variable(row.id)],
-      );
-    }
   }
 }
 

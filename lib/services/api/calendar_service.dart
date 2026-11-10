@@ -109,17 +109,22 @@ class CalendarService {
       final category = categoryById[tx.categoryId];
       dailyDetails.putIfAbsent('${tx.date.day}', () => <dynamic>[]);
 
-      // name：优先描述，其次分类名；兜底文案由 UI 按当前语言补全
+      // name：优先描述，其次分类名；兜底文案由 UI 按当前语言补全。
+      // 分类名一律带 nameKey 交给显示层本地化，禁止直接展示库内规范名。
       String? name;
+      String? nameKey;
       if ((tx.description ?? '').isNotEmpty) {
         name = tx.description!;
       } else if (category != null) {
         name = category.name;
+        nameKey = category.nameKey;
       }
 
       (dailyDetails['${tx.date.day}'] as List<dynamic>).add({
         'name': name,
+        'nameKey': nameKey,
         'cat': category?.name ?? '',
+        'catNameKey': category?.nameKey,
         'icon': category?.icon ?? '',
         'time': DateFormat('HH:mm').format(tx.date),
         'type': tx.type,

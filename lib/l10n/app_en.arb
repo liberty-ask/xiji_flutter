@@ -490,7 +490,7 @@
   "taskUploadParse": "Upload & Parse",
   "taskImport": "Import",
   "taskInProgress": "{task} in progress",
-  "billAssignHint": "Tap the category on a group to assign it to all transactions of that counterparty",
+  "billAssignHint": "Tap a category on a group to assign it by income/expense for that counterparty",
   "billDuplicateSkip": "Already imported, will skip",
   "billParseFailed": "Cannot recognize this bill file",
   "billNoTransactions": "No transactions found in the {platform} bill",
@@ -507,6 +507,17 @@
     }
   },
   "billGroupCount": "{count} transactions",
+  "billResetGroup": "Undo card",
+  "billResetAll": "Mark all as uncategorized",
+  "billResetAllConfirm": "Set every assignable record to Uncategorized? This only affects the current preview.",
+  "billClearLearning": "Clear learned rules",
+  "billClearLearningConfirm": "Clear all learned merchant rules? Previously assigned merchants will be prefilled again by platform category and keywords.",
+  "billLearningCleared": "Cleared {count} learned rules",
+  "@billLearningCleared": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
   "categoryNotFound": "Category not found",
   "categoryNameExists": "A category with this name already exists in this type",
   "builtinCategoryNotDeletable": "Built-in categories cannot be deleted",
@@ -519,5 +530,52 @@
     "placeholders": {
       "amount": {"type": "String"}
     }
-  }
+  },
+  "syncRestoringData": "Restoring data, {count} restored",
+  "@syncRestoringData": {
+    "description": "First full restore progress shown under the home header",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "syncUploadingHistory": "Uploading history, {done}/{total}",
+  "@syncUploadingHistory": {
+    "description": "Bulk upload progress (first upload / reseal) shown under the home header",
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "categoryDining": "Dining",
+  "categoryDaily": "Daily Necessities",
+  "categoryShopping": "Shopping",
+  "categoryOnlineShopping": "Online Shopping",
+  "categoryTransport": "Transport",
+  "categoryHousing": "Housing",
+  "categoryUtilities": "Utilities",
+  "categoryTelecom": "Communications",
+  "categoryEntertainment": "Entertainment",
+  "categoryMedical": "Healthcare",
+  "categoryInsurance": "Insurance",
+  "categoryEducation": "Education",
+  "categoryTravel": "Travel",
+  "categoryServices": "Lifestyle Services",
+  "categoryChildcare": "Childcare",
+  "categoryPets": "Pets",
+  "categorySocial": "Social Gifts",
+  "categorySalary": "Salary",
+  "categoryBonus": "Bonus",
+  "categoryPartTime": "Part-time Income",
+  "categoryRedPacket": "Red Envelopes",
+  "categoryGiftMoney": "Gift Money",
+  "categoryReimbursement": "Reimbursement",
+  "categoryOther": "Other",
+  "categoryUncategorized": "Uncategorized",
+  "selectedCategory": "Selected: {name}",
+  "@selectedCategory": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "addNote": "Add note"
 }

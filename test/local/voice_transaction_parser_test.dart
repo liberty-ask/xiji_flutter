@@ -41,8 +41,8 @@ void main() {
   });
 
   final now = DateTime(2026, 10, 21, 15, 0);
-  final diningId = BuiltinCategories.byName('餐饮', 1)!.id;
-  final salaryId = BuiltinCategories.byName('工资', 0)!.id;
+  final diningId = BuiltinCategories.byName('餐饮')!.id;
+  final salaryId = BuiltinCategories.byName('工资')!.id;
 
   group('任务 4.1：解析引擎 + 分类命中 + 置信度自评', () {
     test('典型句式：金额/类型/分类齐备 → 有把握直接入库', () async {
@@ -87,13 +87,13 @@ void main() {
       expect(result.isConfident, isFalse);
     });
 
-    test('类型词决定分类侧：收入词过滤掉支出侧规则命中', () async {
-      // 「瑞幸」是支出规则，但「退款」收入词更早出现 → 收入口径判定，
-      // 支出规则被过滤，文本又无收入侧关键词可命中
+    test('类型词决定收支方向，但不影响分类判定', () async {
+      // 「收到」为收入词，方向判为收入；分类中性化后不再按方向过滤规则，
+      // 「瑞幸」仍命中餐饮（方向由 type 单独承载）
       final result = await parser.parse('收到退款，顺便在瑞幸买了三十块', now: now);
       expect(result.type, 0);
-      expect(result.categoryId, isNull, reason: '瑞幸支出规则被收入口径过滤');
-      expect(result.isConfident, isFalse);
+      expect(result.categoryId, diningId, reason: '分类不按收支方向过滤');
+      expect(result.isConfident, isTrue, reason: '金额/类型/分类齐备即直接入库');
     });
 
     test('学习表命中：语音指认过的原文再次说出自动命中', () async {

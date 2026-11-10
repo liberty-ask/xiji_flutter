@@ -41,6 +41,12 @@ class Transaction {
   final String id;
   final TransactionType type;
   final String category;
+
+  /// 分类 ID：编辑回填、显示层按 ID 定位的唯一依据
+  final String? categoryId;
+
+  /// 分类多语言词条 key（内置分类非空），显示走 CategoryL10n
+  final String? nameKey;
   final String? icon;
   final double amount;
   final DateTime date;
@@ -52,6 +58,8 @@ class Transaction {
     required this.id,
     required this.type,
     required this.category,
+    this.categoryId,
+    this.nameKey,
     this.icon,
     required this.amount,
     required this.date,
@@ -78,6 +86,8 @@ class Transaction {
       id: (json['id'] as String?) ?? '',
       type: transactionType,
       category: (json['category'] as String?) ?? '',
+      categoryId: json['categoryId'] as String?,
+      nameKey: json['nameKey'] as String?,
       icon: json['icon'] as String?,
       amount: ((json['amount'] as num?) ?? 0).toDouble(),
       date: DateTime.parse(json['date'] as String? ?? DateTime.now().toIso8601String()),
@@ -91,6 +101,8 @@ class Transaction {
         'id': id,
         'type': type.toInt(),
         'category': category,
+        'categoryId': categoryId,
+        'nameKey': nameKey,
         'icon': icon,
         'amount': amount,
         'date': date.toIso8601String().split('T')[0],

@@ -35,6 +35,13 @@ class FtsTokenizer {
   /// 构造 FTS5 短语查询串：拆字后以双引号包裹，保证相邻匹配
   static String phrase(String keyword) => '"${tokenize(keyword)}"';
 
+  /// 同 [phrase]，但关键词分词后为空（纯符号/空白）时返回 null，
+  /// 供查询侧短路（空短语在不同 SQLite 版本下行为不一致）
+  static String? phraseOrNull(String keyword) {
+    final tokens = tokenize(keyword);
+    return tokens.isEmpty ? null : '"$tokens"';
+  }
+
   static bool _isWordChar(int rune) =>
       (rune >= 0x30 && rune <= 0x39) || // 0-9
       (rune >= 0x41 && rune <= 0x5A) || // A-Z

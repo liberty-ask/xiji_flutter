@@ -1359,8 +1359,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get billAssignHint =>
-      'Tap the category on a group to assign it to all transactions of that counterparty';
+  String get billAssignHint => '点击分组上的分类，可按收支分别批量指认该商户的交易';
 
   @override
   String get billDuplicateSkip => 'Already imported, will skip';
@@ -1388,6 +1387,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get billResetGroup => '撤销本卡';
+
+  @override
+  String get billResetAll => '全部置为未分类';
+
+  @override
+  String get billResetAllConfirm => '确定将本次预览中所有可指认的交易置为未分类？';
+
+  @override
+  String get billClearLearning => '清空学习表';
+
+  @override
+  String get billClearLearningConfirm => '确定清空学习表？清空后此前指认过的商户会重新按平台分类与关键词预填。';
+
+  @override
+  String billLearningCleared(int count) {
+    return '已清空学习表，共 $count 条';
+  }
+
+  @override
   String get categoryNotFound => '分类不存在';
 
   @override
@@ -1409,6 +1428,99 @@ class AppLocalizationsZh extends AppLocalizations {
   String refundToNeutralConfirm(String amount) {
     return '该笔已退款 $amount，改为不计收支后整笔不再计入支出统计。';
   }
+
+  @override
+  String syncRestoringData(int count) {
+    return 'Restoring data, $count restored';
+  }
+
+  @override
+  String syncUploadingHistory(int done, int total) {
+    return 'Uploading history, $done/$total';
+  }
+
+  @override
+  String get categoryDining => '餐饮';
+
+  @override
+  String get categoryDaily => '日用';
+
+  @override
+  String get categoryShopping => '购物';
+
+  @override
+  String get categoryOnlineShopping => '网购';
+
+  @override
+  String get categoryTransport => '交通';
+
+  @override
+  String get categoryHousing => '居住';
+
+  @override
+  String get categoryUtilities => '水电燃气';
+
+  @override
+  String get categoryTelecom => '通讯';
+
+  @override
+  String get categoryEntertainment => '娱乐';
+
+  @override
+  String get categoryMedical => '医疗';
+
+  @override
+  String get categoryInsurance => '保险';
+
+  @override
+  String get categoryEducation => '教育';
+
+  @override
+  String get categoryTravel => '旅行';
+
+  @override
+  String get categoryServices => '生活服务';
+
+  @override
+  String get categoryChildcare => '育儿';
+
+  @override
+  String get categoryPets => '宠物';
+
+  @override
+  String get categorySocial => '人情往来';
+
+  @override
+  String get categorySalary => '工资';
+
+  @override
+  String get categoryBonus => '奖金';
+
+  @override
+  String get categoryPartTime => '兼职';
+
+  @override
+  String get categoryRedPacket => '红包';
+
+  @override
+  String get categoryGiftMoney => '礼金';
+
+  @override
+  String get categoryReimbursement => '报销';
+
+  @override
+  String get categoryOther => '其他';
+
+  @override
+  String get categoryUncategorized => '未分类';
+
+  @override
+  String selectedCategory(String name) {
+    return '已选：$name';
+  }
+
+  @override
+  String get addNote => '添加备注';
 }
 
 /// The translations for Chinese, as used in China (`zh_CN`).
@@ -2755,7 +2867,7 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
-  String get billAssignHint => '点击分组上的分类，可为该商户全部交易批量指认';
+  String get billAssignHint => '点击分组上的分类，可按收支分别批量指认该商户的交易';
 
   @override
   String get billDuplicateSkip => '已导入，将跳过';
@@ -2782,6 +2894,26 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   }
 
   @override
+  String get billResetGroup => '撤销本卡';
+
+  @override
+  String get billResetAll => '全部置为未分类';
+
+  @override
+  String get billResetAllConfirm => '确定将本次预览中所有可指认的交易置为未分类？';
+
+  @override
+  String get billClearLearning => '清空学习表';
+
+  @override
+  String get billClearLearningConfirm => '确定清空学习表？清空后此前指认过的商户会重新按平台分类与关键词预填。';
+
+  @override
+  String billLearningCleared(int count) {
+    return '已清空学习表，共 $count 条';
+  }
+
+  @override
   String get categoryNotFound => '分类不存在';
 
   @override
@@ -2803,6 +2935,99 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String refundToNeutralConfirm(String amount) {
     return '该笔已退款 $amount，改为不计收支后整笔不再计入支出统计。';
   }
+
+  @override
+  String syncRestoringData(int count) {
+    return '正在恢复数据，已恢复 $count 条';
+  }
+
+  @override
+  String syncUploadingHistory(int done, int total) {
+    return '正在上传历史数据，已上传 $done/$total';
+  }
+
+  @override
+  String get categoryDining => '餐饮';
+
+  @override
+  String get categoryDaily => '日用';
+
+  @override
+  String get categoryShopping => '购物';
+
+  @override
+  String get categoryOnlineShopping => '网购';
+
+  @override
+  String get categoryTransport => '交通';
+
+  @override
+  String get categoryHousing => '居住';
+
+  @override
+  String get categoryUtilities => '水电燃气';
+
+  @override
+  String get categoryTelecom => '通讯';
+
+  @override
+  String get categoryEntertainment => '娱乐';
+
+  @override
+  String get categoryMedical => '医疗';
+
+  @override
+  String get categoryInsurance => '保险';
+
+  @override
+  String get categoryEducation => '教育';
+
+  @override
+  String get categoryTravel => '旅行';
+
+  @override
+  String get categoryServices => '生活服务';
+
+  @override
+  String get categoryChildcare => '育儿';
+
+  @override
+  String get categoryPets => '宠物';
+
+  @override
+  String get categorySocial => '人情往来';
+
+  @override
+  String get categorySalary => '工资';
+
+  @override
+  String get categoryBonus => '奖金';
+
+  @override
+  String get categoryPartTime => '兼职';
+
+  @override
+  String get categoryRedPacket => '红包';
+
+  @override
+  String get categoryGiftMoney => '礼金';
+
+  @override
+  String get categoryReimbursement => '报销';
+
+  @override
+  String get categoryOther => '其他';
+
+  @override
+  String get categoryUncategorized => '未分类';
+
+  @override
+  String selectedCategory(String name) {
+    return '已选：$name';
+  }
+
+  @override
+  String get addNote => '添加备注';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -2810,7 +3035,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   AppLocalizationsZhTw() : super('zh_TW');
 
   @override
-  String get appTitle => 'XiJi';
+  String get appTitle => '璽記';
 
   @override
   String get welcomeSlogan => '溫馨家庭，共同記賬';
@@ -4153,7 +4378,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get billAssignHint => '點擊分組上的分類，可為該商家全部交易批量指認';
+  String get billAssignHint => '點擊分組上的分類，可按收支分別批量指認該商家的交易';
 
   @override
   String get billDuplicateSkip => '已匯入，將跳過';
@@ -4180,6 +4405,26 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
+  String get billResetGroup => '撤銷本卡';
+
+  @override
+  String get billResetAll => '全部設為未分類';
+
+  @override
+  String get billResetAllConfirm => '確定將本次預覽中所有可指認的交易設為未分類？';
+
+  @override
+  String get billClearLearning => '清空學習表';
+
+  @override
+  String get billClearLearningConfirm => '確定清空學習表？清空後先前指認過的商家會重新依平台分類與關鍵詞預填。';
+
+  @override
+  String billLearningCleared(int count) {
+    return '已清空學習表，共 $count 條';
+  }
+
+  @override
   String get categoryNotFound => '分類不存在';
 
   @override
@@ -4201,4 +4446,97 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String refundToNeutralConfirm(String amount) {
     return '該筆已退款 $amount，改為不計收支後整筆不再計入支出統計。';
   }
+
+  @override
+  String syncRestoringData(int count) {
+    return '正在恢復資料，已恢復 $count 筆';
+  }
+
+  @override
+  String syncUploadingHistory(int done, int total) {
+    return '正在上傳歷史資料，已上傳 $done/$total';
+  }
+
+  @override
+  String get categoryDining => '餐飲';
+
+  @override
+  String get categoryDaily => '日用';
+
+  @override
+  String get categoryShopping => '購物';
+
+  @override
+  String get categoryOnlineShopping => '網購';
+
+  @override
+  String get categoryTransport => '交通';
+
+  @override
+  String get categoryHousing => '居住';
+
+  @override
+  String get categoryUtilities => '水電燃氣';
+
+  @override
+  String get categoryTelecom => '通訊';
+
+  @override
+  String get categoryEntertainment => '娛樂';
+
+  @override
+  String get categoryMedical => '醫療';
+
+  @override
+  String get categoryInsurance => '保險';
+
+  @override
+  String get categoryEducation => '教育';
+
+  @override
+  String get categoryTravel => '旅行';
+
+  @override
+  String get categoryServices => '生活服務';
+
+  @override
+  String get categoryChildcare => '育兒';
+
+  @override
+  String get categoryPets => '寵物';
+
+  @override
+  String get categorySocial => '人情往來';
+
+  @override
+  String get categorySalary => '工資';
+
+  @override
+  String get categoryBonus => '獎金';
+
+  @override
+  String get categoryPartTime => '兼職';
+
+  @override
+  String get categoryRedPacket => '紅包';
+
+  @override
+  String get categoryGiftMoney => '禮金';
+
+  @override
+  String get categoryReimbursement => '報銷';
+
+  @override
+  String get categoryOther => '其他';
+
+  @override
+  String get categoryUncategorized => '未分類';
+
+  @override
+  String selectedCategory(String name) {
+    return '已選：$name';
+  }
+
+  @override
+  String get addNote => '新增備註';
 }

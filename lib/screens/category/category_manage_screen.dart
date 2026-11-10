@@ -14,6 +14,7 @@ import '../../utils/icon_constants.dart';
 import '../../models/category.dart';
 import '../../models/user.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 
 class CategoryManageScreen extends StatefulWidget {
   const CategoryManageScreen({super.key});
@@ -25,13 +26,6 @@ class CategoryManageScreen extends StatefulWidget {
 class _CategoryManageScreenState extends State<CategoryManageScreen> {
   // 随库世代动态解析：登出关库换世代后旧实例持死引用，禁止构造捕获
   CategoryService get _categoryService => CategoryService();
-  late String _activeTab; // '支出', '收入'
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _activeTab = AppLocalizations.of(context)!.expense;
-  }
 
   @override
   void initState() {
@@ -62,7 +56,13 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
           style: TextStyle(color: Colors.white),
         ),
         content: ScaledText(
-          AppLocalizations.of(context)!.confirmDeleteCategoryMessage(category.name),
+          AppLocalizations.of(context)!.confirmDeleteCategoryMessage(
+            CategoryL10n.display(
+              AppLocalizations.of(context)!,
+              nameKey: category.nameKey,
+              fallbackName: category.name,
+            ),
+          ),
           style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
         ),
         actions: [
@@ -106,7 +106,6 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     String selectedIcon = 'category';
-    int selectedType = 1; // 1-支出, 0-收入
 
     final commonIcons = IconConstants.allIcons;
 
@@ -145,103 +144,6 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  // 交易类型
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: ThemeHelper.surfaceLight(context),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedType = 1; // 1-支出(EXPENSE)
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: selectedType == 1
-                                    ? ThemeHelper.expenseColor(context).withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.arrow_downward,
-                                    size: 16,
-                                    color: selectedType == 1
-                                        ? ThemeHelper.expenseColor(context)
-                                        : Colors.white54,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ScaledText(
-                                    AppLocalizations.of(context)!.expense,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: selectedType == 1
-                                          ? ThemeHelper.expenseColor(context)
-                                          : Colors.white54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedType = 0; // 0-收入(INCOME)
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: selectedType == 0
-                                    ? ThemeHelper.primary(context).withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.arrow_upward,
-                                    size: 16,
-                                    color: selectedType == 0
-                                        ? ThemeHelper.primary(context)
-                                        : Colors.white54,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ScaledText(
-                                    AppLocalizations.of(context)!.income,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: selectedType == 0
-                                          ? ThemeHelper.primary(context)
-                                          : Colors.white54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 图标选择
                   ScaledText(
                     AppLocalizations.of(context)!.selectIcon,
                     style: TextStyle(
@@ -319,7 +221,6 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                         await _categoryService.addCategory(
                           name: nameController.text.trim(),
                           icon: selectedIcon,
-                          type: selectedType,
                         );
                         if (context.mounted) {
                           Navigator.pop(context);
@@ -359,7 +260,6 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: category.name);
     String selectedIcon = category.icon;
-    int selectedType = category.type;
 
     final commonIcons = IconConstants.allIcons;
 
@@ -398,103 +298,6 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  // 交易类型
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: ThemeHelper.surfaceLight(context),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedType = 1; // 1-支出(EXPENSE)
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: selectedType == 1
-                                    ? ThemeHelper.expenseColor(context).withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.arrow_downward,
-                                    size: 16,
-                                    color: selectedType == 1
-                                        ? ThemeHelper.expenseColor(context)
-                                        : Colors.white54,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ScaledText(
-                                    AppLocalizations.of(context)!.expense,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: selectedType == 1
-                                          ? ThemeHelper.expenseColor(context)
-                                          : Colors.white54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setDialogState(() {
-                                selectedType = 0; // 0-收入(INCOME)
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: selectedType == 0
-                                    ? ThemeHelper.primary(context).withValues(alpha: 0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.arrow_upward,
-                                    size: 16,
-                                    color: selectedType == 0
-                                        ? ThemeHelper.primary(context)
-                                        : Colors.white54,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  ScaledText(
-                                    AppLocalizations.of(context)!.income,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: selectedType == 0
-                                          ? ThemeHelper.primary(context)
-                                          : Colors.white54,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // 图标选择
                   ScaledText(
                     AppLocalizations.of(context)!.selectIcon,
                     style: TextStyle(
@@ -573,7 +376,6 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                           id: category.id,
                           name: nameController.text.trim(),
                           icon: selectedIcon,
-                          type: selectedType,
                         );
                         if (context.mounted) {
                           Navigator.pop(context);
@@ -613,9 +415,7 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
   Widget build(BuildContext context) {
     final categoryProvider = context.watch<CategoryProvider>();
 
-    final categories = _activeTab == AppLocalizations.of(context)!.expense
-        ? categoryProvider.expenseCategories
-        : categoryProvider.incomeCategories;
+    final categories = categoryProvider.categories;
 
     return Scaffold(
       appBar: AppBar(
@@ -639,49 +439,7 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
                 )
               : Column(
                   children: [
-                        // 选项卡
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: ResponsiveHelper.horizontalPadding(context),
-                            vertical: ResponsiveHelper.verticalPadding(context),
-                          ),
-                          child: Row(
-                            children: [AppLocalizations.of(context)!.expense, AppLocalizations.of(context)!.income].map((tab) {
-                              final isActive = _activeTab == tab;
-                              return Expanded(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _activeTab = tab;
-                                    });
-                                  },
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: ResponsiveHelper.spacing(context, small: 10, normal: 12, large: 14),
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      color: isActive
-                                          ? ThemeHelper.primary(context).withValues(alpha: 0.2)
-                                          : Colors.transparent,
-                                    ),
-                                    child: ScaledText(
-                                      tab,
-                                      textAlign: TextAlign.center,
-                                      style: ResponsiveHelper.responsiveTitleStyle(
-                                        context,
-                                        color: isActive
-                                            ? ThemeHelper.primary(context)
-                                            : Colors.white54,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                        // 类别列表
+                        // 类别列表（分类中性化：单一列表，不再按收支分 Tab）
                         Expanded(
                           child: categories.isEmpty
                               ? Center(
@@ -744,22 +502,18 @@ class _CategoryManageScreenState extends State<CategoryManageScreen> {
             height: 48,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              color: category.type == 0
-                  ? ThemeHelper.primary(context).withValues(alpha: 0.2)
-                  : Colors.white.withValues(alpha: 0.05),
+              color: Colors.white.withValues(alpha: 0.05),
             ),
             child: Icon(
               IconConstants.getIconFromString(category.icon),
-              color: category.type == 0
-                  ? ThemeHelper.primary(context)
-                  : Colors.white70,
+              color: Colors.white70,
               size: 24,
             ),
           ),
           SizedBox(width: ResponsiveHelper.spacing(context)),
           Expanded(
             child: ScaledText(
-              category.name,
+              CategoryL10n.ofModel(AppLocalizations.of(context)!, category),
               style: ResponsiveHelper.responsiveTitleStyle(context, color: Colors.white),
             ),
           ),

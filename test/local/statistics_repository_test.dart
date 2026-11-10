@@ -143,7 +143,7 @@ void main() {
       // 自定义分类 + 交易，随后软删除分类
       final cat = await db.into(db.categories).insertReturning(
           CategoriesCompanion.insert(
-              name: '自定义', icon: 'category', type: 1));
+              name: '自定义', icon: 'category'));
       await seed(1, 50, DateTime(2026, 10, 3), categoryId: cat.id);
       await (db.update(db.categories)..where((c) => c.id.equals(cat.id)))
           .write(const CategoriesCompanion(

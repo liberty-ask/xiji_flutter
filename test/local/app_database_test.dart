@@ -35,7 +35,6 @@ void main() {
             id: const Value(builtinId),
             name: '餐饮',
             icon: 'restaurant',
-            type: 1,
             isBuiltin: const Value(true),
           ));
 
@@ -48,7 +47,7 @@ void main() {
 
     test('不传 id 时 clientDefault 生成 UUIDv7，同步字段默认值正确', () async {
       final category = await db.into(db.categories).insertReturning(
-          CategoriesCompanion.insert(name: '餐饮', icon: 'restaurant', type: 1));
+          CategoriesCompanion.insert(name: '餐饮', icon: 'restaurant'));
       expect(category.id, matches(uuidPattern));
 
       final now = DateTime(2026, 10, 21, 12, 0);
@@ -88,7 +87,7 @@ void main() {
 
     test('学习表 matchText 唯一约束', () async {
       final category = await db.into(db.categories).insertReturning(
-          CategoriesCompanion.insert(name: '餐饮', icon: 'restaurant', type: 1));
+          CategoriesCompanion.insert(name: '餐饮', icon: 'restaurant'));
       await db.into(db.categoryRules).insert(CategoryRulesCompanion.insert(
             matchText: '瑞幸咖啡',
             categoryId: category.id,

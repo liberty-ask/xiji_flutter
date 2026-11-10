@@ -20,8 +20,8 @@ import '../../utils/money.dart';
 /// 交易数据门面：本地优先架构下的唯一读写入口。
 ///
 /// 对外保持既有 Service 签名与返回结构（页面零改动），内部全部读写本地库，
-/// 不发起任何网络请求。分类参数沿用既有语义：传分类名称，门面按名称
-/// 解析为分类 ID 落库（与服务端行为一致，findFirst）。
+/// 不发起任何网络请求。分类参数为分类 ID（分类中性化后名称不参与写入，
+/// 方向只由 type 决定）。
 class TransactionService {
   static TransactionService? _instance;
   static int _generation = -1;
@@ -72,18 +72,19 @@ class TransactionService {
         .subtract(const Duration(microseconds: 1));
   }
 
-  /// 添加交易：分类按名称解析为 ID，本地生成 UUIDv7 主键
+  /// 添加交易：分类按 ID 解析（分类中性化，名称不再参与写入），
+  /// 方向只由 type 决定，本地生成 UUIDv7 主键
   Future<Map<String, dynamic>> addTransaction({
     required int type,
-    required String category,
+    required String categoryId,
     required double amount,
     required String date,
     String? note,
     String? location,
   }) async {
     final familyId = await CurrentFamilyStore.get();
-    final cat = await _categories.findByName(familyId, category, type);
-    if (cat == null) {
+    final cat = await _categories.findById(categoryId);
+    if (cat == null || cat.deleted) {
       throw const LocalizedException(LocalizedErrorCode.categoryNotFound);
     }
     final user = await LocalUser.load();
@@ -139,6 +140,8 @@ class TransactionService {
               id: r.id,
               type: TransactionType.fromInt(r.type),
               category: categoryById[r.categoryId]?.name ?? '',
+              categoryId: r.categoryId,
+              nameKey: categoryById[r.categoryId]?.nameKey,
               icon: categoryById[r.categoryId]?.icon,
               amount: Money.centsToYuan(r.amountCents),
               date: r.date,
@@ -149,11 +152,11 @@ class TransactionService {
         .toList();
   }
 
-  /// 更新交易：分类按名称解析为 ID；备注传 null 表示清空（表单语义）
+  /// 更新交易：分类按 ID 写入；备注传 null 表示清空（表单语义）
   Future<Map<String, dynamic>> updateTransaction({
     required String id,
     required int type,
-    required String category,
+    required String categoryId,
     required double amount,
     required String date,
     String? note,
@@ -170,22 +173,8 @@ class TransactionService {
         type != existing.type) {
       throw const LocalizedException(LocalizedErrorCode.refundTypeChangeNotAllowed);
     }
-    final familyId = await CurrentFamilyStore.get();
-    local.Category? cat;
-    if (type == 2) {
-      // 不计收支不做分类 type 强校验（与账单导入口径一致）：
-      // 分类名未变沿用原分类，改名时支出组优先、收入组兜底
-      final currentCat = await _categories.findById(existing.categoryId);
-      if (currentCat != null && currentCat.name == category) {
-        cat = currentCat;
-      } else {
-        cat = await _categories.findByName(familyId, category, 1) ??
-            await _categories.findByName(familyId, category, 0);
-      }
-    } else {
-      cat = await _categories.findByName(familyId, category, type);
-    }
-    if (cat == null) {
+    final cat = await _categories.findById(categoryId);
+    if (cat == null || cat.deleted) {
       throw const LocalizedException(LocalizedErrorCode.categoryNotFound);
     }
 
@@ -256,6 +245,7 @@ class TransactionService {
           MemberNicknames.displayName(nicknameMap, r.userId, user);
       return <String, dynamic>{
         'title': title,
+        'nameKey': category?.nameKey,
         'icon': icon,
         'user': ownerName,
         'time': DateFormat('yyyy-MM-dd HH:mm').format(r.updatedAt),

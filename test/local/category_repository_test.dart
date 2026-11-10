@@ -25,66 +25,62 @@ void main() {
   });
 
   CategoriesCompanion newCat(
-    String name,
-    int type, {
+    String name, {
     String icon = 'category',
     String? id,
   }) =>
       CategoriesCompanion.insert(
         name: name,
         icon: icon,
-        type: type,
         id: id == null ? const Value.absent() : Value(id),
       );
 
-  group('任务 2.5：分类仓储（列表/查重/墓碑）', () {
-    test('列表：类型分组（支出在前），同类型内置种子序在前、自定义在后', () async {
-      final custom = await repo.insert('', newCat('猫舍', 1, icon: 'pets'));
+  group('分类仓储（中性分类 v10：单一列表/全局查重/墓碑）', () {
+    test('列表：单一 sortOrder 序列，25 个内置在前、自定义顺延在后', () async {
+      final custom = await repo.insert('', newCat('猫舍', icon: 'pets'));
 
       final list = await repo.listAll('');
       expect(list.first.id, BuiltinCategories.all.first.id,
-          reason: '支出内置分类固定排在最前（与常量表顺序一致）');
-      // 0-12 位为支出内置分类种子（含「未分类」兜底），自定义支出紧随其后、先于收入内置分类
-      expect(list.indexOf(custom), 13);
-      expect(list.last.type, 0, reason: '收入分类整体排在支出之后');
+          reason: '内置分类固定排在最前（与常量表顺序一致）');
+      expect(list.indexOf(custom), BuiltinCategories.all.length,
+          reason: '自定义分类排在 25 个内置分类之后');
+      expect(list.last.id, custom.id);
 
       // 内置分类种子顺序完整保留
       final builtinIds = list.where((c) => c.isBuiltin).map((c) => c.id);
       expect(builtinIds, BuiltinCategories.all.map((c) => c.id));
     });
 
-    test('新增：sortOrder 取同类型最大值 +1', () async {
-      final first = await repo.insert('', newCat('自定义甲', 1));
-      final second = await repo.insert('', newCat('自定义乙', 1));
-      final incomeCat = await repo.insert('', newCat('自定义收入', 0));
+    test('新增：sortOrder 取全局最大值 +1（不再按收支分序列）', () async {
+      final first = await repo.insert('', newCat('自定义甲'));
+      final second = await repo.insert('', newCat('自定义乙'));
 
+      expect(first.sortOrder, BuiltinCategories.all.last.sortOrder + 1);
       expect(second.sortOrder, first.sortOrder + 1);
-      // 不同类型独立计数：收入自定义从内置收入最大序号 +1 起
-      expect(incomeCat.sortOrder, lessThan(first.sortOrder),
-          reason: '内置收入分类少（6 项），收入自定义序号应小于支出侧');
     });
 
-    test('按名称查找：命中名称与类型，墓碑不可见', () async {
-      final hit = await repo.findByName('', '餐饮', 1);
-      expect(hit, isNotNull, reason: '内置分类按名称可解析（记账写入路径）');
-      expect(await repo.findByName('', '餐饮', 0), isNull,
-          reason: '餐饮是支出分类，收入侧不得命中');
+    test('按名称查找：大小写不敏感，墓碑不可见', () async {
+      final hit = await repo.findByName('', '餐饮');
+      expect(hit, isNotNull, reason: '内置分类按名称可解析');
 
-      final custom = await repo.insert('', newCat('猫舍', 1));
+      final custom = await repo.insert('', newCat('CoffeeShop'));
+      expect((await repo.findByName('', 'coffeeshop'))?.id, custom.id,
+          reason: '英文自建分类查名不区分大小写');
+
       await repo.softDelete(custom.id);
-      expect(await repo.findByName('', '猫舍', 1), isNull, reason: '墓碑不可见');
+      expect(await repo.findByName('', 'CoffeeShop'), isNull, reason: '墓碑不可见');
     });
 
     test('同名计数：排除自身后改名查重', () async {
-      final custom = await repo.insert('', newCat('猫舍', 1));
-      expect(await repo.countByName('', '猫舍', 1), 1);
-      expect(await repo.countByName('', '猫舍', 1, excludeId: custom.id), 0,
+      final custom = await repo.insert('', newCat('猫舍'));
+      expect(await repo.countByName('', '猫舍'), 1);
+      expect(await repo.countByName('', '猫舍', excludeId: custom.id), 0,
           reason: '排除自身后改回原名应放行');
     });
 
     test('家庭隔离：自定义分类仅归属家庭可见，内置分类全局共享', () async {
-      final f1Cat = await repo.insert('f1', newCat('猫舍', 1));
-      await repo.insert('f2', newCat('会所', 1));
+      final f1Cat = await repo.insert('f1', newCat('猫舍'));
+      await repo.insert('f2', newCat('会所'));
 
       final f1List = await repo.listAll('f1');
       expect(f1List.map((c) => c.id), contains(f1Cat.id));
@@ -94,15 +90,43 @@ void main() {
       expect(f1List.where((c) => c.isBuiltin).length,
           BuiltinCategories.all.length,
           reason: '内置分类在任何家庭口径下都全局共享');
-      expect(await repo.countByName('f2', '猫舍', 1), 0,
+      expect(await repo.countByName('f2', '猫舍'), 0,
           reason: '查重范围不含他家的自定义分类');
     });
 
-    test('编辑：version+1、updatedAt 刷新、发件箱置位', () async {
-      final custom = await repo.insert('', newCat('猫舍', 1, icon: 'pets'));
+    test('近 90 天使用频次：按分类+方向聚合，type=2 不参与', () async {
+      SharedPreferences.setMockInitialValues({});
+      final cat = await repo.insert('', newCat('猫舍'));
+      Future<void> addTx(String id, int type, DateTime date) async {
+        await db.into(db.transactions).insert(TransactionsCompanion.insert(
+              id: Value(id),
+              type: type,
+              categoryId: cat.id,
+              amountCents: 100,
+              date: date,
+              userId: 'user-1',
+            ));
+      }
 
-      final updated =
-          await repo.update(custom.id, const CategoriesCompanion(name: Value('猫咪乐园')));
+      final now = DateTime.now();
+      await addTx('t1', 1, now.subtract(const Duration(days: 1)));
+      await addTx('t2', 1, now.subtract(const Duration(days: 2)));
+      await addTx('t3', 0, now.subtract(const Duration(days: 3)));
+      await addTx('t4', 2, now.subtract(const Duration(days: 4))); // 不计收支
+      await addTx('t5', 1, now.subtract(const Duration(days: 120))); // 超窗口
+
+      final counts = await repo.recentUsageCounts(
+          '', now.subtract(const Duration(days: 90)));
+      expect(counts['${cat.id}|1'], 2);
+      expect(counts['${cat.id}|0'], 1);
+      expect(counts['${cat.id}|2'], isNull, reason: 'type=2 不计收支不参与频次');
+    });
+
+    test('编辑：version+1、updatedAt 刷新、发件箱置位', () async {
+      final custom = await repo.insert('', newCat('猫舍', icon: 'pets'));
+
+      final updated = await repo.update(
+          custom.id, const CategoriesCompanion(name: Value('猫咪乐园')));
 
       expect(updated.version, custom.version + 1);
       expect(updated.updatedAt.isBefore(custom.updatedAt), false);
@@ -111,7 +135,7 @@ void main() {
     });
 
     test('软删除墓碑：行保留、查询不可见', () async {
-      final custom = await repo.insert('', newCat('猫舍', 1));
+      final custom = await repo.insert('', newCat('猫舍'));
       await repo.softDelete(custom.id);
 
       final tombstone = await (db.select(db.categories)
@@ -126,27 +150,28 @@ void main() {
     });
   });
 
-  group('任务 2.5：分类门面（内置保护 + 自定义增删改）', () {
-    test('getCategories：内置在前 + 自定义在后', () async {
-      final custom = await repo.insert('', newCat('猫舍', 1, icon: 'pets'));
+  group('分类门面（内置保护 + 自定义增删改，无 type 维度）', () {
+    test('getCategories：内置 25 个在前 + 自定义在后，返回 nameKey', () async {
+      final custom = await repo.insert('', newCat('猫舍', icon: 'pets'));
       final categories = await service.getCategories();
 
       expect(categories.first.id, BuiltinCategories.all.first.id);
-      expect(categories.any((c) => c.id == custom.id && c.name == '猫舍'),
-          isTrue);
+      expect(categories.first.nameKey, 'categoryDining');
+      final customDto = categories.firstWhere((c) => c.id == custom.id);
+      expect(customDto.name, '猫舍');
+      expect(customDto.nameKey, isNull, reason: '自建分类无 nameKey，显示原文');
     });
 
-    test('新增自定义分类：与内置分类重名被拒，正常新增放行', () async {
+    test('新增自定义分类：与内置分类重名被拒（全局唯一），正常新增放行', () async {
       await expectLater(
-        service.addCategory(name: '餐饮', icon: 'restaurant', type: 1),
+        service.addCategory(name: '餐饮', icon: 'restaurant'),
         throwsA(isA<Exception>()),
         reason: '与内置分类重名必须拒绝',
       );
 
-      final result =
-          await service.addCategory(name: '猫舍', icon: 'pets', type: 1);
+      final result = await service.addCategory(name: '猫舍', icon: 'pets');
       expect(result['name'], '猫舍');
-      expect(result['id'], isNotEmpty);
+      expect(result['nameKey'], isNull);
       expect((await service.getCategories()).any((c) => c.name == '猫舍'),
           isTrue);
     });
@@ -160,46 +185,45 @@ void main() {
         reason: '内置分类不可删除',
       );
 
-      final custom = await repo.insert('', newCat('猫舍', 1));
+      final custom = await repo.insert('', newCat('猫舍'));
       await service.deleteCategory(custom.id);
       expect(await repo.findById(custom.id), isNull, reason: '自定义分类墓碑后不可见');
     });
 
-    test('更新：内置分类被拒；自定义可改名，type 不随更新改变', () async {
+    test('更新：内置分类被拒；自定义可改名', () async {
       final diningId =
           BuiltinCategories.all.firstWhere((c) => c.name == '餐饮').id;
       await expectLater(
-        service.updateCategory(id: diningId, name: '饭钱', icon: 'restaurant', type: 1),
+        service.updateCategory(id: diningId, name: '饭钱', icon: 'restaurant'),
         throwsA(isA<Exception>()),
         reason: '内置分类不可修改',
       );
 
-      final custom = await repo.insert('', newCat('猫舍', 1, icon: 'pets'));
+      final custom = await repo.insert('', newCat('猫舍', icon: 'pets'));
       final result = await service.updateCategory(
         id: custom.id,
         name: '猫咪乐园',
         icon: 'cruelty_free',
-        type: 0, // 传入不同 type 也不得改型
       );
 
       expect(result['name'], '猫咪乐园');
-      expect(result['type'], 1, reason: '分类类型不可变（对齐服务端语义）');
+      expect(result.containsKey('type'), false, reason: '分类中性化后无 type 字段');
       expect((await repo.findById(custom.id))!.icon, 'cruelty_free');
     });
 
-    test('更新：改成同类型既有名称被拒，改回自身原名放行', () async {
-      final custom = await repo.insert('', newCat('猫舍', 1));
-      final other = await repo.insert('', newCat('猫咪乐园', 1));
+    test('更新：改成既有名称被拒，改回自身原名放行', () async {
+      final custom = await repo.insert('', newCat('猫舍'));
+      final other = await repo.insert('', newCat('猫咪乐园'));
 
       await expectLater(
         service.updateCategory(
-            id: custom.id, name: '猫咪乐园', icon: 'pets', type: 1),
+            id: custom.id, name: '猫咪乐园', icon: 'pets'),
         throwsA(isA<Exception>()),
         reason: '与其他分类重名必须拒绝',
       );
 
       final result = await service.updateCategory(
-          id: other.id, name: '猫咪乐园', icon: 'pets', type: 1);
+          id: other.id, name: '猫咪乐园', icon: 'pets');
       expect(result['name'], '猫咪乐园', reason: '改回自身原名应放行');
     });
   });

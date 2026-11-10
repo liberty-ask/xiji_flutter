@@ -50,9 +50,8 @@ void main() {
     await db.close();
   });
 
-  final diningId = BuiltinCategories.byName('餐饮', 1)!.id;
-  final uncategorizedExpenseId = BuiltinCategories.uncategorizedExpenseId;
-  final uncategorizedIncomeId = BuiltinCategories.uncategorizedIncomeId;
+  final diningId = BuiltinCategories.byName('餐饮')!.id;
+  final uncategorizedId = BuiltinCategories.uncategorizedId;
 
   ParsedBillRow row({
     String? tradeNo = 'TN001',
@@ -617,24 +616,24 @@ void main() {
   });
 
   group('任务 3.6：未分类兜底入库不阻塞', () {
-    test('未命中行以未分类入库（支出侧），入库不阻塞', () async {
+    test('未命中行以未分类入库，入库不阻塞', () async {
       final preview = await service.prepare([row(counterparty: '陌生商户')]);
-      expect(preview.first.categoryId, uncategorizedExpenseId);
+      expect(preview.first.categoryId, uncategorizedId);
       expect(preview.first.isUncategorized, true);
 
       final outcome = await service.importRows(preview);
       expect(outcome.successCount, 1, reason: '未分类不阻塞入库');
 
       final saved = await transactions.listAll('');
-      expect(saved.first.categoryId, uncategorizedExpenseId);
+      expect(saved.first.categoryId, uncategorizedId);
       expect(saved.first.counterparty, '陌生商户');
       expect(saved.first.tradeNo, 'TN001');
     });
 
-    test('收入未命中挂收入侧未分类', () async {
+    test('收入未命中同样挂唯一未分类（方向由 type 决定）', () async {
       final preview =
           await service.prepare([row(type: 0, counterparty: '陌生来源')]);
-      expect(preview.first.categoryId, uncategorizedIncomeId);
+      expect(preview.first.categoryId, uncategorizedId);
     });
 
     test('未分类记录入库后可修改分类', () async {
@@ -642,7 +641,7 @@ void main() {
         row(tradeNo: 'UNC1', counterparty: '陌生商户')
       ]));
       final saved = await transactions.listAll('');
-      expect(saved.first.categoryId, uncategorizedExpenseId);
+      expect(saved.first.categoryId, uncategorizedId);
 
       // 入库后修改分类为餐饮
       final updated = await transactions.update(
@@ -683,6 +682,56 @@ void main() {
       expect(entry!.categoryId, diningId);
       expect(entry.source, 0, reason: '0-账单导入');
       expect(entry.hitCount, 1, reason: 'prepare 命中即计数');
+    });
+
+    test('同一商户本轮跨多个分类时跳过学习表', () async {
+      final onlineShoppingId = BuiltinCategories.byName('网购')!.id;
+      await service.assignCategory(
+        counterparty: '合成混合商户',
+        categoryId: diningId,
+        roundCategories: {diningId, onlineShoppingId},
+      );
+      expect(await rules.findByMatchText('合成混合商户'), isNull,
+          reason: '跨分类商户指认后不学习，避免第二遍把整组拉平');
+    });
+
+    test('本轮只有一个具体分类时仍写入学习表', () async {
+      await service.assignCategory(
+        counterparty: '合成单一商户',
+        categoryId: diningId,
+        roundCategories: {diningId, uncategorizedId},
+      );
+      final entry = await rules.findByMatchText('合成单一商户');
+      expect(entry?.categoryId, diningId, reason: '未分类不算分类信号');
+    });
+
+    test('平台汇总账户永不学习', () async {
+      final names = [
+        '合成平台商户',
+        '京东平台商户',
+        '拼多多平台商户',
+        '支付宝',
+        '财付通',
+        '财付通支付科技有限公司',
+        '微信支付',
+        '京东支付',
+        '淘宝闪购',
+      ];
+      for (final name in names) {
+        await service.assignCategory(
+          counterparty: name,
+          categoryId: diningId,
+          roundCategories: {diningId},
+        );
+        expect(await rules.findByMatchText(name), isNull,
+            reason: '$name 是平台汇总账户/支付通道，永不学习');
+      }
+    });
+
+    test('平台汇总账户判定：平台商户后缀与支付通道名单', () {
+      expect(BillImportService.isPlatformAggregateAccount('美团平台商户'), isTrue);
+      expect(BillImportService.isPlatformAggregateAccount('菜鸟驿站'), isFalse);
+      expect(BillImportService.isPlatformAggregateAccount('瑞幸咖啡'), isFalse);
     });
 
     test('退款守卫：明确标注支出的行不被退款文本改写', () async {

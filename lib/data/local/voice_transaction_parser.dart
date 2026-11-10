@@ -169,8 +169,11 @@ class VoiceParseResult {
   /// 分类引擎命中的分类 ID（学习表优先 → 内置规则），未命中为 null（不猜测）
   final String? categoryId;
 
-  /// 命中分类的名称（直接入库与 Snackbar 文案用）
+  /// 命中分类的名称（日志/兜底展示用；显示层优先 nameKey）
   final String? categoryName;
+
+  /// 命中分类的多语言词条 key（内置分类非空）
+  final String? categoryNameKey;
 
   const VoiceParseResult({
     this.amount,
@@ -179,6 +182,7 @@ class VoiceParseResult {
     this.date,
     this.categoryId,
     this.categoryName,
+    this.categoryNameKey,
   });
 
   /// 有把握：金额存在、无金额冲突、类型明示、分类命中，四者齐备才直接入库；
@@ -206,12 +210,14 @@ class VoiceTransactionParser {
     // 分类缺失即无把握，预填表单由用户自行选择）
     String? categoryId;
     String? categoryName;
+    String? categoryNameKey;
     if (facts.type != null) {
-      categoryId = await _engine.classify([text], expectedType: facts.type);
+      categoryId = await _engine.classify([text]);
       if (categoryId != null) {
         final cats = await _categories.findByIds({categoryId});
         if (cats.isNotEmpty) {
           categoryName = cats.first.name;
+          categoryNameKey = cats.first.nameKey;
         }
       }
     }
@@ -223,6 +229,7 @@ class VoiceTransactionParser {
       date: facts.date,
       categoryId: categoryId,
       categoryName: categoryName,
+      categoryNameKey: categoryNameKey,
     );
   }
 }

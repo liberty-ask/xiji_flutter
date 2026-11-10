@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import '../../data/local/bill_import_service.dart';
 import '../../data/local/builtin_categories.dart';
 import '../../l10n/app_localizations.dart';
+import '../../l10n/category_l10n.dart';
 import '../../models/bill_platform.dart';
 import '../../models/category.dart';
 import '../../parser/bill_csv_parser.dart';
@@ -29,12 +30,72 @@ import '../../widgets/custom/category_selector.dart';
 ///
 /// 流程：选平台卡 → 选文件（支付宝/京东 CSV，微信 XLSX）→ 本地解析
 /// （GBK/UTF-8/xlsx）→ 预览
-/// （按交易对方分组、点击组分类批量指认、指认回写学习表）→ 确认入库
-/// （tradeNo 去重、未分类兜底）→ 结果页。
+/// （一个交易对方一张卡片、一个分类 chip 同时覆盖收入行与支出行，
+///  type=2/退款关联行只能行级覆盖；批量指认回写学习表）→
+/// 确认入库（tradeNo 去重、未分类兜底）→ 结果页。
 enum ImportStep {
   platformList, // 选择平台
   preview, // 预览与批量指认
   result, // 导入结果
+}
+
+/// 预览分组：一个交易对方一张卡片。
+/// 分类是中性标签，同一商户的收入行与支出行共用一个 chip；
+/// type=2（不计收支）/退款关联行不参与批量写入，只能行级覆盖。
+class BillPreviewGroup {
+  const BillPreviewGroup(this.counterparty, this.items);
+
+  final String counterparty;
+  final List<BillImportPreviewItem> items;
+
+  int get length => items.length;
+
+  /// 批量指认范围：排除退款关联行（继承原支出分类）与 type=2 不计收支行
+  List<BillImportPreviewItem> get assignable => [
+        for (final i in items)
+          if (!i.refundLinked && i.row.type != 2) i
+      ];
+
+  /// chip 展示的分类取批量指认范围内的第一条；全部不可指认时退回首条
+  BillImportPreviewItem get representative =>
+      assignable.isNotEmpty ? assignable.first : items.first;
+
+  bool get hasUncategorized => items.any((i) => i.isUncategorized);
+
+  /// 是否存在已指认（非未分类）的可指认行：决定卡片级撤销入口是否显示
+  bool get hasAssigned => assignable.any((i) => !i.isUncategorized);
+}
+
+/// 按交易对方分组（保持账单内出现顺序，空交易对方置末）。
+List<BillPreviewGroup> groupBillPreviewItems(
+    List<BillImportPreviewItem> items) {
+  final groups = <String, List<BillImportPreviewItem>>{};
+  for (final item in items) {
+    final key = (item.row.counterparty ?? '').trim();
+    groups.putIfAbsent(key, () => []).add(item);
+  }
+  final empty = groups.remove('');
+  if (empty != null) groups[''] = empty;
+  return [
+    for (final entry in groups.entries)
+      BillPreviewGroup(entry.key, entry.value),
+  ];
+}
+
+/// 卡片级撤销：该组可指认行全部置未分类（退款关联行与 type=2 天然不在范围内）
+void resetGroupCategories(BillPreviewGroup group) {
+  for (final item in group.assignable) {
+    item.categoryId = BuiltinCategories.uncategorizedId;
+  }
+}
+
+/// 全局撤销：所有可指认行置未分类；退款关联行与 type=2 保持原分类
+void resetAllCategories(List<BillImportPreviewItem> items) {
+  for (final item in items) {
+    if (!item.refundLinked && item.row.type != 2) {
+      item.categoryId = BuiltinCategories.uncategorizedId;
+    }
+  }
 }
 
 class ImportBillsScreen extends StatefulWidget {
@@ -56,6 +117,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
   BillImportService? _service; // 首次选文件时异步初始化（含规则库加载）
   List<Category> _categories = []; // 分类选择器数据
   Map<String, Category> _categoryById = {};
+  Map<String, int> _usageCounts = {}; // 近 90 天使用频次（软排序提示）
 
   ImportStep _currentStep = ImportStep.platformList;
   bool _isLoading = false;
@@ -322,9 +384,11 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
 
       // 2. 初始化服务（含内置规则库加载）与分类缓存
       _service ??= await BillImportService.instance();
-      final categories = await CategoryService().getCategories();
+      final categoryService = CategoryService();
+      final categories = await categoryService.getCategories();
       _categories = categories;
       _categoryById = {for (final c in categories) c.id: c};
+      _usageCounts = await categoryService.getRecentUsageCounts();
 
       // 3. 分类预填 + 重复单号标记
       final items = await _service!.prepare(parsed.rows);
@@ -348,33 +412,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
 
   // ---------------- 预览与批量指认 ----------------
 
-  /// 按交易对方分组（保持账单内出现顺序）；无交易对方的行归入空组末尾
-  Map<String, List<BillImportPreviewItem>> get _groups {
-    final groups = <String, List<BillImportPreviewItem>>{};
-    for (final item in _items) {
-      final key = (item.row.counterparty ?? '').trim();
-      groups.putIfAbsent(key, () => []).add(item);
-    }
-    // 空交易对方组挪到最后
-    final empty = groups.remove('');
-    if (empty != null) groups[''] = empty;
-    return groups;
-  }
-
-  /// 组内主导分类类型（0/1）：按条目数计，type=2 归支出侧；未知类型不计
-  int? _majorTypeOf(List<BillImportPreviewItem> items) {
-    final counts = <int, int>{};
-    for (final item in items) {
-      final type = item.row.type;
-      if (type == null) continue;
-      final side = type == 0 ? 0 : 1;
-      counts[side] = (counts[side] ?? 0) + 1;
-    }
-    if (counts.isEmpty) return null;
-    final entries = counts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return entries.first.key;
-  }
+  /// 按交易对方分组（一个商户一张卡片，见 [groupBillPreviewItems]）
+  List<BillPreviewGroup> get _groups => groupBillPreviewItems(_items);
 
   Widget _buildPreviewView() {
     final parse = _parseResult!;
@@ -394,6 +433,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
                     if (parse.errors.isNotEmpty)
                       _buildParseErrorsCard(parse),
                     SizedBox(height: ResponsiveHelper.spacing(context)),
+                    _buildPreviewActions(),
+                    SizedBox(height: ResponsiveHelper.spacing(context, small: 4)),
                     ScaledText(
                       AppLocalizations.of(context)!.billAssignHint,
                       style: ResponsiveHelper.responsiveTextStyle(
@@ -411,9 +452,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final entry = _groups.entries.elementAt(index);
-                      return _buildGroupCard(
-                          entry.key, entry.value, entry.value.first);
+                      final group = _groups[index];
+                      return _buildGroupCard(group);
                     },
                     childCount: _groups.length,
                   ),
@@ -448,6 +488,42 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// 预览页的两个全局入口：一键把本次预览置为未分类 / 清空学习表。
+  /// 学习表是四层链路的第一层，指认错误会立即压制平台与关键词结果，
+  /// 因此必须留一条清空后路；清空后当场重算本次预览。
+  Widget _buildPreviewActions() {
+    final l10n = AppLocalizations.of(context)!;
+    final buttonStyle = TextButton.styleFrom(
+      foregroundColor: Colors.white.withValues(alpha: 0.7),
+      overlayColor: Colors.transparent,
+      splashFactory: NoSplash.splashFactory,
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      minimumSize: const Size(0, 32),
+    );
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 4,
+        children: [
+          TextButton.icon(
+            onPressed: _resetAll,
+            style: buttonStyle,
+            icon: const Icon(Icons.layers_clear, size: 16),
+            label: ScaledText(l10n.billResetAll),
+          ),
+          TextButton.icon(
+            onPressed: _clearLearning,
+            style: buttonStyle,
+            icon: const Icon(Icons.delete_sweep, size: 16),
+            label: ScaledText(l10n.billClearLearning),
+          ),
+        ],
+      ),
     );
   }
 
@@ -547,15 +623,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
     );
   }
 
-  /// 分组卡片：组头（交易对方 + 分类 chip 批量指认入口）+ 组内条目
-  Widget _buildGroupCard(
-      String counterparty, List<BillImportPreviewItem> groupItems,
-      BillImportPreviewItem first) {
-    final category = _categoryById[first.categoryId];
-    final isUncategorized = groupItems.any((i) => i.isUncategorized);
-    final canAssign =
-        counterparty.isNotEmpty && _majorTypeOf(groupItems) != null;
-
+  /// 分组卡片：一个商户一张卡片，一个 chip 同时覆盖该商户的收入行与支出行
+  Widget _buildGroupCard(BillPreviewGroup group) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -563,7 +632,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
         color: ThemeHelper.surfaceDark(context),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isUncategorized
+          color: group.hasUncategorized
               ? Colors.orange.withValues(alpha: 0.4)
               : Colors.white.withValues(alpha: 0.05),
         ),
@@ -571,50 +640,77 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 组头：交易对方 + 分类 chip
-          Row(
-            children: [
-              Expanded(
-                child: ScaledText(
-                  counterparty.isNotEmpty
-                      ? counterparty
-                      : AppLocalizations.of(context)!.unknown,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              ScaledText(
-                AppLocalizations.of(context)!
-                    .billGroupCount(groupItems.length),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.5),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _buildCategoryChip(category, canAssign,
-                  () => _assignGroupCategory(counterparty, groupItems)),
-            ],
+          _buildGroupHeader(
+            group.counterparty,
+            group.length,
+            chip: _buildGroupChip(group),
+            onUndo: group.hasAssigned ? () => _resetGroup(group) : null,
           ),
           const SizedBox(height: 8),
-          // 组内条目
-          ...groupItems.map(_buildGroupItemRow),
+          ...group.items.map((item) => _buildGroupItemRow(group, item)),
         ],
       ),
     );
   }
 
+  Widget _buildGroupHeader(String counterparty, int count,
+      {Widget? chip, VoidCallback? onUndo}) {
+    return Row(
+      children: [
+        Expanded(
+          child: ScaledText(
+            counterparty.isNotEmpty
+                ? counterparty
+                : AppLocalizations.of(context)!.unknown,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        ScaledText(
+          AppLocalizations.of(context)!.billGroupCount(count),
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
+        ),
+        if (onUndo != null)
+          IconButton(
+            onPressed: onUndo,
+            tooltip: AppLocalizations.of(context)!.billResetGroup,
+            icon: const Icon(Icons.undo, size: 18),
+            color: Colors.white54,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        if (chip != null) ...[
+          const SizedBox(width: 8),
+          chip,
+        ],
+      ],
+    );
+  }
+
+  /// 商户分类 chip：一个 chip 同时覆盖该商户收入行与支出行；
+  /// 退款关联行与 type=2 不计收支行不参与批量指认
+  Widget _buildGroupChip(BillPreviewGroup group) {
+    final category = _categoryById[group.representative.categoryId];
+    final canAssign =
+        group.counterparty.isNotEmpty && group.assignable.isNotEmpty;
+    return _buildCategoryChip(category, canAssign,
+        () => _assignGroupCategory(group));
+  }
+
   Widget _buildCategoryChip(
       Category? category, bool canAssign, VoidCallback onTap) {
-    final isUncategorized = category != null &&
-        (category.id == BuiltinCategories.uncategorizedExpenseId ||
-            category.id == BuiltinCategories.uncategorizedIncomeId);
+    final isUncategorized =
+        category != null && category.id == BuiltinCategories.uncategorizedId;
     return InkWell(
       onTap: canAssign ? onTap : null,
       borderRadius: BorderRadius.circular(12),
@@ -641,7 +737,9 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
             ),
             const SizedBox(width: 4),
             ScaledText(
-              category?.name ?? AppLocalizations.of(context)!.unknown,
+              category == null
+                  ? AppLocalizations.of(context)!.unknown
+                  : CategoryL10n.ofModel(AppLocalizations.of(context)!, category),
               style: TextStyle(
                 fontSize: 12,
                 color: isUncategorized ? Colors.orange : Colors.white,
@@ -661,73 +759,225 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
     );
   }
 
-  Widget _buildGroupItemRow(BillImportPreviewItem item) {
+  /// 行级展示：次要入口——点单行可只覆盖这一行的分类
+  /// （type=2 不计收支行只能走这里单独指认）
+  Widget _buildGroupItemRow(
+      BillPreviewGroup group, BillImportPreviewItem item) {
     final dateFormat = DateFormat('MM-dd HH:mm');
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: ScaledText(
-              item.row.description ?? '',
+    final l10n = AppLocalizations.of(context)!;
+    return InkWell(
+      onTap: () => _assignItemCategory(group, item),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: ScaledText(
+                item.row.description ?? '',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (item.row.type == 0) ...[
+              const SizedBox(width: 6),
+              _buildSideBadge(l10n.income, Colors.green),
+            ] else if (item.row.type == 2) ...[
+              const SizedBox(width: 6),
+              _buildSideBadge(l10n.noCount, Colors.white54),
+            ],
+            if (item.duplicate) ...[
+              const SizedBox(width: 6),
+              ScaledText(
+                l10n.billDuplicateSkip,
+                style: const TextStyle(fontSize: 11, color: Colors.orange),
+              ),
+            ],
+            if (item.refundLinked) ...[
+              const SizedBox(width: 6),
+              ScaledText(
+                l10n.noCount,
+                style: const TextStyle(fontSize: 11, color: Colors.white54),
+              ),
+            ],
+            const SizedBox(width: 6),
+            ScaledText(
+              dateFormat.format(item.row.date),
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(width: 6),
+            ScaledText(
+              '${l10n.currencySymbol}${AmountFormat.format(item.row.amount)}',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.7),
+                fontWeight: FontWeight.bold,
+                color: item.refundLinked
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : item.row.type == 0
+                        ? Colors.green
+                        : item.row.type == 2
+                            ? Colors.white54
+                            : ThemeHelper.expenseColor(context),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (item.duplicate) ...[
-            const SizedBox(width: 6),
-            ScaledText(
-              AppLocalizations.of(context)!.billDuplicateSkip,
-              style: const TextStyle(fontSize: 11, color: Colors.orange),
             ),
           ],
-          if (item.refundLinked) ...[
-            const SizedBox(width: 6),
-            ScaledText(
-              AppLocalizations.of(context)!.noCount,
-              style: const TextStyle(fontSize: 11, color: Colors.white54),
-            ),
-          ],
-          const SizedBox(width: 6),
-          ScaledText(
-            dateFormat.format(item.row.date),
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.white.withValues(alpha: 0.5),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSideBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: ScaledText(text, style: TextStyle(fontSize: 10, color: color)),
+    );
+  }
+
+  /// 批量指认：一个 chip 同时写该商户的收入行与支出行
+  /// （type=2 与退款关联行不参与），并回写学习表。
+  /// 学习表只有 matchText 单键，分类中性化后同一商户收支共用分类，
+  /// 不再存在「写一侧污染另一侧」的问题。
+  Future<void> _assignGroupCategory(BillPreviewGroup group) async {
+    final counterparty = group.counterparty;
+    if (counterparty.isEmpty) return;
+    final targets = group.assignable;
+    if (targets.isEmpty) return;
+
+    final selected = await _pickCategory(
+      title: counterparty,
+      currentCategoryId: targets.first.categoryId,
+      direction: targets.first.row.type == 0 ? 0 : 1,
+    );
+    if (selected == null || !mounted) return;
+
+    // 指认前快照：同一商户本轮预填若已跨多个分类，服务层会跳过学习表写入
+    final roundCategories = <String>{
+      for (final item in targets) item.categoryId,
+    };
+    for (final item in targets) {
+      item.categoryId = selected.id;
+    }
+    await _service?.assignCategory(
+      counterparty: counterparty,
+      categoryId: selected.id,
+      roundCategories: roundCategories,
+    );
+
+    setState(() {});
+  }
+
+  /// 行级覆盖（次要入口）：只改这一条，不写学习表、不影响同商户其他行
+  Future<void> _assignItemCategory(
+      BillPreviewGroup group, BillImportPreviewItem item) async {
+    final selected = await _pickCategory(
+      title: group.counterparty,
+      currentCategoryId: item.categoryId,
+      direction: item.row.type == 0 ? 0 : 1,
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      item.categoryId = selected.id;
+    });
+  }
+
+  /// 卡片级撤销：该组可指认行全部置未分类（不写学习表，只影响本次预览）
+  void _resetGroup(BillPreviewGroup group) {
+    if (group.assignable.isEmpty) return;
+    setState(() => resetGroupCategories(group));
+  }
+
+  /// 全局撤销：本次预览所有可指认行置未分类（退款关联行与 type=2 不动）
+  Future<void> _resetAll() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await _showConfirm(
+      title: l10n.billResetAll,
+      message: l10n.billResetAllConfirm,
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => resetAllCategories(_items));
+  }
+
+  /// 清空学习表并当场重算本次预览：
+  /// 学习表指认错误会压制平台分类与关键词，必须有这条后路。
+  Future<void> _clearLearning() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await _showConfirm(
+      title: l10n.billClearLearning,
+      message: l10n.billClearLearningConfirm,
+    );
+    if (confirmed != true || !mounted) return;
+
+    final service = _service;
+    final rows = _parseResult?.rows;
+    if (service == null || rows == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final count = await service.clearLearningTable();
+      final refreshed = await service.prepare(rows);
+      if (!mounted) return;
+      setState(() {
+        _items = refreshed;
+        _isLoading = false;
+      });
+      CustomSnackBar.showSuccess(context, l10n.billLearningCleared(count));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      CustomSnackBar.showError(context, ErrorHelper.extractErrorMessage(e));
+    }
+  }
+
+  Future<bool?> _showConfirm({
+    required String title,
+    required String message,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ThemeHelper.surface(context),
+        title: ScaledText(
+          title,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: ScaledText(
+          message,
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: ScaledText(
+              AppLocalizations.of(context)!.cancel,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
             ),
           ),
-          const SizedBox(width: 6),
-          ScaledText(
-            '${AppLocalizations.of(context)!.currencySymbol}${AmountFormat.format(item.row.amount)}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: item.refundLinked
-                  ? Colors.white.withValues(alpha: 0.7)
-                  : item.row.type == 0
-                      ? Colors.green
-                      : ThemeHelper.expenseColor(context),
-            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: ScaledText(AppLocalizations.of(context)!.confirm),
           ),
         ],
       ),
     );
   }
 
-  /// 批量指认：弹分类选择器 → 组内主导类型的条目统一改分类 → 回写学习表
-  Future<void> _assignGroupCategory(
-      String counterparty, List<BillImportPreviewItem> groupItems) async {
-    final majorType = _majorTypeOf(groupItems);
-    if (majorType == null || counterparty.isEmpty) return;
-
-    final candidates =
-        _categories.where((c) => c.type == majorType).toList();
-    final currentId = groupItems.first.categoryId;
-    final selected = await showModalBottomSheet<Category>(
+  Future<Category?> _pickCategory({
+    required String title,
+    required String currentCategoryId,
+    required int direction,
+  }) {
+    return showModalBottomSheet<Category>(
       context: context,
       backgroundColor: ThemeHelper.surfaceDark(context),
       shape: const RoundedRectangleBorder(
@@ -740,7 +990,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ScaledText(
-                '${AppLocalizations.of(context)!.selectCategory} · $counterparty',
+                '${AppLocalizations.of(context)!.selectCategory} · $title',
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -749,8 +999,10 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
               ),
               const SizedBox(height: 12),
               CategorySelector(
-                categories: candidates,
-                selectedCategory: _categoryById[currentId],
+                categories: _categories,
+                selectedCategory: _categoryById[currentCategoryId],
+                direction: direction,
+                usageCounts: _usageCounts,
                 onSelected: (c) => Navigator.of(context).pop(c),
               ),
             ],
@@ -758,23 +1010,6 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
         ),
       ),
     );
-    if (selected == null || !mounted) return;
-
-    // 组内主导类型条目统一改分类（type=2 沿用支出侧，对齐服务端语义）
-    for (final item in groupItems) {
-      final type = item.row.type;
-      if (type == null) continue;
-      final side = type == 0 ? 0 : 1;
-      if (side == majorType) item.categoryId = selected.id;
-    }
-
-    // 指认回写学习表：下次同商户自动命中
-    await _service?.assignCategory(
-      counterparty: counterparty,
-      categoryId: selected.id,
-    );
-
-    setState(() {});
   }
 
   // ---------------- 确认导入与结果 ----------------

@@ -20,6 +20,8 @@ void main() {
   late TransactionService txService;
 
   const diningId = '01a15d13-bded-710c-a3bd-aba94a5aeb36'; // 餐饮（内置）
+  const trafficId = '01a15d13-bdef-7611-b1fc-61e853292646'; // 交通（内置）
+  const salaryId = '01a15d13-bdf0-7a5f-993a-8442815623e1'; // 工资（内置）
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -49,7 +51,7 @@ void main() {
   models.TransactionType txType(int v) => models.TransactionType.fromInt(v);
 
   // 经仓储直接种入（type=2 中性交易真实路径仅账单导入，其 userId/分类
-  // 由导入流程决定，不经记账门面的名称解析，测试同样直接落库）
+  // 由导入流程决定，不经记账门面，测试同样直接落库）
   Future<void> seedRaw({
     required String desc,
     required int type,
@@ -68,11 +70,11 @@ void main() {
   }
 
   group('任务 2.1：记账门面（写入走本地库）', () {
-    test('新增：分类按名称解析为 ID，用户取本地缓存，落库 UUIDv7', () async {
+    test('新增：分类按 ID 写入，用户取本地缓存，落库 UUIDv7', () async {
       final now = DateTime.now();
       await txService.addTransaction(
         type: 1,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-10-15',
         note: '瑞幸拿铁',
@@ -81,7 +83,7 @@ void main() {
       final list = await txRepo.listAll('');
       expect(list, hasLength(1));
       final row = list.single;
-      expect(row.categoryId, diningId, reason: '分类名称应解析为内置餐饮 ID');
+      expect(row.categoryId, diningId, reason: '分类 ID 原样落库');
       expect(row.userId, 'u1', reason: '用户取本地缓存，离线可用');
       expect(row.id, isNotEmpty);
       expect(row.description, '瑞幸拿铁');
@@ -92,11 +94,11 @@ void main() {
       expect(row.updatedAt.isBefore(now.add(const Duration(minutes: 1))), true);
     });
 
-    test('新增：分类名称不存在时拒绝', () async {
+    test('新增：分类 ID 不存在时拒绝', () async {
       await expectLater(
         txService.addTransaction(
           type: 1,
-          category: '不存在的分类',
+          categoryId: 'no-such-category',
           amount: 10,
           date: '2026-10-15',
         ),
@@ -105,10 +107,10 @@ void main() {
       expect(await txRepo.listAll(''), isEmpty);
     });
 
-    test('编辑：改名分类重解析、version+1、备注传 null 清空', () async {
+    test('编辑：换分类写入新 ID、version+1、备注传 null 清空', () async {
       await txService.addTransaction(
         type: 1,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-10-15',
         note: '瑞幸拿铁',
@@ -118,15 +120,14 @@ void main() {
       await txService.updateTransaction(
         id: before.id,
         type: 1,
-        category: '交通',
+        categoryId: trafficId,
         amount: 15,
         date: '2026-10-16',
         note: null,
       );
 
       final row = await txRepo.findById(before.id);
-      expect(row!.categoryId,
-          isNot(diningId), reason: '编辑应把分类解析为新的 ID');
+      expect(row!.categoryId, trafficId, reason: '编辑写入新的分类 ID');
       expect(row.amountCents, 1500);
       expect(row.date, DateTime(2026, 10, 16));
       expect(row.description, isNull, reason: '备注传 null 应清空');
@@ -137,7 +138,7 @@ void main() {
     test('删除：软删除墓碑，列表不可见', () async {
       await txService.addTransaction(
         type: 1,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-10-15',
       );
@@ -171,7 +172,7 @@ void main() {
     }) async {
       final result = await txService.addTransaction(
         type: type,
-        category: type == 0 ? '工资' : '餐饮',
+        categoryId: type == 0 ? salaryId : diningId,
         amount: amount,
         date: date.toString().split(' ').first,
         note: desc,
@@ -259,17 +260,17 @@ void main() {
       final now = DateTime(2026, 11, 15, 12); // 固定基准，避免真实日期边界
 
       await txService.addTransaction(
-          type: 0, category: '工资', amount: 100, date: '2026-11-15', note: '工资');
+          type: 0, categoryId: salaryId, amount: 100, date: '2026-11-15', note: '工资');
       await txService.addTransaction(
-          type: 1, category: '餐饮', amount: 30, date: '2026-11-15', note: '午餐');
+          type: 1, categoryId: diningId, amount: 30, date: '2026-11-15', note: '午餐');
       await txService.addTransaction(
           type: 1,
-          category: '餐饮',
+          categoryId: diningId,
           amount: 20,
           date: '2026-11-14',
           note: '晚餐');
       await txService.addTransaction(
-          type: 1, category: '餐饮', amount: 50, date: '2026-10-15', note: '上月');
+          type: 1, categoryId: diningId, amount: 50, date: '2026-10-15', note: '上月');
       await seedRaw(desc: '转账', type: 2, amount: 50, date: DateTime(2026, 11, 15));
 
       // 当月预算（当前登录用户 u1 的个人预算）
@@ -317,7 +318,6 @@ void main() {
         CategoriesCompanion.insert(
           name: '猫舍',
           icon: 'pets',
-          type: 1,
         ),
       );
       await txRepo.insert(TransactionsCompanion.insert(
@@ -341,7 +341,7 @@ void main() {
     test('支出改不计收支：分类 ID 不变、落库 type=2', () async {
       final id = (await txService.addTransaction(
         type: 1,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-11-15',
         note: '午餐',
@@ -351,7 +351,7 @@ void main() {
       await txService.updateTransaction(
         id: id,
         type: 2,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-11-15',
         note: '午餐',
@@ -371,7 +371,7 @@ void main() {
       await txService.updateTransaction(
         id: row.id,
         type: 2,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 50,
         date: '2026-11-15',
         note: '理财转出',
@@ -400,7 +400,7 @@ void main() {
         txService.updateTransaction(
           id: row.id,
           type: 1,
-          category: '餐饮',
+          categoryId: diningId,
           amount: 20,
           date: '2026-11-15',
           note: '退款',
@@ -417,7 +417,7 @@ void main() {
       final now = DateTime(2026, 11, 15, 12);
       final id = (await txService.addTransaction(
         type: 1,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-11-15',
         note: '午餐',
@@ -430,7 +430,7 @@ void main() {
       await txService.updateTransaction(
         id: id,
         type: 2,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-11-15',
         note: '午餐',
@@ -442,7 +442,7 @@ void main() {
       await txService.updateTransaction(
         id: id,
         type: 1,
-        category: '餐饮',
+        categoryId: diningId,
         amount: 30,
         date: '2026-11-15',
         note: '午餐',

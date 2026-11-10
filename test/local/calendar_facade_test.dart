@@ -31,8 +31,8 @@ void main() {
     await db.close();
   });
 
-  final diningId = BuiltinCategories.byName('餐饮', 1)!.id;
-  final salaryId = BuiltinCategories.byName('工资', 0)!.id;
+  final diningId = BuiltinCategories.byName('餐饮')!.id;
+  final salaryId = BuiltinCategories.byName('工资')!.id;
 
   Future<void> addTx({
     required DateTime date,

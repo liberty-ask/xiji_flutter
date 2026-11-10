@@ -1405,7 +1405,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get billAssignHint =>
-      'Tap the category on a group to assign it to all transactions of that counterparty';
+      'Tap a category on a group to assign it by income/expense for that counterparty';
 
   @override
   String get billDuplicateSkip => 'Already imported, will skip';
@@ -1430,6 +1430,28 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String billGroupCount(Object count) {
     return '$count transactions';
+  }
+
+  @override
+  String get billResetGroup => 'Undo card';
+
+  @override
+  String get billResetAll => 'Mark all as uncategorized';
+
+  @override
+  String get billResetAllConfirm =>
+      'Set every assignable record to Uncategorized? This only affects the current preview.';
+
+  @override
+  String get billClearLearning => 'Clear learned rules';
+
+  @override
+  String get billClearLearningConfirm =>
+      'Clear all learned merchant rules? Previously assigned merchants will be prefilled again by platform category and keywords.';
+
+  @override
+  String billLearningCleared(int count) {
+    return 'Cleared $count learned rules';
   }
 
   @override
@@ -1458,4 +1480,97 @@ class AppLocalizationsEn extends AppLocalizations {
   String refundToNeutralConfirm(String amount) {
     return 'This record has been refunded $amount. Changing it to non-income/expense will exclude the entire record from expense statistics.';
   }
+
+  @override
+  String syncRestoringData(int count) {
+    return 'Restoring data, $count restored';
+  }
+
+  @override
+  String syncUploadingHistory(int done, int total) {
+    return 'Uploading history, $done/$total';
+  }
+
+  @override
+  String get categoryDining => 'Dining';
+
+  @override
+  String get categoryDaily => 'Daily Necessities';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categoryOnlineShopping => 'Online Shopping';
+
+  @override
+  String get categoryTransport => 'Transport';
+
+  @override
+  String get categoryHousing => 'Housing';
+
+  @override
+  String get categoryUtilities => 'Utilities';
+
+  @override
+  String get categoryTelecom => 'Communications';
+
+  @override
+  String get categoryEntertainment => 'Entertainment';
+
+  @override
+  String get categoryMedical => 'Healthcare';
+
+  @override
+  String get categoryInsurance => 'Insurance';
+
+  @override
+  String get categoryEducation => 'Education';
+
+  @override
+  String get categoryTravel => 'Travel';
+
+  @override
+  String get categoryServices => 'Lifestyle Services';
+
+  @override
+  String get categoryChildcare => 'Childcare';
+
+  @override
+  String get categoryPets => 'Pets';
+
+  @override
+  String get categorySocial => 'Social Gifts';
+
+  @override
+  String get categorySalary => 'Salary';
+
+  @override
+  String get categoryBonus => 'Bonus';
+
+  @override
+  String get categoryPartTime => 'Part-time Income';
+
+  @override
+  String get categoryRedPacket => 'Red Envelopes';
+
+  @override
+  String get categoryGiftMoney => 'Gift Money';
+
+  @override
+  String get categoryReimbursement => 'Reimbursement';
+
+  @override
+  String get categoryOther => 'Other';
+
+  @override
+  String get categoryUncategorized => 'Uncategorized';
+
+  @override
+  String selectedCategory(String name) {
+    return 'Selected: $name';
+  }
+
+  @override
+  String get addNote => 'Add note';
 }

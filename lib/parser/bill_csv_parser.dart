@@ -18,6 +18,10 @@ class ParsedBillRow {
   final String? description; // 商品说明
   final String? payMethod; // 收/付款方式
   final String? status; // 交易状态（退款判定线索）
+  /// 平台自带分类列（支付宝/京东「交易分类」），用于中性分类预填映射
+  final String? platformCategory;
+  /// 微信「交易类型」（商户消费/转账/红包…），微信只按此映射，不看商品
+  final String? transactionType;
   /// 京东原支出行金额括号内的已退款额（`100.00(已退款10.00)` → 10.00）。
   /// 账单自带的退款锚点，导入时直接记入该行已退额，无需再跨行匹配
   final double? refundedAmount;
@@ -33,6 +37,8 @@ class ParsedBillRow {
     this.description,
     this.payMethod,
     this.status,
+    this.platformCategory,
+    this.transactionType,
     this.refundedAmount,
   });
 }
@@ -262,6 +268,7 @@ class BillCsvParser {
         description: cell(['商品说明', '商品名称', '备注']),
         payMethod: cell(['收/付款方式']),
         status: cell(['交易状态']),
+        platformCategory: cell(['交易分类']),
       );
     }
 
@@ -278,6 +285,7 @@ class BillCsvParser {
         description: cell(['交易说明', '备注']),
         payMethod: cell(['收/付款方式']),
         status: cell(['交易状态']),
+        platformCategory: cell(['交易分类']),
         refundedAmount: jdRefundedAmount,
       );
     }

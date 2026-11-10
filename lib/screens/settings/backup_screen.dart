@@ -37,11 +37,27 @@ class _BackupScreenState extends State<BackupScreen> {
   bool _enabled = false;
   bool _configured = false;
   bool _vaultUnlocked = false;
+  // 同步执行中：仅禁用「关闭备份 / 重置密钥」这类会改写密钥或
+  // 中断在途推送的操作，其余交互不受影响（P1-6）
+  bool _syncing = false;
 
   @override
   void initState() {
     super.initState();
     _loadState();
+    _syncing = SyncScheduler.instance.isSyncing;
+    SyncScheduler.instance.syncing.addListener(_onSyncingChanged);
+  }
+
+  @override
+  void dispose() {
+    SyncScheduler.instance.syncing.removeListener(_onSyncingChanged);
+    super.dispose();
+  }
+
+  void _onSyncingChanged() {
+    if (!mounted) return;
+    setState(() => _syncing = SyncScheduler.instance.isSyncing);
   }
 
   Future<void> _loadState() async {
@@ -823,7 +839,8 @@ class _BackupScreenState extends State<BackupScreen> {
                 ),
                 trailing: Switch(
                   value: _enabled,
-                  onChanged: _onSwitchChanged,
+                  // 同步在途禁用开关（关闭备份会中断本轮推送/恢复）
+                  onChanged: _syncing ? null : _onSwitchChanged,
                 ),
               ),
             ),
@@ -866,7 +883,8 @@ class _BackupScreenState extends State<BackupScreen> {
                       color: Colors.white.withValues(alpha: 0.5),
                     ),
                   ),
-                  onTap: _resetPassword,
+                  // 同步在途禁用重置密钥（会改写密钥并使在途密文失效）
+                  onTap: _syncing ? null : _resetPassword,
                 ),
               ),
             if (_configured) const SizedBox(height: 16),

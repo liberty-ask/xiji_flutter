@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' show Value;
 import '../../parser/bill_csv_parser.dart';
 import '../../sync/sync_scheduler.dart';
 import 'app_database.dart' as local;
+import 'bill_category_mapper.dart';
 import 'builtin_categories.dart';
 import 'category_engine.dart';
 import 'category_rule_loader.dart';
@@ -32,9 +33,7 @@ class BillImportPreviewItem {
     required this.categoryId,
   });
 
-  bool get isUncategorized =>
-      categoryId == BuiltinCategories.uncategorizedExpenseId ||
-      categoryId == BuiltinCategories.uncategorizedIncomeId;
+  bool get isUncategorized => categoryId == BuiltinCategories.uncategorizedId;
 }
 
 /// 导入结果（spec：重复导入仅提示新增条数）
@@ -111,7 +110,6 @@ class BillImportService {
   /// 引擎分类预填 + 本地重复单号标记。家庭维度：当前家庭内去重
   Future<List<BillImportPreviewItem>> prepare(List<ParsedBillRow> rows) async {
     final corrected = rows.map(_applyRefundRule).toList();
-    final typeCache = await _engine.loadCategoryTypeCache();
     final familyId = await CurrentFamilyStore.get();
 
     final tradeNos = corrected
@@ -125,11 +123,17 @@ class BillImportService {
     final items = <BillImportPreviewItem>[];
     for (var i = 0; i < corrected.length; i++) {
       final row = corrected[i];
-      final categoryId = await _engine.classify(
-        [row.counterparty, row.description],
-        expectedType: row.type == 2 ? 1 : row.type,
-        categoryTypeCache: typeCache,
-      );
+      // 统一四层链路，对所有平台（含微信）一视同仁：
+      // 学习表 → 平台分类列（可信度分级）→ 关键词规则 → 未分类。
+      // type=2 不计收支的行不参与任何分类推断。
+      String? categoryId;
+      if (row.type != 2) {
+        categoryId =
+            await _engine.matchLearned([row.counterparty, row.description]);
+        categoryId ??= BillCategoryMapper.mapRow(row);
+        categoryId ??=
+            await _engine.classifyKeywords([row.counterparty, row.description]);
+      }
       items.add(BillImportPreviewItem(
         row: row,
         duplicate: row.tradeNo != null &&
@@ -137,7 +141,7 @@ class BillImportService {
               TransactionRepository.importKey(row.tradeNo!, row.merchantOrderNo),
             ),
         refund: _isRefundRow(rows[i]) || _wechatIsRefundRow(rows[i]),
-        categoryId: categoryId ?? _fallbackCategoryId(row.type),
+        categoryId: categoryId ?? _fallbackCategoryId,
       ));
     }
     // 预览即判定退款行能否关联冲抵，避免预览按收入展示、入库后变不计收支
@@ -324,18 +328,65 @@ class BillImportService {
     }
   }
 
+  /// 平台汇总账户：账单里的「XX平台商户」「XX支付」是聚合收单口径，
+  /// 同一名称下混着多个真实商户，写成一条学习规则会把整组拉平，永不学习。
+  /// 后缀为「平台商户」的一律按汇总账户处理（覆盖各平台后续新增名称）。
+  static const Set<String> _platformAggregateAccounts = {
+    '淘宝闪购',
+    '京东外卖',
+    '京东支付',
+    '京东白条',
+    '京东金融',
+    '京东小金库',
+    '京东物流',
+    '支付宝',
+    '微信支付',
+    '财付通',
+    '财付通支付科技有限公司',
+  };
+
+  /// 是否属于平台汇总账户（学习表黑名单）
+  static bool isPlatformAggregateAccount(String counterparty) {
+    final key = counterparty.trim().toLowerCase();
+    if (key.isEmpty) return false;
+    if (key.endsWith('平台商户')) return true;
+    return _platformAggregateAccounts.contains(key);
+  }
+
+  /// 学习表写入守卫：
+  /// - 平台汇总账户永不学习（同一名称下混着多个真实商户）；
+  /// - 同一交易对方在本轮预填里已跨多个具体分类时不学习，
+  ///   避免第二次导入把整组拉平成同一个分类。
+  ///   未分类只是「还没认出来」，不算分类信号，不参与跨界判定。
+  static bool shouldLearn(String counterparty, {Set<String>? roundCategories}) {
+    if (isPlatformAggregateAccount(counterparty)) return false;
+    if (roundCategories == null) return true;
+    final known = roundCategories
+        .where((id) => id != BuiltinCategories.uncategorizedId)
+        .toSet();
+    return known.length <= 1;
+  }
+
   /// 批量指认回写学习表（matchText = 交易对方，source = 0 账单导入）。
-  /// 预览页组内条目的 categoryId 由调用方就地更新
+  /// 匹配键由仓储统一归一化，预览页组内条目的 categoryId 由调用方就地更新。
+  /// [roundCategories] 为该商户本轮预填的分类集合（指认前快照），
+  /// 用于识别跨多个分类的商户并跳过学习。
   Future<void> assignCategory({
     required String counterparty,
     required String categoryId,
-  }) {
-    return _rules.assign(
+    Set<String>? roundCategories,
+  }) async {
+    if (!shouldLearn(counterparty, roundCategories: roundCategories)) return;
+    await _rules.assign(
       matchText: counterparty,
       categoryId: categoryId,
       source: 0,
     );
   }
+
+  /// 清空学习表（全部软删除），返回清掉的条数。
+  /// 学习表置顶后既有错误指认会立即生效，导入页需要这条后路。
+  Future<int> clearLearningTable() => _rules.clearAll();
 
   /// 入库：重复单号跳过、收/支未知行判失败、退款行关联原支出后批量写入。
   /// 家庭维度：写入当前家庭，同家庭内去重。
@@ -498,8 +549,7 @@ class BillImportService {
       // 预览已按冲抵展示但入库时无可关联目标（如另一端已删改）：
       // 京东退款行仍是不计收支，其余平台回退收入分类
       if (!linked && p.item.refundLinked) {
-        p.categoryId =
-            _fallbackCategoryId(p.item.row.platformCode == 'jd' ? 2 : 0);
+        p.categoryId = _fallbackCategoryId;
       }
     }
 
@@ -761,10 +811,6 @@ class BillImportService {
     return pools.toList();
   }
 
-  /// 未分类兜底：收入挂收入侧未分类，支出/不计收支挂支出侧未分类
-  String _fallbackCategoryId(int? type) {
-    return type == 0
-        ? BuiltinCategories.uncategorizedIncomeId
-        : BuiltinCategories.uncategorizedExpenseId;
-  }
+  /// 未分类兜底：分类中性化后只有一个未分类 ID（方向由 transactions.type 决定）
+  String get _fallbackCategoryId => BuiltinCategories.uncategorizedId;
 }

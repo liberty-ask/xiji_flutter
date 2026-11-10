@@ -1,6 +1,7 @@
 ﻿import 'package:drift/drift.dart';
 
 import 'builtin_categories.dart';
+import 'transaction_fts.dart';
 import 'uuid_v7.dart';
 
 part 'app_database.g.dart';
@@ -49,9 +50,10 @@ class Transactions extends Table {
 
 class Categories extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
-  TextColumn get name => text()();
+  TextColumn get name => text()(); // 业务规范名（规则/导入/日志），显示走 nameKey
   TextColumn get icon => text()(); // Material Icons 名称，渲染统一走 IconConstants
-  IntColumn get type => integer()(); // 0-收入 1-支出
+  // 多语言词条 key：内置分类必填，用户自建分类为 NULL（显示原文）
+  TextColumn get nameKey => text().nullable()();
   BoolColumn get isBuiltin => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   // 自定义分类的家庭归属；内置分类全局共享不参与分区（固定 UUID 约束）
@@ -126,25 +128,22 @@ class AppDatabase extends _$AppDatabase {
       : _migrationSeedUserIdProvider = migrationSeedUserIdProvider;
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 10;
 
   /// 系统内置分类种子：固定 UUID 常量，insertOrIgnore 幂等。
-  /// sortOrder 按类型分别计数（支出 0-12、收入 0-6），保证同类型内顺序稳定
+  /// 分类中性化后为单一 sortOrder（0–24），name 与 nameKey 随常量表发布。
   Future<void> seedBuiltinCategories() async {
-    final sortIndexByType = <int, int>{};
     await batch((b) {
       for (final c in BuiltinCategories.all) {
-        final index = sortIndexByType.update(c.type, (v) => v + 1,
-            ifAbsent: () => 0);
         b.insert(
           categories,
           CategoriesCompanion.insert(
             id: Value(c.id),
             name: c.name,
             icon: c.icon,
-            type: c.type,
+            nameKey: Value(c.nameKey),
             isBuiltin: const Value(true),
-            sortOrder: Value(index),
+            sortOrder: Value(c.sortOrder),
             // 内置分类随 App 发布，非用户变更，不进发件箱
             syncPending: const Value(false),
           ),
@@ -166,10 +165,9 @@ class AppDatabase extends _$AppDatabase {
       await seedBuiltinCategories();
     },
     onUpgrade: (m, from, to) async {
-      // v2：新增「未分类」兜底内置分类（账单导入/语音未命中），补种常量表
-      if (from < 2) {
-        await seedBuiltinCategories();
-      }
+      // v2/v9 的内置分类补种在 v10 统一重建时一并完成：旧版本表结构
+      // （categories 带 type、无 name_key）无法用新版 Companion 写入，
+      // 因此这里不再做中间版本补种，避免迁移链在旧库上写错列。
       // v3：家庭维度（D11）——交易/分类加列（默认空串归入当前家庭），
       // 预算重建表改唯一约束 UNIQUE(family_id, year, month)
       if (from < 3) {
@@ -308,6 +306,65 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'ALTER TABLE transactions ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0',
         );
+      }
+      // v8：搜索索引自愈——v8 之前同步入库（首轮全量恢复/日常增量）直写
+      // transactions 而不维护 transactions_fts，重装/换机后搜索整库为空。
+      // 这里做一次性全量重建，回填所有历史缺口；之后由 TransactionFts
+      // 在每条写库路径上增量维护。墓碑与空文本行不进索引。
+      if (from < 8) {
+        await TransactionFts.rebuild(this);
+      }
+      // v9：新增「保险」支出内置分类。直接按内置集合定义补种：
+      // seedBuiltinCategories 走 insertOrIgnore，已存在的内置行不重复插入，
+      // 因此对已有库只补缺的那一行，天然幂等
+      // （分类中性化后补种统一并入 v10，见上）
+      // v10：分类中性化——categories 删除 type、新增 name_key 可空列。
+      // SQLite 无法可靠 DROP COLUMN，整体重建；旧 type 丢弃。
+      // 两个「未分类」合并到支出侧 ID，「理财」交易改挂「其他」，
+      // 内置行清空后按 25 个中性常量重新落库（含改名/改图标/重排序）。
+      if (from < 10) {
+        await customStatement(
+          'CREATE TABLE categories_new('
+          'id TEXT NOT NULL, '
+          'name TEXT NOT NULL, '
+          'icon TEXT NOT NULL, '
+          'name_key TEXT NULL, '
+          'is_builtin INTEGER NOT NULL DEFAULT 0, '
+          'sort_order INTEGER NOT NULL DEFAULT 0, '
+          "family_id TEXT NOT NULL DEFAULT '', "
+          'version INTEGER NOT NULL DEFAULT 1, '
+          'updated_at INTEGER NOT NULL, '
+          'deleted INTEGER NOT NULL DEFAULT 0, '
+          'sync_pending INTEGER NOT NULL DEFAULT 1, '
+          'PRIMARY KEY (id))',
+        );
+        await customStatement(
+          'INSERT INTO categories_new '
+          'SELECT id, name, icon, NULL, is_builtin, sort_order, family_id, '
+          'version, updated_at, deleted, sync_pending FROM categories',
+        );
+        // 收入未分类 → 保留的支出未分类 ID
+        await customStatement(
+          'UPDATE transactions SET category_id = ? WHERE category_id = ?',
+          [
+            BuiltinCategories.uncategorizedId,
+            BuiltinCategories.removedIncomeUncategorizedId,
+          ],
+        );
+        // 理财 → 其他（真实收益归其他，本金流转应走 type=2）
+        await customStatement(
+          'UPDATE transactions SET category_id = ? WHERE category_id = ?',
+          [
+            BuiltinCategories.byName('其他')!.id,
+            BuiltinCategories.removedInvestmentId,
+          ],
+        );
+        await customStatement('DROP TABLE categories');
+        await customStatement('ALTER TABLE categories_new RENAME TO categories');
+        // 内置行按新常量整体重写：改名（居住/水电燃气/其他）、nameKey、
+        // 单一 sortOrder 与删除理财/收入未分类都在这一步收敛
+        await customStatement('DELETE FROM categories WHERE is_builtin = 1');
+        await seedBuiltinCategories();
       }
     },
   );

@@ -13,7 +13,7 @@ class TransactionProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>> addTransaction({
     required int type,
-    required String category,
+    required String categoryId,
     required double amount,
     required String date,
     String? note,
@@ -26,7 +26,7 @@ class TransactionProvider with ChangeNotifier {
     try {
       final result = await _transactionService.addTransaction(
         type: type,
-        category: category,
+        categoryId: categoryId,
         amount: amount,
         date: date,
         note: note,

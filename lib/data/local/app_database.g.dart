@@ -922,11 +922,12 @@ class $CategoriesTable extends Categories
   late final GeneratedColumn<String> icon = GeneratedColumn<String>(
       'icon', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  static const VerificationMeta _nameKeyMeta =
+      const VerificationMeta('nameKey');
   @override
-  late final GeneratedColumn<int> type = GeneratedColumn<int>(
-      'type', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+  late final GeneratedColumn<String> nameKey = GeneratedColumn<String>(
+      'name_key', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _isBuiltinMeta =
       const VerificationMeta('isBuiltin');
   @override
@@ -994,7 +995,7 @@ class $CategoriesTable extends Categories
         id,
         name,
         icon,
-        type,
+        nameKey,
         isBuiltin,
         sortOrder,
         familyId,
@@ -1028,11 +1029,9 @@ class $CategoriesTable extends Categories
     } else if (isInserting) {
       context.missing(_iconMeta);
     }
-    if (data.containsKey('type')) {
-      context.handle(
-          _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
-    } else if (isInserting) {
-      context.missing(_typeMeta);
+    if (data.containsKey('name_key')) {
+      context.handle(_nameKeyMeta,
+          nameKey.isAcceptableOrUnknown(data['name_key']!, _nameKeyMeta));
     }
     if (data.containsKey('is_builtin')) {
       context.handle(_isBuiltinMeta,
@@ -1079,8 +1078,8 @@ class $CategoriesTable extends Categories
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       icon: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}icon'])!,
-      type: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}type'])!,
+      nameKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name_key']),
       isBuiltin: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_builtin'])!,
       sortOrder: attachedDatabase.typeMapping
@@ -1108,7 +1107,7 @@ class Category extends DataClass implements Insertable<Category> {
   final String id;
   final String name;
   final String icon;
-  final int type;
+  final String? nameKey;
   final bool isBuiltin;
   final int sortOrder;
   final String familyId;
@@ -1120,7 +1119,7 @@ class Category extends DataClass implements Insertable<Category> {
       {required this.id,
       required this.name,
       required this.icon,
-      required this.type,
+      this.nameKey,
       required this.isBuiltin,
       required this.sortOrder,
       required this.familyId,
@@ -1134,7 +1133,9 @@ class Category extends DataClass implements Insertable<Category> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['icon'] = Variable<String>(icon);
-    map['type'] = Variable<int>(type);
+    if (!nullToAbsent || nameKey != null) {
+      map['name_key'] = Variable<String>(nameKey);
+    }
     map['is_builtin'] = Variable<bool>(isBuiltin);
     map['sort_order'] = Variable<int>(sortOrder);
     map['family_id'] = Variable<String>(familyId);
@@ -1150,7 +1151,9 @@ class Category extends DataClass implements Insertable<Category> {
       id: Value(id),
       name: Value(name),
       icon: Value(icon),
-      type: Value(type),
+      nameKey: nameKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameKey),
       isBuiltin: Value(isBuiltin),
       sortOrder: Value(sortOrder),
       familyId: Value(familyId),
@@ -1168,7 +1171,7 @@ class Category extends DataClass implements Insertable<Category> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       icon: serializer.fromJson<String>(json['icon']),
-      type: serializer.fromJson<int>(json['type']),
+      nameKey: serializer.fromJson<String?>(json['nameKey']),
       isBuiltin: serializer.fromJson<bool>(json['isBuiltin']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       familyId: serializer.fromJson<String>(json['familyId']),
@@ -1185,7 +1188,7 @@ class Category extends DataClass implements Insertable<Category> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'icon': serializer.toJson<String>(icon),
-      'type': serializer.toJson<int>(type),
+      'nameKey': serializer.toJson<String?>(nameKey),
       'isBuiltin': serializer.toJson<bool>(isBuiltin),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'familyId': serializer.toJson<String>(familyId),
@@ -1200,7 +1203,7 @@ class Category extends DataClass implements Insertable<Category> {
           {String? id,
           String? name,
           String? icon,
-          int? type,
+          Value<String?> nameKey = const Value.absent(),
           bool? isBuiltin,
           int? sortOrder,
           String? familyId,
@@ -1212,7 +1215,7 @@ class Category extends DataClass implements Insertable<Category> {
         id: id ?? this.id,
         name: name ?? this.name,
         icon: icon ?? this.icon,
-        type: type ?? this.type,
+        nameKey: nameKey.present ? nameKey.value : this.nameKey,
         isBuiltin: isBuiltin ?? this.isBuiltin,
         sortOrder: sortOrder ?? this.sortOrder,
         familyId: familyId ?? this.familyId,
@@ -1226,7 +1229,7 @@ class Category extends DataClass implements Insertable<Category> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       icon: data.icon.present ? data.icon.value : this.icon,
-      type: data.type.present ? data.type.value : this.type,
+      nameKey: data.nameKey.present ? data.nameKey.value : this.nameKey,
       isBuiltin: data.isBuiltin.present ? data.isBuiltin.value : this.isBuiltin,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       familyId: data.familyId.present ? data.familyId.value : this.familyId,
@@ -1244,7 +1247,7 @@ class Category extends DataClass implements Insertable<Category> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('icon: $icon, ')
-          ..write('type: $type, ')
+          ..write('nameKey: $nameKey, ')
           ..write('isBuiltin: $isBuiltin, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('familyId: $familyId, ')
@@ -1257,7 +1260,7 @@ class Category extends DataClass implements Insertable<Category> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, icon, type, isBuiltin, sortOrder,
+  int get hashCode => Object.hash(id, name, icon, nameKey, isBuiltin, sortOrder,
       familyId, version, updatedAt, deleted, syncPending);
   @override
   bool operator ==(Object other) =>
@@ -1266,7 +1269,7 @@ class Category extends DataClass implements Insertable<Category> {
           other.id == this.id &&
           other.name == this.name &&
           other.icon == this.icon &&
-          other.type == this.type &&
+          other.nameKey == this.nameKey &&
           other.isBuiltin == this.isBuiltin &&
           other.sortOrder == this.sortOrder &&
           other.familyId == this.familyId &&
@@ -1280,7 +1283,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> icon;
-  final Value<int> type;
+  final Value<String?> nameKey;
   final Value<bool> isBuiltin;
   final Value<int> sortOrder;
   final Value<String> familyId;
@@ -1293,7 +1296,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.icon = const Value.absent(),
-    this.type = const Value.absent(),
+    this.nameKey = const Value.absent(),
     this.isBuiltin = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.familyId = const Value.absent(),
@@ -1307,7 +1310,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     this.id = const Value.absent(),
     required String name,
     required String icon,
-    required int type,
+    this.nameKey = const Value.absent(),
     this.isBuiltin = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.familyId = const Value.absent(),
@@ -1317,13 +1320,12 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     this.syncPending = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : name = Value(name),
-        icon = Value(icon),
-        type = Value(type);
+        icon = Value(icon);
   static Insertable<Category> custom({
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? icon,
-    Expression<int>? type,
+    Expression<String>? nameKey,
     Expression<bool>? isBuiltin,
     Expression<int>? sortOrder,
     Expression<String>? familyId,
@@ -1337,7 +1339,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (icon != null) 'icon': icon,
-      if (type != null) 'type': type,
+      if (nameKey != null) 'name_key': nameKey,
       if (isBuiltin != null) 'is_builtin': isBuiltin,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (familyId != null) 'family_id': familyId,
@@ -1353,7 +1355,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       {Value<String>? id,
       Value<String>? name,
       Value<String>? icon,
-      Value<int>? type,
+      Value<String?>? nameKey,
       Value<bool>? isBuiltin,
       Value<int>? sortOrder,
       Value<String>? familyId,
@@ -1366,7 +1368,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
       id: id ?? this.id,
       name: name ?? this.name,
       icon: icon ?? this.icon,
-      type: type ?? this.type,
+      nameKey: nameKey ?? this.nameKey,
       isBuiltin: isBuiltin ?? this.isBuiltin,
       sortOrder: sortOrder ?? this.sortOrder,
       familyId: familyId ?? this.familyId,
@@ -1390,8 +1392,8 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
     if (icon.present) {
       map['icon'] = Variable<String>(icon.value);
     }
-    if (type.present) {
-      map['type'] = Variable<int>(type.value);
+    if (nameKey.present) {
+      map['name_key'] = Variable<String>(nameKey.value);
     }
     if (isBuiltin.present) {
       map['is_builtin'] = Variable<bool>(isBuiltin.value);
@@ -1426,7 +1428,7 @@ class CategoriesCompanion extends UpdateCompanion<Category> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('icon: $icon, ')
-          ..write('type: $type, ')
+          ..write('nameKey: $nameKey, ')
           ..write('isBuiltin: $isBuiltin, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('familyId: $familyId, ')
@@ -2821,7 +2823,7 @@ typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
   Value<String> id,
   required String name,
   required String icon,
-  required int type,
+  Value<String?> nameKey,
   Value<bool> isBuiltin,
   Value<int> sortOrder,
   Value<String> familyId,
@@ -2835,7 +2837,7 @@ typedef $$CategoriesTableUpdateCompanionBuilder = CategoriesCompanion Function({
   Value<String> id,
   Value<String> name,
   Value<String> icon,
-  Value<int> type,
+  Value<String?> nameKey,
   Value<bool> isBuiltin,
   Value<int> sortOrder,
   Value<String> familyId,
@@ -2864,8 +2866,8 @@ class $$CategoriesTableFilterComposer
   ColumnFilters<String> get icon => $composableBuilder(
       column: $table.icon, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<int> get type => $composableBuilder(
-      column: $table.type, builder: (column) => ColumnFilters(column));
+  ColumnFilters<String> get nameKey => $composableBuilder(
+      column: $table.nameKey, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isBuiltin => $composableBuilder(
       column: $table.isBuiltin, builder: (column) => ColumnFilters(column));
@@ -2907,8 +2909,8 @@ class $$CategoriesTableOrderingComposer
   ColumnOrderings<String> get icon => $composableBuilder(
       column: $table.icon, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<int> get type => $composableBuilder(
-      column: $table.type, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<String> get nameKey => $composableBuilder(
+      column: $table.nameKey, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get isBuiltin => $composableBuilder(
       column: $table.isBuiltin, builder: (column) => ColumnOrderings(column));
@@ -2950,8 +2952,8 @@ class $$CategoriesTableAnnotationComposer
   GeneratedColumn<String> get icon =>
       $composableBuilder(column: $table.icon, builder: (column) => column);
 
-  GeneratedColumn<int> get type =>
-      $composableBuilder(column: $table.type, builder: (column) => column);
+  GeneratedColumn<String> get nameKey =>
+      $composableBuilder(column: $table.nameKey, builder: (column) => column);
 
   GeneratedColumn<bool> get isBuiltin =>
       $composableBuilder(column: $table.isBuiltin, builder: (column) => column);
@@ -3001,7 +3003,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<String> icon = const Value.absent(),
-            Value<int> type = const Value.absent(),
+            Value<String?> nameKey = const Value.absent(),
             Value<bool> isBuiltin = const Value.absent(),
             Value<int> sortOrder = const Value.absent(),
             Value<String> familyId = const Value.absent(),
@@ -3015,7 +3017,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             id: id,
             name: name,
             icon: icon,
-            type: type,
+            nameKey: nameKey,
             isBuiltin: isBuiltin,
             sortOrder: sortOrder,
             familyId: familyId,
@@ -3029,7 +3031,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             required String name,
             required String icon,
-            required int type,
+            Value<String?> nameKey = const Value.absent(),
             Value<bool> isBuiltin = const Value.absent(),
             Value<int> sortOrder = const Value.absent(),
             Value<String> familyId = const Value.absent(),
@@ -3043,7 +3045,7 @@ class $$CategoriesTableTableManager extends RootTableManager<
             id: id,
             name: name,
             icon: icon,
-            type: type,
+            nameKey: nameKey,
             isBuiltin: isBuiltin,
             sortOrder: sortOrder,
             familyId: familyId,

@@ -13,10 +13,10 @@ import '../../sync/sync_scheduler.dart';
 
 /// 分类数据门面：内置分类 + 自定义分类的本地读写，不发起任何网络请求。
 ///
-/// 保护规则（对齐既有服务端语义）：
+/// 保护规则（分类中性化）：
 /// - 内置分类随版本发布、ID 固定，不可编辑、不可删除
 /// - 自定义分类增删改自由，软删除墓碑参与后续同步
-/// - 同类型下分类名称不可重复（含与内置分类重名）
+/// - 名称全局唯一（trim、不区分大小写，含与内置分类重名），不再按收支分别校验
 class CategoryService {
   static CategoryService? _instance;
   static int _generation = -1;
@@ -41,7 +41,7 @@ class CategoryService {
   @visibleForTesting
   CategoryService.withRepos(this._categories);
 
-  /// 获取分类列表：内置在前（种子序），自定义在后（创建序）。
+  /// 获取分类列表：单一列表按 sortOrder 升序（内置 25 个在前，自建在后）。
   /// 家庭维度：内置（全局共享）+ 当前家庭自定义
   Future<List<Category>> getCategories() async {
     final rows = await _categories.listAll(await CurrentFamilyStore.get());
@@ -50,20 +50,30 @@ class CategoryService {
               id: r.id,
               name: r.name,
               icon: r.icon,
-              type: r.type,
+              nameKey: r.nameKey,
+              sortOrder: r.sortOrder,
             ))
         .toList();
   }
 
-  /// 添加自定义分类
+  /// 近 90 天分类使用频次（选择器软提示排序用），key 为 `分类ID|方向`
+  Future<Map<String, int>> getRecentUsageCounts({
+    Duration window = const Duration(days: 90),
+  }) async {
+    return _categories.recentUsageCounts(
+      await CurrentFamilyStore.get(),
+      DateTime.now().subtract(window),
+    );
+  }
+
+  /// 添加自定义分类（中性分类：无收支类型；nameKey 恒为 null）
   Future<Map<String, dynamic>> addCategory({
     required String name,
     required String icon,
-    required int type,
   }) async {
     final trimmed = name.trim();
     final familyId = await CurrentFamilyStore.get();
-    if (await _categories.countByName(familyId, trimmed, type) > 0) {
+    if (await _categories.countByName(familyId, trimmed) > 0) {
       throw const LocalizedException(LocalizedErrorCode.categoryNameExists);
     }
 
@@ -72,7 +82,6 @@ class CategoryService {
       local.CategoriesCompanion.insert(
         name: trimmed,
         icon: icon,
-        type: type,
       ),
     );
 
@@ -82,7 +91,7 @@ class CategoryService {
       'id': row.id,
       'name': row.name,
       'icon': row.icon,
-      'type': row.type,
+      'nameKey': row.nameKey,
     };
   }
 
@@ -100,14 +109,12 @@ class CategoryService {
     unawaited(SyncScheduler.instance.maybePush());
   }
 
-  /// 更新分类：仅限自定义分类，同类型下名称查重（排除自身）。
-  /// type 不随更新改变（对齐既有服务端语义：分类类型不可变，
-  /// 防止已挂交易的分类改型污染收支统计）。
+  /// 更新分类：仅限自定义分类，名称全局查重（排除自身）。
+  /// 分类中性化后不再有 type 字段可改。
   Future<Map<String, dynamic>> updateCategory({
     required String id,
     required String name,
     required String icon,
-    required int type,
   }) async {
     final category = await _categories.findById(id);
     if (category == null) {
@@ -122,7 +129,6 @@ class CategoryService {
         await _categories.countByName(
           await CurrentFamilyStore.get(),
           trimmed,
-          category.type,
           excludeId: id,
         ) >
             0) {
@@ -143,7 +149,7 @@ class CategoryService {
       'id': row.id,
       'name': row.name,
       'icon': row.icon,
-      'type': row.type,
+      'nameKey': row.nameKey,
     };
   }
 }

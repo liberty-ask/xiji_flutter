@@ -2720,7 +2720,7 @@ abstract class AppLocalizations {
   /// No description provided for @billAssignHint.
   ///
   /// In en, this message translates to:
-  /// **'Tap the category on a group to assign it to all transactions of that counterparty'**
+  /// **'Tap a category on a group to assign it by income/expense for that counterparty'**
   String get billAssignHint;
 
   /// No description provided for @billDuplicateSkip.
@@ -2758,6 +2758,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} transactions'**
   String billGroupCount(Object count);
+
+  /// No description provided for @billResetGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo card'**
+  String get billResetGroup;
+
+  /// No description provided for @billResetAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all as uncategorized'**
+  String get billResetAll;
+
+  /// No description provided for @billResetAllConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Set every assignable record to Uncategorized? This only affects the current preview.'**
+  String get billResetAllConfirm;
+
+  /// No description provided for @billClearLearning.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear learned rules'**
+  String get billClearLearning;
+
+  /// No description provided for @billClearLearningConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all learned merchant rules? Previously assigned merchants will be prefilled again by platform category and keywords.'**
+  String get billClearLearningConfirm;
+
+  /// No description provided for @billLearningCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared {count} learned rules'**
+  String billLearningCleared(int count);
 
   /// No description provided for @categoryNotFound.
   ///
@@ -2800,6 +2836,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This record has been refunded {amount}. Changing it to non-income/expense will exclude the entire record from expense statistics.'**
   String refundToNeutralConfirm(String amount);
+
+  /// First full restore progress shown under the home header
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring data, {count} restored'**
+  String syncRestoringData(int count);
+
+  /// Bulk upload progress (first upload / reseal) shown under the home header
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading history, {done}/{total}'**
+  String syncUploadingHistory(int done, int total);
+
+  /// No description provided for @categoryDining.
+  ///
+  /// In en, this message translates to:
+  /// **'Dining'**
+  String get categoryDining;
+
+  /// No description provided for @categoryDaily.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Necessities'**
+  String get categoryDaily;
+
+  /// No description provided for @categoryShopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Shopping'**
+  String get categoryShopping;
+
+  /// No description provided for @categoryOnlineShopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Online Shopping'**
+  String get categoryOnlineShopping;
+
+  /// No description provided for @categoryTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport'**
+  String get categoryTransport;
+
+  /// No description provided for @categoryHousing.
+  ///
+  /// In en, this message translates to:
+  /// **'Housing'**
+  String get categoryHousing;
+
+  /// No description provided for @categoryUtilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Utilities'**
+  String get categoryUtilities;
+
+  /// No description provided for @categoryTelecom.
+  ///
+  /// In en, this message translates to:
+  /// **'Communications'**
+  String get categoryTelecom;
+
+  /// No description provided for @categoryEntertainment.
+  ///
+  /// In en, this message translates to:
+  /// **'Entertainment'**
+  String get categoryEntertainment;
+
+  /// No description provided for @categoryMedical.
+  ///
+  /// In en, this message translates to:
+  /// **'Healthcare'**
+  String get categoryMedical;
+
+  /// No description provided for @categoryInsurance.
+  ///
+  /// In en, this message translates to:
+  /// **'Insurance'**
+  String get categoryInsurance;
+
+  /// No description provided for @categoryEducation.
+  ///
+  /// In en, this message translates to:
+  /// **'Education'**
+  String get categoryEducation;
+
+  /// No description provided for @categoryTravel.
+  ///
+  /// In en, this message translates to:
+  /// **'Travel'**
+  String get categoryTravel;
+
+  /// No description provided for @categoryServices.
+  ///
+  /// In en, this message translates to:
+  /// **'Lifestyle Services'**
+  String get categoryServices;
+
+  /// No description provided for @categoryChildcare.
+  ///
+  /// In en, this message translates to:
+  /// **'Childcare'**
+  String get categoryChildcare;
+
+  /// No description provided for @categoryPets.
+  ///
+  /// In en, this message translates to:
+  /// **'Pets'**
+  String get categoryPets;
+
+  /// No description provided for @categorySocial.
+  ///
+  /// In en, this message translates to:
+  /// **'Social Gifts'**
+  String get categorySocial;
+
+  /// No description provided for @categorySalary.
+  ///
+  /// In en, this message translates to:
+  /// **'Salary'**
+  String get categorySalary;
+
+  /// No description provided for @categoryBonus.
+  ///
+  /// In en, this message translates to:
+  /// **'Bonus'**
+  String get categoryBonus;
+
+  /// No description provided for @categoryPartTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Part-time Income'**
+  String get categoryPartTime;
+
+  /// No description provided for @categoryRedPacket.
+  ///
+  /// In en, this message translates to:
+  /// **'Red Envelopes'**
+  String get categoryRedPacket;
+
+  /// No description provided for @categoryGiftMoney.
+  ///
+  /// In en, this message translates to:
+  /// **'Gift Money'**
+  String get categoryGiftMoney;
+
+  /// No description provided for @categoryReimbursement.
+  ///
+  /// In en, this message translates to:
+  /// **'Reimbursement'**
+  String get categoryReimbursement;
+
+  /// No description provided for @categoryOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get categoryOther;
+
+  /// No description provided for @categoryUncategorized.
+  ///
+  /// In en, this message translates to:
+  /// **'Uncategorized'**
+  String get categoryUncategorized;
+
+  /// No description provided for @selectedCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {name}'**
+  String selectedCategory(String name);
+
+  /// No description provided for @addNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Add note'**
+  String get addNote;
 }
 
 class _AppLocalizationsDelegate

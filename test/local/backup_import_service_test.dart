@@ -21,8 +21,8 @@ void main() {
     await db.close();
   });
 
-  final diningId = BuiltinCategories.byName('餐饮', 1)!.id;
-  final salaryId = BuiltinCategories.byName('工资', 0)!.id;
+  final diningId = BuiltinCategories.byName('餐饮')!.id;
+  final salaryId = BuiltinCategories.byName('工资')!.id;
 
   /// 最小备份样本：1 内置命中 + 1 自定义 + 2 交易 + 1 预算
   String backupJson({
@@ -152,5 +152,27 @@ void main() {
     expect(hits2.length, 1); // 描述命中
     final hits3 = await repo.search('fam-1', '工资');
     expect(hits3, isEmpty); // 描述/对方为空的记录不进索引，搜索不出
+  });
+
+  test('导入末尾重建顺带回填历史同步缺口（v8 之前的索引空行）', () async {
+    final repo = TransactionRepository(db);
+    // 模拟旧版本同步入库：只写主表、不写索引
+    await db.into(db.transactions).insert(TransactionsCompanion.insert(
+          id: const Value('sync-legacy-1'),
+          type: 1,
+          categoryId: diningId,
+          amountCents: 1200,
+          date: DateTime(2026, 10, 1),
+          userId: 'user-1',
+          familyId: const Value('fam-1'),
+          description: const Value('同步来的账'),
+        ));
+    expect(await repo.search('fam-1', '同步'), isEmpty, reason: '模拟缺口');
+
+    await service.importFromString(backupJson());
+
+    expect((await repo.search('fam-1', '同步')).map((t) => t.id),
+        contains('sync-legacy-1'),
+        reason: '重建覆盖全表，不只本次导入的行');
   });
 }

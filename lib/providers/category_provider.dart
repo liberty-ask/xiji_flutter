@@ -7,16 +7,14 @@ class CategoryProvider with ChangeNotifier {
   CategoryService get _categoryService => CategoryService();
   
   List<models.Category> _categories = [];
+  Map<String, int> _usageCounts = {};
   bool _isLoading = false;
   String? _error;
 
   List<models.Category> get categories => _categories;
-  List<models.Category> get expenseCategories => _categories
-      .where((c) => c.type == 1)
-      .toList();
-  List<models.Category> get incomeCategories => _categories
-      .where((c) => c.type == 0)
-      .toList();
+
+  /// 近 90 天使用频次，key 为 `分类ID|方向`（选择器软提示排序用）
+  Map<String, int> get usageCounts => _usageCounts;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -27,10 +25,12 @@ class CategoryProvider with ChangeNotifier {
 
     try {
       _categories = await _categoryService.getCategories();
+      _usageCounts = await _categoryService.getRecentUsageCounts();
       _error = null;
     } catch (e) {
       _error = e.toString();
       _categories = [];
+      _usageCounts = {};
     } finally {
       _isLoading = false;
       notifyListeners();

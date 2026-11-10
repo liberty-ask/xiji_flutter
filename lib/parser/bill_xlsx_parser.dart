@@ -148,6 +148,7 @@ class BillXlsxParser {
       description: description,
       payMethod: cell(['支付方式']),
       status: cell(['当前状态']),
+      transactionType: cell(['交易类型']),
     );
   }
 

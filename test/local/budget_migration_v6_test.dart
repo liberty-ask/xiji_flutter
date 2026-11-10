@@ -35,9 +35,43 @@ void main() {
     raw.execute(
         "INSERT INTO budgets(id, family_id, year, month, amount_cents, "
         'updated_at) VALUES (\'b1\', \'f1\', 2026, 10, 500000, 0)');
-    // v7 迁移会给 transactions 加退款冲抵列，本用例只验预算迁移，
-    // 故建同名空表满足 ALTER 前置条件（真实 v5 库由 app 建全表）
-    raw.execute('CREATE TABLE transactions(id TEXT NOT NULL PRIMARY KEY)');
+    // v7 迁移会给 transactions 加退款冲抵列、v8 迁移会重建 FTS 索引，
+    // 本用例只验预算迁移，故按真实 v5 库结构建交易表与索引表（均为空）
+    raw.execute('CREATE TABLE transactions('
+        'id TEXT NOT NULL, '
+        'type INTEGER NOT NULL, '
+        'category_id TEXT NOT NULL, '
+        'amount_cents INTEGER NOT NULL, '
+        'date INTEGER NOT NULL, '
+        'user_id TEXT NOT NULL, '
+        "family_id TEXT NOT NULL DEFAULT '', "
+        'description TEXT NULL, '
+        'counterparty TEXT NULL, '
+        'trade_no TEXT NULL, '
+        'merchant_order_no TEXT NULL, '
+        'pay_method TEXT NULL, '
+        'platform TEXT NULL, '
+        'version INTEGER NOT NULL DEFAULT 1, '
+        'updated_at INTEGER NOT NULL, '
+        'deleted INTEGER NOT NULL DEFAULT 0, '
+        'sync_pending INTEGER NOT NULL DEFAULT 1, '
+        'PRIMARY KEY (id))');
+    raw.execute(
+        'CREATE VIRTUAL TABLE transactions_fts USING fts5(fts_text, tx_id UNINDEXED)');
+    // v9 迁移会补种内置「保险」分类，真实 v5 库同样有 categories 表（本用例留空）
+    raw.execute('CREATE TABLE categories('
+        'id TEXT NOT NULL, '
+        'name TEXT NOT NULL, '
+        'icon TEXT NOT NULL, '
+        'type INTEGER NOT NULL, '
+        'is_builtin INTEGER NOT NULL DEFAULT 0, '
+        'sort_order INTEGER NOT NULL DEFAULT 0, '
+        "family_id TEXT NOT NULL DEFAULT '', "
+        'version INTEGER NOT NULL DEFAULT 1, '
+        'updated_at INTEGER NOT NULL, '
+        'deleted INTEGER NOT NULL DEFAULT 0, '
+        'sync_pending INTEGER NOT NULL DEFAULT 1, '
+        'PRIMARY KEY (id))');
     raw.execute('PRAGMA user_version = 5');
     raw.dispose();
 
