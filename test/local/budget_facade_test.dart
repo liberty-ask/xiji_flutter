@@ -224,4 +224,87 @@ void main() {
       expect(p11.used, 0, reason: '10 月支出不计入 11 月口径');
     });
   });
+
+  group('预算支出净额口径（退款冲抵，1666 vs 1600 回归）', () {
+    const categoryId = '01a15d13-bded-710c-a3bd-aba94a5aeb36';
+
+    test('1666 元支出已退 66 → 预算页与首页预算卡同为 1600', () async {
+      const y = 2026, m = 11;
+      await db.into(db.budgets).insert(BudgetsCompanion.insert(
+            userId: 'user-A',
+            year: y,
+            month: m,
+            amountCents: 200000, // 2000 元
+          ));
+      // 原支出 1666 元，累计已退 66 元
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            type: 1,
+            categoryId: categoryId,
+            amountCents: 166600,
+            date: DateTime(2026, 11, 5),
+            userId: 'user-A',
+            refundedCents: const Value(6600),
+          ));
+      // 退款行自身 type=2（不计收支），不进入支出统计
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            type: 2,
+            categoryId: categoryId,
+            amountCents: 6600,
+            date: DateTime(2026, 11, 6),
+            userId: 'user-A',
+          ));
+
+      final personal = await service.getBudget(year: y, month: m);
+      expect(personal['used'], 1600, reason: '净额法：1666 - 66');
+      expect(personal['percentage'], 80, reason: '1600 / 2000 正好 80%');
+
+      final family =
+          await StatisticsRepository(db).familyBudgetProgress('', y, m);
+      expect(family.used, 1600, reason: '首页预算卡与预算页支出同数');
+      expect(family.total, 2000);
+    });
+
+    test('统一入口：家庭全部成员与预算成员两种 scope 同源', () async {
+      const y = 2026, m = 11;
+      final stats = StatisticsRepository(db);
+      await db.into(db.budgets).insert(BudgetsCompanion.insert(
+            userId: 'user-A',
+            year: y,
+            month: m,
+            amountCents: 200000,
+          ));
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            type: 1,
+            categoryId: categoryId,
+            amountCents: 166600,
+            date: DateTime(2026, 11, 5),
+            userId: 'user-A',
+            refundedCents: const Value(6600),
+          ));
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            type: 1,
+            categoryId: categoryId,
+            amountCents: 10000,
+            date: DateTime(2026, 11, 7),
+            userId: 'user-B', // 未设预算成员
+          ));
+
+      final monthStart = DateTime(y, m, 1);
+      final monthEnd =
+          DateTime(y, m + 1, 1).subtract(const Duration(microseconds: 1));
+      final familyExpense = await stats.expenseCentsInRange(
+        familyId: '',
+        start: monthStart,
+        end: monthEnd,
+      );
+      final budgetedExpense = await stats.expenseCentsInRange(
+        familyId: '',
+        start: monthStart,
+        end: monthEnd,
+        userIds: ['user-A'],
+      );
+      expect(familyExpense, 160000 + 10000, reason: '家庭口径含未设预算成员');
+      expect(budgetedExpense, 160000, reason: '预算成员口径仅含 A 的净额');
+    });
+  });
 }

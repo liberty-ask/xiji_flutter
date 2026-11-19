@@ -14,6 +14,7 @@ import '../../widgets/common/scaled_text.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
 import '../../widgets/common/custom_snackbar.dart';
+import '../../widgets/common/budget_progress_bar.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/transaction_type_style.dart';
 import '../../utils/error_helper.dart';
@@ -963,16 +964,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ],
                                       ),
                                       const SizedBox(height: 12),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: LinearProgressIndicator(
-                                          value: _calculateBudgetProgress(budget),
-                                          backgroundColor: Colors.white.withValues(alpha: 0.05),
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            _getBudgetProgressColor(budget),
-                                          ),
-                                          minHeight: 6,
-                                        ),
+                                      BudgetProgressBar(
+                                        used: budget['used'] as num?,
+                                        total: budget['total'] as num?,
                                       ),
                                       // 8.5：预算口径标注——预算与支出同为
                                       // 「已设预算成员」口径，X/N 提示覆盖范围；
@@ -1206,34 +1200,6 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
     );
-  }
-
-  // Calculate budget progress
-  double _calculateBudgetProgress(Map<String, dynamic> budget) {
-    final used = (budget['used'] as num? ?? 0).toDouble();
-    final total = (budget['total'] as num? ?? 1).toDouble();
-    if (total == 0) return 0.0;
-    return (used / total).clamp(0.0, 1.0);
-  }
-
-  // Get budget progress color based on percentage
-  Color _getBudgetProgressColor(Map<String, dynamic> budget) {
-    double percentage = 0.0;
-
-    final used = (budget['used'] as num? ?? 0).toDouble();
-    final total = (budget['total'] as num? ?? 0).toDouble();
-    if (total > 0) {
-      percentage = (used / total) * 100;
-    }
-
-    // Return color based on percentage
-    if (percentage > 100) {
-      return ThemeHelper.expenseColor(context); // Red for over budget
-    } else if (percentage > 80) {
-      return Colors.orange; // Orange/Yellow for warning (80-100%)
-    } else {
-      return ThemeHelper.primary(context); // Primary color for normal (0-80%)
-    }
   }
 
   // 格式化金额：千分位 + 两位小数（复用全局 AmountFormat）

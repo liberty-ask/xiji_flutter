@@ -4,6 +4,7 @@ import '../../services/api/budget_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/custom_snackbar.dart';
 import '../../widgets/common/scaled_text.dart';
+import '../../widgets/common/budget_progress_bar.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
@@ -188,16 +189,11 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: ((_budgetData!['percentage'] as num? ?? 0) / 100).clamp(0.0, 1.0),
-                            backgroundColor: Colors.white.withValues(alpha: 0.05),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _getBudgetProgressColor(_budgetData!),
-                            ),
-                            minHeight: 8,
-                          ),
+                        BudgetProgressBar(
+                          used: _budgetData!['used'] as num?,
+                          total: _budgetData!['budget'] as num?,
+                          height: 8,
+                          borderRadius: 8,
                         ),
                       ],
                     ),
@@ -266,20 +262,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ),
             ),
     );
-  }
-
-  // Get budget progress color based on percentage
-  Color _getBudgetProgressColor(Map<String, dynamic> budgetData) {
-    final percentage = (budgetData['percentage'] as num? ?? 0).toDouble();
-    
-    // Return color based on percentage
-    if (percentage > 100) {
-      return ThemeHelper.expenseColor(context); // Red for over budget
-    } else if (percentage > 80) {
-      return Colors.orange; // Orange/Yellow for warning (80-100%)
-    } else {
-      return ThemeHelper.primary(context); // Primary color for normal (0-80%)
-    }
   }
 
   Widget _buildStatItem(String label, String value) {

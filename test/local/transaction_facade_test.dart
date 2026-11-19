@@ -6,12 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/utils/money.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
+import 'package:xiji_flutter/data/local/budget_repository.dart';
 import 'package:xiji_flutter/data/local/category_repository.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
 import 'package:xiji_flutter/data/local/statistics_repository.dart';
 import 'package:xiji_flutter/data/local/transaction_repository.dart';
 import 'package:xiji_flutter/models/transaction.dart' as models;
 import 'package:xiji_flutter/models/user.dart';
+import 'package:xiji_flutter/services/api/budget_service.dart';
 import 'package:xiji_flutter/services/api/transaction_service.dart';
 
 void main() {
@@ -306,6 +308,41 @@ void main() {
           first['time'],
           matches(RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$')),
           reason: '动态时间为真实操作时间（updatedAt），格式 yyyy-MM-dd HH:mm');
+    });
+
+    test('退款净额：首页本月支出与预算页支出同数（1666 → 1600）', () async {
+      final now = DateTime(2026, 11, 15, 12);
+
+      await db.into(db.budgets).insert(BudgetsCompanion.insert(
+            userId: 'u1',
+            year: 2026,
+            month: 11,
+            amountCents: 200000, // 2000 元
+          ));
+      // 原支出 1666 元，累计已退 66 元
+      await txRepo.insert(TransactionsCompanion.insert(
+        type: 1,
+        categoryId: diningId,
+        amountCents: 166600,
+        date: DateTime(2026, 11, 5),
+        userId: 'u1',
+        refundedCents: const Value(6600),
+      ));
+      // 退款行自身 type=2（不计收支），不进入支出统计
+      await seedRaw(desc: '退款', type: 2, amount: 66, date: DateTime(2026, 11, 6));
+
+      final home = await txService.getHomeData(now);
+      final budgetService = BudgetService.withRepo(
+        BudgetRepository(db),
+        StatisticsRepository(db),
+      );
+      final budget = await budgetService.getBudget(year: 2026, month: 11);
+
+      expect(home['expense'], 1600, reason: '本月支出按净额法减退款');
+      expect((home['budget'] as Map<String, dynamic>)['used'], 1600,
+          reason: '首页预算卡同数');
+      expect(budget['used'], 1600, reason: '预算页支出同数');
+      expect(budget['percentage'], 80, reason: '1600 / 2000 正好 80%');
     });
 
     test('动态标题与图标兜底：分类被删时降级', () async {

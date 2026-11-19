@@ -31,10 +31,9 @@ class StatisticsRepository {
     final yesterday = today.subtract(const Duration(days: 1));
 
     final rows = await _db.customSelect(
-      'SELECT SUM(CASE WHEN type = 0 THEN amount_cents ELSE 0 END) AS income, '
-      'SUM(CASE WHEN type = 1 THEN amount_cents - refunded_cents ELSE 0 END) AS expense '
-      'FROM transactions WHERE deleted = 0 AND type IN (0, 1) '
-      'AND family_id = ? AND date >= ? AND date <= ?',
+      'SELECT SUM(amount_cents) AS income FROM transactions '
+      'WHERE deleted = 0 AND type = 0 AND family_id = ? '
+      'AND date >= ? AND date <= ?',
       variables: [
         Variable(familyId),
         Variable<DateTime>(monthStart),
@@ -43,13 +42,18 @@ class StatisticsRepository {
       readsFrom: {_db.transactions},
     ).get();
 
+    // 本月支出走统一入口（净额法），与预算页共用同一份 SQL
+    final expenseCents = await expenseCentsInRange(
+      familyId: familyId,
+      start: monthStart,
+      end: monthEnd,
+    );
+
     // 今日/昨日支出（type=1）
     final todayExpense = await _sumExpense(familyId, today);
     final yesterdayExpense = await _sumExpense(familyId, yesterday);
 
-    final r = rows.single;
-    final incomeCents = (r.readNullable<int>('income') ?? 0);
-    final expenseCents = (r.readNullable<int>('expense') ?? 0);
+    final incomeCents = rows.single.readNullable<int>('income') ?? 0;
     return MonthlyOverview(
       income: Money.centsToYuan(incomeCents),
       expense: Money.centsToYuan(expenseCents),
@@ -63,18 +67,47 @@ class StatisticsRepository {
   Future<double> _sumExpense(String familyId, DateTime day) async {
     final dayEnd = day.add(const Duration(days: 1))
         .subtract(const Duration(microseconds: 1));
+    final cents = await expenseCentsInRange(
+      familyId: familyId,
+      start: day,
+      end: dayEnd,
+    );
+    return Money.centsToYuan(cents);
+  }
+
+  /// 支出净额统一入口（分）：首页「本月支出」、首页预算进度、预算页进度
+  /// 三处共用同一份 SQL，禁止各写一套——预算页曾漏掉 `- refunded_cents`，
+  /// 同一笔支出在两页相差一个退款额。
+  ///
+  /// 口径：type=1、排除墓碑；金额按净额法 `amount_cents - refunded_cents`；
+  /// [userIds] 为空表示家庭全部成员，非空按成员过滤（预算成员/本人口径）。
+  Future<int> expenseCentsInRange({
+    required String familyId,
+    required DateTime start,
+    required DateTime end,
+    List<String>? userIds,
+  }) async {
+    final where = <String>['deleted = 0', 'type = 1', 'family_id = ?'];
+    final variables = <Variable>[Variable(familyId)];
+    if (userIds != null) {
+      if (userIds.isEmpty) return 0;
+      where.add(
+          'user_id IN (${List.filled(userIds.length, '?').join(', ')})');
+      variables.addAll(userIds.map(Variable.new));
+    }
+    where
+      ..add('date >= ?')
+      ..add('date <= ?');
+    variables
+      ..add(Variable<DateTime>(start))
+      ..add(Variable<DateTime>(end));
     final rows = await _db.customSelect(
       'SELECT SUM(amount_cents - refunded_cents) AS total FROM transactions '
-      'WHERE deleted = 0 AND type = 1 AND family_id = ? '
-      'AND date >= ? AND date <= ?',
-      variables: [
-        Variable(familyId),
-        Variable<DateTime>(day),
-        Variable<DateTime>(dayEnd),
-      ],
+      'WHERE ${where.join(' AND ')}',
+      variables: variables,
       readsFrom: {_db.transactions},
     ).get();
-    return Money.centsToYuan(rows.single.readNullable<int>('total') ?? 0);
+    return rows.single.readNullable<int>('total') ?? 0;
   }
 
   /// 指定月份预算金额（无预算或墓碑返回 0）。个人口径（D8）：
@@ -127,21 +160,13 @@ class StatisticsRepository {
     final budgetedUserIds =
         bRows.map((r) => r.read<String>('user_id')).toList();
 
-    // 同口径成员的本月支出（type=1、排除墓碑与不计收支）
-    final uRows = await _db.customSelect(
-      'SELECT SUM(amount_cents - refunded_cents) AS used FROM transactions '
-      'WHERE deleted = 0 AND type = 1 AND family_id = ? '
-      'AND user_id IN (${List.filled(budgetedUserIds.length, '?').join(', ')}) '
-      'AND date >= ? AND date <= ?',
-      variables: [
-        Variable(familyId),
-        ...budgetedUserIds.map(Variable.new),
-        Variable<DateTime>(monthStart),
-        Variable<DateTime>(monthEnd),
-      ],
-      readsFrom: {_db.transactions},
-    ).get();
-    final usedCents = uRows.single.readNullable<int>('used') ?? 0;
+    // 同口径成员的本月支出走统一入口（type=1、排除墓碑与不计收支、减退款）
+    final usedCents = await expenseCentsInRange(
+      familyId: familyId,
+      start: monthStart,
+      end: monthEnd,
+      userIds: budgetedUserIds,
+    );
     return FamilyBudgetProgress(
       total: Money.centsToYuan(budgetCents),
       used: Money.centsToYuan(usedCents),
@@ -161,19 +186,13 @@ class StatisticsRepository {
     final monthEnd = DateTime(year, month + 1, 1)
         .subtract(const Duration(microseconds: 1));
 
-    final rows = await _db.customSelect(
-      'SELECT SUM(amount_cents) AS used FROM transactions '
-      'WHERE deleted = 0 AND type = 1 AND family_id = ? AND user_id = ? '
-      'AND date >= ? AND date <= ?',
-      variables: [
-        Variable(familyId),
-        Variable(userId),
-        Variable<DateTime>(monthStart),
-        Variable<DateTime>(monthEnd),
-      ],
-      readsFrom: {_db.transactions},
-    ).get();
-    final usedCents = rows.single.readNullable<int>('used') ?? 0;
+    // 本人本月支出走统一入口（净额法，减退款；与首页「本月支出」同源）
+    final usedCents = await expenseCentsInRange(
+      familyId: familyId,
+      start: monthStart,
+      end: monthEnd,
+      userIds: [userId],
+    );
 
     final budgetRows = await (_db.select(_db.budgets)
           ..where((b) =>
