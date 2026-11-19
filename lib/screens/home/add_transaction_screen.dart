@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -174,7 +176,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (mounted) setState(() {});
   }
 
-  /// 键盘态的分类 chip 点开：完整分类选择器（6 列全量铺开、可滚动），
+  /// 键盘态的分类 chip 点开：完整分类选择器（列数随宽度自适应、可滚动），
   /// 选中即关闭弹层并回填
   Future<void> _pickCategory() async {
     // 先收起金额输入的键盘，弹层不被顶到过窄
@@ -222,8 +224,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   const SizedBox(height: 12),
                   Flexible(
                     child: SingleChildScrollView(
-                      // 不传 rowsPerPage：6 列全量铺开、可滚动；
-                      // adaptiveLabels 让长英文名按语言自适应列数并折两行
+                      // adaptiveLabels：列数随弹层宽度自适应、格子 1:1，
+                      // 长英文名折两行，超出 60% 屏高时内部滚动
                       child: CategorySelector(
                         categories: provider.categories,
                         selectedCategory: _selectedCategory,
@@ -324,7 +326,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final transactionProvider = context.watch<TransactionProvider>();
 
     final isEditing = widget.prefill?.transactionId != null;
-    // 键盘弹起时分类区收成 1 行，让金额、分类、保存都落在键盘上方
+    // 键盘弹起时分类区收成单个 chip，让金额、日期、备注、保存都落在键盘上方
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final horizontal = ResponsiveHelper.horizontalPadding(context);
     final selectedName = _selectedCategory == null
@@ -338,21 +340,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         title: ScaledText(
           isEditing ? l10n.editTransaction : l10n.addTransaction,
         ),
-        actions: [
-          _buildTypeAction(
-            l10n.expense,
-            transaction_model.TransactionType.expense,
-            Icons.arrow_downward,
-            ThemeHelper.expenseColor(context),
-          ),
-          _buildTypeAction(
-            l10n.income,
-            transaction_model.TransactionType.income,
-            Icons.arrow_upward,
-            ThemeHelper.primary(context),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: SafeArea(
         top: false,
@@ -361,18 +348,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           child: Column(
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontal,
-                    16,
-                    horizontal,
-                    keyboardVisible ? 8 : 16,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 金额输入：置顶，键盘弹起时第一眼可见
-                      TextFormField(
+                child: _AdaptiveFormBody(
+                  categoryCount: categoryProvider.categories.length,
+                  children: [
+                    // 收支切换：带文字与图标，放在内容区顶部，一眼可见可点
+                    Padding(
+                      padding:
+                          EdgeInsets.fromLTRB(horizontal, 16, horizontal, 0),
+                      child: _buildTypeSwitch(context, l10n),
+                    ),
+
+                    // 金额输入：置顶，键盘弹起时第一眼可见
+                    Padding(
+                      padding:
+                          EdgeInsets.fromLTRB(horizontal, 16, horizontal, 0),
+                      child: TextFormField(
                         controller: _amountController,
                         keyboardType:
                             const TextInputType.numberWithOptions(decimal: true),
@@ -397,12 +387,52 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           return null;
                         },
                       ),
+                    ),
 
+                    // 分类标题 + 已选分类回显（键盘态由 chip 自身承载，避免重复）
+                    if (!keyboardVisible) ...[
+                      Padding(
+                        padding:
+                            EdgeInsets.fromLTRB(horizontal, 24, horizontal, 0),
+                        child: Row(
+                          children: [
+                            ScaledText(
+                              l10n.category,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (selectedName != null) ...[
+                              const SizedBox(width: 8),
+                              const Spacer(),
+                              Flexible(
+                                child: ScaledText(
+                                  l10n.selectedCategory(selectedName),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: ThemeHelper.primary(context),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ] else
                       const SizedBox(height: 24),
 
-                      if (keyboardVisible)
-                        // 键盘态：分类收成单个 chip，点击弹出完整选择器
-                        SizedBox(
+                    if (keyboardVisible)
+                      // 键盘态：分类收成单个 chip，点击弹出完整选择器
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: horizontal),
+                        child: SizedBox(
                           key: const Key('categoryChip'),
                           height: 44,
                           child: _buildInfoChip(
@@ -414,120 +444,98 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                             onTap: _pickCategory,
                             trailingIcon: Icons.keyboard_arrow_down,
                           ),
-                        )
-                      else ...[
-                        // 分类标题 + 已选分类回显
-                        SizedBox(
-                          height: 20,
-                          child: Row(
-                            children: [
-                              ScaledText(
-                                l10n.category,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              if (selectedName != null) ...[
-                                const SizedBox(width: 8),
-                                const Spacer(),
-                                Flexible(
-                                  child: ScaledText(
-                                    l10n.selectedCategory(selectedName),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: ThemeHelper.primary(context),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.right,
-                                  ),
-                                ),
-                              ],
-                            ],
+                        ),
+                      )
+                    else if (categoryProvider.isLoading)
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: horizontal),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32.0),
+                            child: CircularProgressIndicator(
+                              color: ThemeHelper.primary(context),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 10),
-
-                        if (categoryProvider.isLoading)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: CircularProgressIndicator(
-                                color: ThemeHelper.primary(context),
+                      )
+                    else if (categoryProvider.error != null)
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: horizontal),
+                        child: Center(
+                          child: Padding(
+                            padding: ResponsiveHelper.cardPadding(context),
+                            child: ScaledText(
+                              l10n.loadCategoryFailed(
+                                  categoryProvider.error ?? ''),
+                              style: TextStyle(
+                                color: ThemeHelper.expenseColor(context),
                               ),
                             ),
-                          )
-                        else if (categoryProvider.error != null)
-                          Center(
-                            child: Padding(
-                              padding: ResponsiveHelper.cardPadding(context),
-                              child: ScaledText(
-                                l10n.loadCategoryFailed(
-                                    categoryProvider.error ?? ''),
-                                style: TextStyle(
-                                  color: ThemeHelper.expenseColor(context),
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          CategorySelector(
-                            categories: categoryProvider.categories,
-                            selectedCategory: _selectedCategory,
-                            direction: _transactionType ==
-                                    transaction_model.TransactionType.income
-                                ? 0
-                                : 1,
-                            usageCounts: categoryProvider.usageCounts,
-                            // 3 行 × 6 列/页，带页码点
-                            rowsPerPage: 3,
-                            onSelected: (category) {
-                              setState(() {
-                                _selectedCategory = category;
-                              });
-                            },
                           ),
-                      ],
-
-                      const SizedBox(height: 24),
-
-                      // 日期与备注收成同行 chip
-                      SizedBox(
-                        height: 44,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 115,
-                              child: _buildInfoChip(
-                                context,
-                                icon: Icons.calendar_today,
-                                label: l10n.date,
-                                value: DateFormat('yyyy-MM-dd')
-                                    .format(_selectedDate),
-                                onTap: _selectDate,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 100,
-                              child: _buildInfoChip(
-                                context,
-                                icon: Icons.note,
-                                label: _noteController.text.isEmpty
-                                    ? l10n.addNote
-                                    : _noteController.text,
-                                onTap: _editNote,
-                                trailingIcon: Icons.chevron_right,
-                              ),
-                            ),
-                          ],
+                        ),
+                      )
+                    else
+                      // 一次铺开全部分类：列数随宽度自适应、格子接近正方形；
+                      // 页面整体滚动，分类区不再自己滚动
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: horizontal),
+                        child: CategorySelector(
+                          categories: categoryProvider.categories,
+                          selectedCategory: _selectedCategory,
+                          direction: _transactionType ==
+                                  transaction_model.TransactionType.income
+                              ? 0
+                              : 1,
+                          usageCounts: categoryProvider.usageCounts,
+                          adaptiveLabels: true,
+                          onSelected: (category) {
+                            setState(() {
+                              _selectedCategory = category;
+                            });
+                          },
                         ),
                       ),
-                    ],
-                  ),
+
+                    // 日期：独立一行，完整显示年月日，不省略
+                    Padding(
+                      padding:
+                          EdgeInsets.fromLTRB(horizontal, 24, horizontal, 0),
+                      child: SizedBox(
+                        key: const Key('dateChip'),
+                        height: 44,
+                        child: _buildInfoChip(
+                          context,
+                          icon: Icons.calendar_today,
+                          label: l10n.date,
+                          value:
+                              DateFormat('yyyy-MM-dd').format(_selectedDate),
+                          onTap: _selectDate,
+                          trailingIcon: Icons.chevron_right,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // 备注：独立一行，可见 20 字以上，超长省略、点开弹层查看编辑
+                    Padding(
+                      padding:
+                          EdgeInsets.fromLTRB(horizontal, 0, horizontal, 16),
+                      child: SizedBox(
+                        key: const Key('noteChip'),
+                        height: 44,
+                        child: _buildInfoChip(
+                          context,
+                          icon: Icons.notes,
+                          label: _noteController.text.isEmpty
+                              ? l10n.addNote
+                              // 多行备注压成单行摘要，避免 chip 内换行
+                              : _noteController.text.replaceAll('\n', ' '),
+                          onTap: _editNote,
+                          trailingIcon: Icons.chevron_right,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -542,24 +550,31 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     ),
                   ),
                 ),
-                child: ElevatedButton(
-                  onPressed: transactionProvider.isLoading
-                      ? null
-                      : _submitTransaction,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    padding: EdgeInsets.zero,
+                // 大屏与正文同宽居中，按钮不被拉成整屏宽
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(maxWidth: _AdaptiveFormBody.maxWidth),
+                    child: ElevatedButton(
+                      onPressed: transactionProvider.isLoading
+                          ? null
+                          : _submitTransaction,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: transactionProvider.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : ScaledText(
+                              l10n.confirmAdd,
+                              style: ResponsiveHelper.responsiveTextStyle(context),
+                            ),
+                    ),
                   ),
-                  child: transactionProvider.isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : ScaledText(
-                          l10n.confirmAdd,
-                          style: ResponsiveHelper.responsiveTextStyle(context),
-                        ),
                 ),
               ),
             ],
@@ -569,46 +584,84 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  /// 顶栏的类型切换：图标常驻，Tooltip 与语义标签补齐可读性
-  Widget _buildTypeAction(
+  /// 收支切换：文字 + 图标的分段控件，明确可点；
+  /// 英文文案偏长时用 FittedBox 等比缩小，不截断、不溢出
+  Widget _buildTypeSwitch(BuildContext context, AppLocalizations l10n) {
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: ThemeHelper.surface(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTypeOption(
+              l10n.expense,
+              transaction_model.TransactionType.expense,
+              Icons.arrow_downward,
+              ThemeHelper.expenseColor(context),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildTypeOption(
+              l10n.income,
+              transaction_model.TransactionType.income,
+              Icons.arrow_upward,
+              ThemeHelper.primary(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypeOption(
     String label,
     transaction_model.TransactionType type,
     IconData icon,
     Color color,
   ) {
     final isSelected = _transactionType == type;
+    final foreground = isSelected ? color : Colors.white70;
 
-    return Center(
-      child: Semantics(
-        button: true,
-        selected: isSelected,
-        label: label,
-        child: Tooltip(
-          message: label,
-          // 外层 Semantics 已提供可读标签，避免读屏重复播报
-          excludeFromSemantics: true,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () {
-              setState(() {
-                _transactionType = type;
-                _selectedCategory = null; // 切换类型时清空分类选择
-              });
-            },
-            child: Container(
-              width: 42,
-              height: 32,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: isSelected
-                    ? color.withValues(alpha: 0.2)
-                    : Colors.transparent,
-              ),
-              child: Icon(
-                icon,
-                size: 18,
-                color: isSelected ? color : Colors.white54,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      child: Material(
+        color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(9),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          onTap: () {
+            setState(() {
+              _transactionType = type;
+              _selectedCategory = null; // 切换类型时清空分类选择
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: foreground),
+                  const SizedBox(width: 6),
+                  ScaledText(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
+                    ),
+                    maxLines: 1,
+                  ),
+                ],
               ),
             ),
           ),
@@ -617,7 +670,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
-  /// 日期 / 备注的并排 chip
+  /// 日期 / 备注 / 键盘态分类的单行 chip
   Widget _buildInfoChip(
     BuildContext context, {
     required IconData icon,
@@ -682,6 +735,76 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 记一笔正文的自适应容器：
+/// - 小屏 / 横屏放不下时整页滚动，只用这一个滚动容器，不做嵌套滚动
+/// - 大屏限制正文宽度并居中，表单不被横向拉宽
+/// - 内容不足一屏时把余量摊到区块间距上（每段最多 +[_maxGapGrowth]），
+///   再多的余量留在底部，既不拉高分类格，也不在内容中间挖空洞
+class _AdaptiveFormBody extends StatelessWidget {
+  const _AdaptiveFormBody({
+    required this.children,
+    required this.categoryCount,
+  });
+
+  final List<Widget> children;
+  final int categoryCount;
+
+  /// 正文最大宽度：宽于该值（平板 / 横屏）时居中留白
+  static const double maxWidth = 560;
+
+  /// 除分类网格外的固定高度合计（收支 44 + 金额 56 + 标题 30 + 日期 44 +
+  /// 备注 44 + 各段间距），仅用于估算可摊余量，估小了只是少摊一点
+  static const double _baseHeight = 324;
+
+  /// 每个区块间距最多再多摊多少，避免超高屏把表单拉得过于稀疏
+  static const double _maxGapGrowth = 24;
+
+  /// 正文里可摊余量的区块间距个数
+  static const int _gapCount = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontal = ResponsiveHelper.horizontalPadding(context);
+        final contentWidth =
+            math.min(constraints.maxWidth, maxWidth) - horizontal * 2;
+        final isEnglish =
+            Localizations.localeOf(context).languageCode == 'en';
+        final columns =
+            CategorySelector.columnsFor(contentWidth, isEnglish: isEnglish);
+        final cellWidth =
+            CategorySelector.cellWidthFor(contentWidth, columns);
+        final rows = math.max(1, (categoryCount / columns).ceil());
+        final gridHeight =
+            rows * cellWidth + (rows - 1) * CategorySelector.spacing;
+        final estimated = _baseHeight + gridHeight;
+
+        return SingleChildScrollView(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                // 至少铺满一屏（或估算内容 + 可摊余量），余量交给 spaceBetween
+                minHeight: math.min(
+                  constraints.maxHeight,
+                  estimated + _gapCount * _maxGapGrowth,
+                ),
+                maxWidth: maxWidth,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -40,7 +40,12 @@ List<Category> sortedCategoriesForDirection(
   return list;
 }
 
-class CategorySelector extends StatefulWidget {
+/// 分类网格：一次铺开全部分类，不分页、无页码点。
+///
+/// 两种形态：
+/// - 默认（[adaptiveLabels] = false）：6 列 + 1.1 比例 + 单行标签（导入预览弹层沿用）
+/// - 自适应（[adaptiveLabels] = true）：按可用宽度算列数，格子接近正方形
+class CategorySelector extends StatelessWidget {
   final List<Category> categories;
   final Category? selectedCategory;
 
@@ -51,17 +56,17 @@ class CategorySelector extends StatefulWidget {
   final Map<String, int> usageCounts;
   final Function(Category) onSelected;
 
-  /// 每页行数：null = 不分页、全量铺开（导入预览弹层沿用原行为）；
-  /// 非空 = 按「行数 × 列数」分页，带页码点。
-  final int? rowsPerPage;
-
-  /// 固定列数：null 时不分页场景固定 6 列，分页场景按语言自适应
-  /// （英文 4 列 + 两行标签，其余 6 列 + 单行标签）
+  /// 固定列数：null 时按宽度自适应（[adaptiveLabels] 为 true）或默认 6 列
   final int? columns;
 
-  /// 不分页场景是否也启用「按语言自适应列数 + 两行标签」：
-  /// false（默认）= 6 列 + 单行（导入预览弹层），true = 与主网格一致
+  /// 是否启用自适应网格：列数随宽度增加、格子接近正方形、英文长名允许两行
   final bool adaptiveLabels;
+
+  static const double spacing = 6;
+
+  /// 目标格宽：中文标签短，英文标签长，给更宽的格子好折两行
+  static const double _targetCellWidthZh = 56;
+  static const double _targetCellWidthEn = 74;
 
   const CategorySelector({
     super.key,
@@ -70,101 +75,91 @@ class CategorySelector extends StatefulWidget {
     this.direction = 1,
     this.usageCounts = const {},
     required this.onSelected,
-    this.rowsPerPage,
     this.columns,
     this.adaptiveLabels = false,
   });
 
-  @override
-  State<CategorySelector> createState() => _CategorySelectorState();
-}
-
-class _CategorySelectorState extends State<CategorySelector> {
-  static const double _spacing = 6;
-
-  final PageController _pageController = PageController();
-  int _page = 0;
-
-  @override
-  void didUpdateWidget(covariant CategorySelector oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 键盘弹起/收起会切换每页行数，分页结构变化后回到第一页
-    if (oldWidget.rowsPerPage != widget.rowsPerPage) {
-      _page = 0;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pageController.hasClients) {
-          _pageController.jumpToPage(0);
-        }
-      });
-    }
+  /// 给定可用宽度与列数时每格的宽度（含间距修正），测试与布局共用同一套算法
+  static double cellWidthFor(double availableWidth, int columns) {
+    if (columns <= 0) return 0;
+    return (availableWidth - (columns - 1) * spacing) / columns;
   }
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  /// 按可用宽度推算列数：让格子宽度贴近目标值，宽屏自然增加列数，
+  /// 避免格子被拉成巨大方块
+  static int columnsFor(double availableWidth, {required bool isEnglish}) {
+    final target = isEnglish ? _targetCellWidthEn : _targetCellWidthZh;
+    final raw = ((availableWidth + spacing) / (target + spacing)).round();
+    return raw.clamp(4, 10);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final sorted = sortedCategoriesForDirection(
-        widget.categories, widget.direction, widget.usageCounts);
-
-    if (widget.rowsPerPage == null) {
-      return _buildAll(context, l10n, sorted);
+    final sorted =
+        sortedCategoriesForDirection(categories, direction, usageCounts);
+    if (sorted.isEmpty) {
+      return const SizedBox.shrink();
     }
-    return _buildPaged(context, l10n, sorted);
-  }
 
-  /// 标签布局：英文 4 列 + 两行标签（长名不截断），其余 6 列 + 单行
-  ({int columns, int maxLines}) _labelLayout(BuildContext context) {
-    final isEnglish = Localizations.localeOf(context).languageCode == 'en';
-    final columns = widget.columns ?? (isEnglish ? 4 : 6);
-    return (columns: columns, maxLines: columns <= 4 ? 2 : 1);
-  }
-
-  /// 全量铺开：
-  /// - 默认（导入预览弹层的分类弹层）：6 列、单行标签、不分页
-  /// - [CategorySelector.adaptiveLabels] 为 true：与主网格一致的自适应布局
-  Widget _buildAll(
-    BuildContext context,
-    AppLocalizations l10n,
-    List<Category> sorted,
-  ) {
-    if (!widget.adaptiveLabels) {
-      return GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: widget.columns ?? 6,
-          crossAxisSpacing: _spacing,
-          mainAxisSpacing: _spacing,
-          childAspectRatio: 1.1,
-        ),
-        itemCount: sorted.length,
-        itemBuilder: (context, index) {
-          final category = sorted[index];
-          return _buildCell(
-            context,
-            l10n,
-            category,
-            maxLines: 1,
-            isSelected: widget.selectedCategory?.id == category.id,
-          );
-        },
+    if (!adaptiveLabels) {
+      return _buildGrid(
+        context,
+        l10n,
+        sorted,
+        columns: columns ?? 6,
+        aspectRatio: 1.1,
+        maxLines: 1,
       );
     }
 
-    final layout = _labelLayout(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 宽度不可用时按手机常见宽度兜底，避免出现无限宽
+        final width =
+            constraints.maxWidth.isFinite ? constraints.maxWidth : 360.0;
+        final isEnglish =
+            Localizations.localeOf(context).languageCode == 'en';
+        final resolved =
+            columns ?? columnsFor(width, isEnglish: isEnglish);
+        return _buildGrid(
+          context,
+          l10n,
+          sorted,
+          columns: resolved,
+          // 正方形格子：宽度决定高度，多出来的垂直空间留给区块间距
+          aspectRatio: 1.0,
+          maxLines: isEnglish ? 2 : 1,
+          cellWidth: cellWidthFor(width, resolved),
+        );
+      },
+    );
+  }
+
+  Widget _buildGrid(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<Category> sorted, {
+    required int columns,
+    required double aspectRatio,
+    required int maxLines,
+    double? cellWidth,
+  }) {
+    final iconSize = cellWidth == null
+        ? 14.0
+        : (cellWidth * 0.28).clamp(12.0, 20.0);
+    final fontSize = cellWidth == null
+        ? 11.0
+        : (cellWidth * 0.2).clamp(10.0, 13.0);
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: layout.columns,
-        crossAxisSpacing: _spacing,
-        mainAxisSpacing: _spacing,
-        mainAxisExtent: _cellHeight(layout.maxLines),
+        crossAxisCount: columns,
+        crossAxisSpacing: spacing,
+        mainAxisSpacing: spacing,
+        childAspectRatio: aspectRatio,
       ),
       itemCount: sorted.length,
       itemBuilder: (context, index) {
@@ -173,109 +168,12 @@ class _CategorySelectorState extends State<CategorySelector> {
           context,
           l10n,
           category,
-          maxLines: layout.maxLines,
-          isSelected: widget.selectedCategory?.id == category.id,
+          maxLines: maxLines,
+          iconSize: iconSize,
+          fontSize: fontSize,
+          isSelected: selectedCategory?.id == category.id,
         );
       },
-    );
-  }
-
-  /// 单行标签 41dp、双行标签 44dp，与设计草稿一致
-  static double _cellHeight(int maxLines) => maxLines == 2 ? 44.0 : 41.0;
-
-  /// 分页铺开（记一笔页面）：固定行数、按语言自适应列数、带页码点
-  Widget _buildPaged(
-    BuildContext context,
-    AppLocalizations l10n,
-    List<Category> sorted,
-  ) {
-    if (sorted.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final layout = _labelLayout(context);
-    final columns = layout.columns;
-    final maxLines = layout.maxLines;
-    final rows = widget.rowsPerPage!;
-    final itemsPerPage = columns * rows;
-    final pageCount = (sorted.length / itemsPerPage).ceil();
-
-    if (_page > pageCount - 1) {
-      _page = pageCount - 1;
-    }
-
-    final cellHeight = _cellHeight(maxLines);
-    final gridHeight = rows * cellHeight + (rows - 1) * _spacing;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: gridHeight,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: pageCount,
-            physics: pageCount > 1
-                ? const PageScrollPhysics()
-                : const NeverScrollableScrollPhysics(),
-            onPageChanged: (index) => setState(() => _page = index),
-            itemBuilder: (context, page) {
-              final start = page * itemsPerPage;
-              final end =
-                  (start + itemsPerPage).clamp(0, sorted.length);
-              final items = sorted.sublist(start, end);
-
-              return GridView.builder(
-                padding: EdgeInsets.zero,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  crossAxisSpacing: _spacing,
-                  mainAxisSpacing: _spacing,
-                  mainAxisExtent: cellHeight,
-                ),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final category = items[index];
-                  return _buildCell(
-                    context,
-                    l10n,
-                    category,
-                    maxLines: maxLines,
-                    isSelected: widget.selectedCategory?.id == category.id,
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        if (pageCount > 1) ...[
-          const SizedBox(height: 10),
-          Semantics(
-            label: '${_page + 1}/$pageCount',
-            child: SizedBox(
-              height: 6,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(pageCount, (index) {
-                  final active = index == _page;
-                  return Container(
-                    width: active ? 14 : 6,
-                    height: 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(3),
-                      color: active
-                          ? ThemeHelper.primary(context)
-                          : Colors.white.withValues(alpha: 0.2),
-                    ),
-                  );
-                }),
-              ),
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -284,12 +182,14 @@ class _CategorySelectorState extends State<CategorySelector> {
     AppLocalizations l10n,
     Category category, {
     required int maxLines,
+    required double iconSize,
+    required double fontSize,
     required bool isSelected,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => widget.onSelected(category),
+        onTap: () => onSelected(category),
         splashColor: Colors.transparent,
         highlightColor: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -315,14 +215,14 @@ class _CategorySelectorState extends State<CategorySelector> {
                 color: isSelected
                     ? ThemeHelper.primary(context)
                     : Colors.white70,
-                size: 10, // 缩小一半，从20到10
+                size: iconSize,
               ),
-              const SizedBox(height: 3),
+              SizedBox(height: iconSize >= 14 ? 5 : 3),
               Flexible(
                 child: Text(
                   CategoryL10n.ofModel(l10n, category),
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: fontSize,
                     height: 1.15,
                     fontWeight: FontWeight.w600,
                     color: isSelected
