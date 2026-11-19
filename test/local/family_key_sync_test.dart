@@ -391,6 +391,82 @@ void main() {
     });
   });
 
+  group('8.4f：新成员公钥探测（vaultDoc 固定 epoch 的增量盲区）', () {
+    test('新成员 vaultDoc 落在 admin 游标之前：recordId 探测补公钥，否则永远发不出 F 包裹',
+        () async {
+      await loginAs('user-1');
+      final vaultA = newVault();
+      await vaultA.setup('pw123456');
+      await loginAs('user-2');
+      final vaultB = newVault();
+      await vaultB.setup('pw123456');
+
+      final server = FakeSyncServer();
+      final pushPort = _RecordingPushPort(server);
+      // 新成员开启云备份后把自己的 vaultDoc 推到家庭通道
+      await VaultSyncService.pushVault(
+          port: pushPort, vault: vaultB, currentFamilyId: () async => 'f1');
+      final docRecord =
+          server.record(VaultSyncService.vaultRecordId('user-2'));
+      expect(docRecord, isNotNull);
+      expect(docRecord!['updatedAt'], 1, reason: 'vaultDoc 固定 epoch 时间戳');
+
+      // admin 日常增量拉取：游标已推进到真实时间，epoch 记录永远拉不到
+      final page = await FakeServerPullPort(server)
+          .pull('f1', DateTime.now().millisecondsSinceEpoch, 'zzzzzz');
+      expect(page['records'] as List, isEmpty,
+          reason: '增量分页不返回游标之前的 vaultDoc——公钥不会自然到达');
+
+      // 不探测 → 公钥缺失
+      await loginAs('user-1');
+      expect(await MemberPublicKeyStore.get('user-2'), isNull);
+
+      // 修复点：recordId 精确探测补齐公钥
+      await VaultSyncService.ensureMemberPublicKeys(
+        members: const [(id: 'user-1', role: 0), (id: 'user-2', role: 0)],
+        port: FakeServerPullPort(server),
+        currentFamilyId: () async => 'f1',
+      );
+      expect(await MemberPublicKeyStore.get('user-2'),
+          await pubBase64Of(vaultB));
+
+      // 公钥到位后，admin 的 F 包裹才能发出（新成员据此解家庭密文）
+      await FamilyKeyService.ensureDistributed(
+        members: const [
+          (id: 'user-1', role: FamilyMemberRole.admin),
+          (id: 'user-2', role: FamilyMemberRole.member),
+        ],
+        vault: vaultA,
+        pushPort: pushPort,
+        pullPort: FakeServerPullPort(server),
+        currentFamilyId: () async => 'f1',
+      );
+      expect(await vaultA.getFamilyKey('f1'), isNotNull);
+      final wrap = server
+          .record(await FamilyKeyService.familyKeyRecordId('f1', 'user-2'));
+      expect(wrap, isNotNull, reason: '公钥补齐后包裹即发出，新成员可解 F');
+    });
+
+    test('8.4g：公钥随成员关系下发——成员列表即登记，无需再探测 vaultDoc',
+        () async {
+      await MemberPublicKeyStore.setForTesting(<String, String>{});
+      final vault = newVault();
+      await vault.setup('pw123456');
+      final pub = await pubBase64Of(vault);
+
+      // 模拟服务端 GET /v1/families/members：新成员行已带 publicKey
+      await SyncScheduler.registerMemberPublicKeys(<dynamic>[
+        <String, dynamic>{'id': 'user-9', 'role': 1, 'publicKey': pub},
+        <String, dynamic>{'id': 'user-8', 'role': 0, 'publicKey': null},
+      ]);
+
+      expect(await MemberPublicKeyStore.get('user-9'), pub,
+          reason: '公钥随成员关系到达即可用于包裹 F');
+      expect(await MemberPublicKeyStore.get('user-8'), isNull,
+          reason: '未上报（老客户端）不登记，交给 vaultDoc 探测兜底');
+    });
+  });
+
   group('8.4：双设备端到端闭环', () {
     test('A 分发并推家庭密文 → B 首次拉取同轮解出 F 并入库业务数据',
         () async {
@@ -529,6 +605,7 @@ void main() {
         isSignedIn: () async => true,
         currentFamilyId: () async => 'f1',
         membersProvider: () async => const [],
+        publicKeyReporter: () async {},
       );
 
       await scheduler.maybePush();
@@ -585,6 +662,7 @@ void main() {
         isSignedIn: () async => true,
         currentFamilyId: () async => 'f1',
         membersProvider: () async => const [],
+        publicKeyReporter: () async {},
       );
 
       await scheduler.maybePush();
@@ -662,6 +740,7 @@ void main() {
         isSignedIn: () async => true,
         currentFamilyId: () async => 'f1',
         membersProvider: () async => membersOfA,
+        publicKeyReporter: () async {},
       );
       await schedulerA.maybePush();
       final f = await vaultA.getFamilyKey('f1');
@@ -687,6 +766,7 @@ void main() {
           (id: 'user-1', role: FamilyMemberRole.admin),
           (id: 'user-2', role: FamilyMemberRole.member),
         ],
+        publicKeyReporter: () async {},
       );
       await schedulerB.maybePush();
 
@@ -695,6 +775,8 @@ void main() {
           reason: '家庭密文无 F 解不开，全部跳过');
       expect(await SyncCursorStore.load('f1', 'user-2'), isNotNull,
           reason: '游标已推进——不重置游标历史密文将永久错过');
+      expect(schedulerB.isWaitingForFamilyKey, isTrue,
+          reason: '无 F 且有家庭密文解不开：置「等待家庭密钥」可见态');
 
       // ── A 下轮：B 已开启（vaultDoc 公钥到达），补分发 B 的包裹 ──
       await loginAs('user-1');
@@ -720,6 +802,8 @@ void main() {
           reason: '游标重置后全量重拉，历史密文以家庭 key 解开入库');
       expect(txs.first.amountCents, 3000);
       expect(txs.first.description, '午餐');
+      expect(schedulerB.isWaitingForFamilyKey, isFalse,
+          reason: 'F 到达后等待态解除');
     });
   });
 

@@ -276,7 +276,11 @@ class FamilyKeyService {
     required int version,
   }) async {
     final pubBase64 = await MemberPublicKeyStore.get(forUserId);
-    if (pubBase64 == null) return false;
+    if (pubBase64 == null) {
+      // 可观测性：公钥缺失是「新成员一直空库」的典型断点，不再静默
+      debugPrint('[FamilyKey] 成员 $forUserId 公钥未到达，本轮跳过包裹（下轮重试）');
+      return false;
+    }
     final pubBytes = base64Decode(pubBase64);
     final recipientPublicKey =
         SimplePublicKey(pubBytes, type: KeyPairType.x25519);

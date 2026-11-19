@@ -4,6 +4,8 @@ import '../crypto/key_vault.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/local_user.dart';
+import '../data/local/member_public_key_store.dart';
+import '../services/api/api_client.dart';
 import 'sync_outbox.dart';
 import 'sync_scheduler.dart' show ApiSyncPushPort, SyncPushPort;
 import 'sync_puller.dart' show ApiSyncPullPort, SyncPullPort;
@@ -68,6 +70,33 @@ class VaultSyncService {
     }
   }
 
+  /// 上报本机公钥（公钥随成员关系下发，见 8.4 缺陷修复）。
+  ///
+  /// 服务端把公钥写到该用户全部 family_member 行，持有 F 的成员拉取
+  /// 成员列表即可包裹分发——公钥不再依赖 vaultDoc 的增量可达性
+  /// （其 updated_at 固定 epoch，永远落在已推进游标之前）。
+  /// 每轮同步幂等上报（几十字节，GET members 同量级）；失败静默，
+  /// 下轮重试。入伙后首轮上报即把公钥写进新建的成员行。
+  static Future<void> reportPublicKey({
+    KeyVault? vault,
+    ApiClient? api,
+  }) async {
+    final vault_ = vault ?? VaultProvider.vault;
+    try {
+      if (!await vault_.isConfigured()) return;
+      final doc = await vault_.exportVaultDoc();
+      final publicKey = doc['publicKey'] as String?;
+      if (publicKey == null || publicKey.isEmpty) return;
+      await (api ?? ApiClient()).post<dynamic>(
+        '/v1/families/public-key',
+        data: <String, dynamic>{'publicKey': publicKey},
+      );
+    } catch (e) {
+      // 尽力而为：下轮同步重报（幂等），不打断调用方
+      debugPrint('[VaultSync] 公钥上报跳过，下轮重试: $e');
+    }
+  }
+
   /// 登录后自动探测恢复（6.8 + 6.9）：本机未配置时从云端拉取 vault 导入；
   /// 随后尝试自动解锁（6.9 自动解锁份：不卸载免口令，重装/换设备无
   /// 自动解锁份保持锁定由 UI 弹口令框）。返回是否拉到并导入
@@ -99,6 +128,42 @@ class VaultSyncService {
     } catch (_) {
       // 网络失败等：下次登录/开 App 再探测，静默
       return false;
+    }
+  }
+
+  /// 成员公钥兜底探测（8.4 缺陷修复的兜底路径）。
+  ///
+  /// 公钥主来源已改为「成员关系」：服务端 family_member.public_key，
+  /// 由各成员客户端每轮同步上报，持钥方拉成员列表即登记（见
+  /// SyncScheduler.registerMemberPublicKeys）。这里只覆盖老服务端 /
+  /// 老客户端（未上报 publicKey）的情形——vaultDoc 的 updated_at 固定
+  /// 为 epoch，一旦本机游标已推进到真实时间就永远拉不到，只能按
+  /// recordId 精确探测。
+  ///
+  /// 仅探测本地缓存缺失的成员（常态命中缓存零请求）。
+  /// 任何异常静默，由下一轮同步重试。
+  static Future<void> ensureMemberPublicKeys({
+    required List<({String id, int role})> members,
+    SyncPullPort? port,
+    Future<String?> Function()? currentFamilyId,
+  }) async {
+    try {
+      final familyId = await (currentFamilyId ?? CurrentFamilyStore.get)();
+      if (familyId == null || familyId.isEmpty) return;
+      for (final member in members) {
+        if (await MemberPublicKeyStore.get(member.id) != null) continue;
+        final doc = await pullVaultDoc(
+            port: port, userId: member.id, familyId: familyId);
+        final owner = doc?['userId'] as String?;
+        final publicKey = doc?['publicKey'] as String?;
+        if (owner != member.id || publicKey == null || publicKey.isEmpty) {
+          continue;
+        }
+        await MemberPublicKeyStore.register(member.id, publicKey);
+        debugPrint('[VaultSync] 已探测成员 ${member.id} 公钥（vaultDoc）');
+      }
+    } catch (e) {
+      debugPrint('[VaultSync] 成员公钥探测跳过，下轮重试: $e');
     }
   }
 

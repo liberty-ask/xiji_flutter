@@ -11,6 +11,7 @@ import '../data/local/app_database.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
 import '../data/local/local_user.dart';
+import '../data/local/member_public_key_store.dart';
 import '../services/api/api_client.dart';
 import 'family_key_service.dart';
 import 'sync_cursor_store.dart';
@@ -198,6 +199,7 @@ class SyncScheduler {
     Future<String?> Function()? currentFamilyId,
     SyncPuller? puller,
     Future<List<({String id, int role})>> Function()? membersProvider,
+    Future<void> Function()? publicKeyReporter,
     this.batchSize = 400,
   })  : _injectedDb = db,
         _injectedPuller = puller,
@@ -206,7 +208,9 @@ class SyncScheduler {
         _vault = vault ?? VaultProvider.vault,
         _isSignedIn = isSignedIn ?? _defaultSignedIn,
         _currentFamilyId = currentFamilyId ?? CurrentFamilyStore.get,
-        _membersProvider = membersProvider;
+        _membersProvider = membersProvider,
+        _publicKeyReporter = publicKeyReporter ??
+            (() => VaultSyncService.reportPublicKey(vault: vault));
 
   static Future<bool> _defaultSignedIn() async =>
       await ApiClient().getToken() != null;
@@ -224,6 +228,9 @@ class SyncScheduler {
   final Future<bool> Function() _isSignedIn;
   final Future<String?> Function() _currentFamilyId;
   final Future<List<({String id, int role})>> Function()? _membersProvider;
+
+  /// 公钥上报端口：默认走 ApiClient；测试注入空实现避免真实网络
+  final Future<void> Function() _publicKeyReporter;
   final int batchSize;
 
   /// 当前库：注入（测试）优先；默认随 Db 单例动态取——Db.close()
@@ -259,6 +266,20 @@ class SyncScheduler {
 
   bool get isSyncing => _syncing.value;
   ValueListenable<bool> get syncing => _syncing;
+
+  /// 「等待家庭密钥分发」信号：本机无 F 且本轮确有家庭密文解不开
+  /// （新成员刚入伙、持钥方还没把包裹推上来）。为 true 时调度器会
+  /// 按退避自动重试，拿到 F 后会清游标全量重拉补齐，无需用户操作。
+  final ValueNotifier<bool> _waitingFamilyKey = ValueNotifier<bool>(false);
+
+  bool get isWaitingForFamilyKey => _waitingFamilyKey.value;
+  ValueListenable<bool> get waitingForFamilyKey => _waitingFamilyKey;
+
+  /// 等待密钥的自动重试定时器（同一时刻最多一个）与退避档位
+  Timer? _waitRetryTimer;
+  int _waitRetryStep = 0;
+  static const Duration _waitRetryBase = Duration(seconds: 30);
+  static const int _waitRetryMaxStep = 3;
 
   /// 同步轮完成广播：门控通过且整轮成功（含拉取入库）后触发一次；
   /// 门控跳过/失败不触发。页面 Provider 是拉取一次模式（非响应式
@@ -316,6 +337,10 @@ class SyncScheduler {
     // 云端 upsert 覆盖——改口令/重置后下轮同步自动更新云端副本；
     // 新开启用户首轮同步即补上云端 vault。内部自吞异常，失败下轮重试
     await VaultSyncService.pushVault();
+    // 公钥随成员关系下发：每轮幂等上报本机公钥（失败静默，下轮重报）。
+    // 入伙后首轮上报即把公钥写进新建的成员行，持钥方下一轮拉成员
+    // 列表就能包裹 F——不再依赖 vaultDoc 的增量可达性。
+    await _publicKeyReporter();
 
     // 三期 8.4：家庭密钥 F 保障。先做自身包裹探测（缺陷修复）：
     // fkey 记录为 epoch 时间戳，在已推进的游标之前——增量拉取永远
@@ -332,6 +357,14 @@ class SyncScheduler {
     // admin 首次生成 / 云端缺份的成员补包裹分发。成员列表拉取失败
     // 静默跳过（下轮重试），不阻断同步
     final members = await _loadMembers();
+    // 新成员公钥保障：其 vaultDoc 固定 epoch 时间戳，落在已推进的
+    // 游标之前，增量拉取永远够不到——不靠 recordId 精确探测补公钥，
+    // admin 就永远发不出其 F 包裹（新成员空库的直接原因）
+    await VaultSyncService.ensureMemberPublicKeys(
+      members: members,
+      port: _pullPort,
+      currentFamilyId: _currentFamilyId,
+    );
     await FamilyKeyService.ensureDistributed(
       members: members,
       vault: _vault,
@@ -371,8 +404,10 @@ class SyncScheduler {
     }
 
     Object? pullError;
+    ({int pulled, int applied, int skipped, int unreadable, bool needsFullRespull})?
+        pullOutcome;
     try {
-      await _puller.pullAll(
+      pullOutcome = await _puller.pullAll(
         gate.personal,
         // 惰性家庭密钥源：fkey 记录可能在本轮拉取中途送达 F（后加入
         // 成员首拉），解出后同页后续业务记录立即可解
@@ -399,6 +434,23 @@ class SyncScheduler {
     if (_progress.value?.phase == SyncPhase.restoring) {
       _progress.value = null;
     }
+
+    // 等待家庭密钥分发（新成员刚入伙）：本机无 F，本轮确有家庭密文
+    // 解不开。不静默空库——置等待态并按退避自动重试；持钥方把包裹
+    // 推上来后，下一轮 ensureOwnFamilyKey 命中即清游标全量补齐，
+    // 全程无需用户操作。
+    if (pullError == null && pullOutcome != null) {
+      final waiting = pullOutcome.unreadable > 0;
+      _waitingFamilyKey.value = waiting;
+      if (waiting) {
+        _scheduleWaitRetry(
+          pullOutcome.unreadable,
+          urgent: pullOutcome.needsFullRespull,
+        );
+      } else {
+        _cancelWaitRetry();
+      }
+    }
     // 对账补推：拉取仲裁跳过的本地高版本记录（或推送环节部分
     // 失败遗留）推上去，一轮收敛；已推净则空转返回
     try {
@@ -420,6 +472,52 @@ class SyncScheduler {
     }
   }
 
+  /// 等待家庭密钥的退避重试：30s → 60s → 120s → 240s 封顶，同一时刻
+  /// 只排一个定时器。拿到 F（waiting=false）立即撤销并复位退避。
+  /// [urgent] 表示本轮中途才拿到 F 且已清游标——下一轮需尽快全量补齐。
+  void _scheduleWaitRetry(int pendingRows, {bool urgent = false}) {
+    if (_waitRetryTimer != null) return;
+    final delay = urgent
+        ? const Duration(seconds: 10)
+        : Duration(seconds: _waitRetryBase.inSeconds * (1 << _waitRetryStep));
+    debugPrint('[SyncScheduler] 等待家庭密钥分发：$pendingRows 条家庭密文待 F，'
+        '${delay.inSeconds}s 后自动重试');
+    _waitRetryTimer = Timer(delay, () {
+      _waitRetryTimer = null;
+      if (!_waitingFamilyKey.value) return;
+      if (!urgent && _waitRetryStep < _waitRetryMaxStep) _waitRetryStep++;
+      unawaited(maybePush());
+    });
+  }
+
+  /// 撤销等待重试并复位退避档位（拿到 F / 本轮无不可解密文）
+  void _cancelWaitRetry() {
+    _waitRetryTimer?.cancel();
+    _waitRetryTimer = null;
+    _waitRetryStep = 0;
+  }
+
+  /// 把成员列表下发的公钥登记进本地缓存（公钥随成员关系下发）。
+  ///
+  /// 服务端 family_member.public_key 由各成员客户端在同步轮次里上报，
+  /// 因此在审批通过后的第一轮同步就会写进新建的成员行——不再需要
+  /// 「持钥方某次全量重拉恰好扫到对方 vaultDoc」。老服务端/老客户端
+  /// 未上报时为 null，跳过并由 vaultDoc 精确探测兜底。
+  @visibleForTesting
+  static Future<void> registerMemberPublicKeys(List<dynamic> members) async {
+    for (final m in members) {
+      if (m is! Map) continue;
+      final id = m['id'];
+      final publicKey = m['publicKey'];
+      if (id is String &&
+          id.isNotEmpty &&
+          publicKey is String &&
+          publicKey.isNotEmpty) {
+        await MemberPublicKeyStore.register(id, publicKey);
+      }
+    }
+  }
+
   /// 当前家庭成员（分发 F 的检测范围）。注入（测试）优先；
   /// 网络失败返回空列表（本轮跳过分发，成员数据同步不受影响）。
   /// 注意：该接口 data 为顶层数组（同 FamilyService.getMembers），
@@ -429,6 +527,10 @@ class SyncScheduler {
     try {
       final result = await ApiClient().get<dynamic>('/v1/families/members');
       final list = result as List? ?? const [];
+      // 公钥随成员关系下发（服务端 family_member.public_key）：持有 F
+      // 的成员拉一次成员列表即可包裹分发，不再依赖对方 vaultDoc 的
+      // 增量可达性。老服务端/老客户端未上报时为 null，回落探测兜底
+      await registerMemberPublicKeys(list);
       return list
           .map((m) => (id: (m as Map)['id'] as String, role: m['role'] as int))
           .toList();

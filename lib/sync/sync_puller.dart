@@ -84,13 +84,25 @@ class SyncPuller {
   /// 空——惰性重读让同页先解出的 F 立即作用于后续业务记录，否则游标
   /// 越过后该批家庭密文永久错过（后加入成员首拉数据不全）。
   /// 任何失败异常上抛（由调度器按「游标不动、下次重拉」处理）。
-  Future<void> pullAll(
+  /// 返回本轮统计：[unreadable] 为「本机无家庭密钥期间解不开而跳过」的
+  /// 条数（>0 表示正在等待 F 分发，调用方据此呈现等待态并主动重试）。
+  /// 游标照常推进：拿到 F 后由调度器清游标全量重拉补齐（LWW 幂等），
+  /// 比「不推进游标」更安全——后者会在无 F 时死循环重复拉同一页。
+  Future<({int pulled, int applied, int skipped, int unreadable, bool needsFullRespull})> pullAll(
     Uint8List personalDataKey, {
     Future<Uint8List?> Function()? familyDataKeyProvider,
     void Function(int processed, bool isFullRestore)? onPage,
   }) async {
     final familyId = await _currentFamilyId();
-    if (familyId == null) return;
+    if (familyId == null) {
+      return (
+        pulled: 0,
+        applied: 0,
+        skipped: 0,
+        unreadable: 0,
+        needsFullRespull: false
+      );
+    }
 
     // 游标按「家庭 + 用户」隔离（8.8）：同一手机切换账号时游标
     // 互不继承，各自从自己的位置增量拉取。未登录归一空串（同步
@@ -116,6 +128,10 @@ class SyncPuller {
     var pulled = 0;
     var applied = 0;
     var skipped = 0;
+    // 无 F 期间被跳过的条数（等待家庭密钥分发的量化指标）
+    var unreadable = 0;
+    // F 本轮中途才送达：此前页跳过的记录已在游标之后，需清游标全量重拉
+    var needsFullRespull = false;
 
     while (true) {
       // 每页 2000 条（服务端上限）：万条数据 18 页（200/页时 45 页）
@@ -135,6 +151,10 @@ class SyncPuller {
       // 一次刷新（比逐条连刷更省 UI 开销）。
       if (records.isNotEmpty) {
         pulled += records.length;
+        // 页初是否持有 F：无 F 时本页跳过的业务记录即「等待密钥分发」
+        final hadFamilyKey = familyKey != null;
+        var pageSkipped = 0;
+        var pageGainedKey = false;
         await _db.transaction(() async {
           // 页级批量仲裁（7.10）：解密仍按记录顺序逐条进行（保证页内
           // 先送达的 fkey 能立即作用于同页后续业务记录），DB 写入按表
@@ -148,12 +168,17 @@ class SyncPuller {
           );
           applied += stats.applied;
           skipped += stats.skipped;
+          pageSkipped = stats.skipped;
+          pageGainedKey = stats.familyKeyGained;
           // 页内刚解出自己的包裹份拿到 F：同步本地缓存供下一页使用
           // （只在 F 从无到有时发生一次，常态零开销）
           if (stats.familyKeyGained) {
             familyKey = await familyDataKeyProvider?.call();
           }
         });
+        if (!hadFamilyKey) unreadable += pageSkipped;
+        // F 本轮中途才到：此前页跳过的记录已被游标跨过，标记全量重拉
+        if (pageGainedKey && unreadable > 0) needsFullRespull = true;
         // 每页提交后上报一次进度（P1-6）：条数为累计已拉取数
         onPage?.call(pulled, isFullRestore);
       }
@@ -183,8 +208,22 @@ class SyncPuller {
       await _rebuildFtsAfterFirstRestore(userId);
     }
 
+    // F 中途送达：本轮的跳过记录已在游标之后，清游标让下一轮全量补齐
+    if (needsFullRespull) {
+      await SyncCursorStore.clear(familyId, userId);
+      debugPrint('[SyncPuller] 本轮中途获得家庭密钥，已清游标待下轮全量补齐');
+    }
+
     debugPrint(
-        '[SyncPuller] 家庭 $familyId 拉取完成：$pulled 条（入库 $applied / 跳过 $skipped）');
+        '[SyncPuller] 家庭 $familyId 拉取完成：$pulled 条（入库 $applied / 跳过 $skipped'
+        '${unreadable > 0 ? " / 等待密钥 $unreadable" : ""}）');
+    return (
+      pulled: pulled,
+      applied: applied,
+      skipped: skipped,
+      unreadable: unreadable,
+      needsFullRespull: needsFullRespull
+    );
   }
 
   /// 首轮恢复后的索引重建标记键（按账号隔离：账号切换各自一个库）

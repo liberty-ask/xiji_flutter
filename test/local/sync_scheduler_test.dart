@@ -121,6 +121,7 @@ void main() {
       vault: vault,
       isSignedIn: () async => true,
       membersProvider: () async => const [],
+      publicKeyReporter: () async {},
     );
   });
 
@@ -146,6 +147,7 @@ void main() {
         vault: vault,
         isSignedIn: () async => false,
         membersProvider: () async => const [],
+        publicKeyReporter: () async {},
       );
       await insertTx('tx-1');
       await lockedScheduler.maybePush();
@@ -176,6 +178,7 @@ void main() {
         vault: vault,
         isSignedIn: () async => true,
         membersProvider: () async => const [],
+        publicKeyReporter: () async {},
       );
 
       // 开=同步中：新变更正常上传下拉
@@ -355,6 +358,7 @@ void main() {
         isSignedIn: () async => true,
         batchSize: 2,
         membersProvider: () async => const [],
+        publicKeyReporter: () async {},
       );
       for (var i = 1; i <= 5; i++) {
         await insertTx('tx-$i');
@@ -412,6 +416,7 @@ void main() {
           isSignedIn: () async => true,
           currentFamilyId: () async => 'f1',
           membersProvider: () async => const [],
+          publicKeyReporter: () async {},
         );
 
     test('升级迁移：清全部家庭游标（一次性，二轮不再清）', () async {
@@ -494,6 +499,7 @@ void main() {
         vault: vault,
         isSignedIn: () async => true,
         membersProvider: () async => const [],
+        publicKeyReporter: () async {},
       );
       await insertTx('tx-1');
       port.handler = (_, __) => throw const ApiException('Connection error');

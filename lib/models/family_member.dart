@@ -16,6 +16,11 @@ class FamilyMember {
   /// 其他成员无法看到其数据；机制状态明文，仅展示用途）
   final int syncEnabled;
 
+  /// 成员 X25519 公钥（base64，公开材料）：家庭数据密钥 F 的包裹
+  /// 分发输入，随成员关系下发（服务端 GET /v1/families/members）。
+  /// 老服务端/老客户端未上报时为 null，调用方回落 vaultDoc 探测兜底。
+  final String? publicKey;
+
   FamilyMember({
     required this.id,
     required this.name,
@@ -23,6 +28,7 @@ class FamilyMember {
     this.avatar, // 改为可选参数
     this.label,
     this.syncEnabled = 0,
+    this.publicKey,
   });
 
   bool get isSyncing => syncEnabled == 1;
@@ -34,6 +40,7 @@ class FamilyMember {
         avatar: json['avatar'] as String?, // 处理 null 情况
         label: json['label'] as String?,
         syncEnabled: (json['syncEnabled'] as int?) ?? 0,
+        publicKey: json['publicKey'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -43,5 +50,6 @@ class FamilyMember {
         'avatar': avatar,
         'label': label,
         'syncEnabled': syncEnabled,
+        'publicKey': publicKey,
       };
 }
