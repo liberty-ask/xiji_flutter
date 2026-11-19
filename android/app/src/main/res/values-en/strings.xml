@@ -3,4 +3,8 @@
     <string name="app_name">XiJi</string>
     <string name="finance_summary_widget_name">Monthly Summary</string>
     <string name="finance_summary_widget_description">Home screen widget showing this month\'s income and expenses</string>
+    <string name="finance_widget_title">Spending · Month %1$d</string>
+    <string name="finance_widget_expense_value">¥%1$s</string>
+    <string name="finance_widget_income">Income ¥%1$s</string>
+    <string name="finance_widget_balance">Balance %1$s</string>
 </resources>

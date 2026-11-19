@@ -3,4 +3,8 @@
     <string name="app_name">璽記</string>
     <string name="finance_summary_widget_name">本月財務匯總</string>
     <string name="finance_summary_widget_description">本月財務匯總小工具，展示當月收支匯總</string>
+    <string name="finance_widget_title">本月支出 · %1$d月</string>
+    <string name="finance_widget_expense_value">¥%1$s</string>
+    <string name="finance_widget_income">收入 ¥%1$s</string>
+    <string name="finance_widget_balance">結餘 %1$s</string>
 </resources>

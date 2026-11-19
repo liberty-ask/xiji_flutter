@@ -12,7 +12,6 @@
         android:id="@+id/widget_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="本月支出"
         android:textColor="#A6ADB8"
         android:textSize="11sp" />
 
@@ -23,7 +22,6 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:gravity="bottom"
-        android:text="¥0.00"
         android:textColor="#FFFFFF"
         android:textSize="38sp"
         android:textStyle="bold" />
@@ -49,7 +47,6 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="left"
-            android:text="收入 ¥0.00"
             android:textColor="#8FD6AC"
             android:textSize="12sp" />
 
@@ -59,7 +56,6 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="right"
-            android:text="结余 ¥0.00"
             android:textColor="#B3FFFFFF"
             android:textSize="12sp" />
     </LinearLayout>

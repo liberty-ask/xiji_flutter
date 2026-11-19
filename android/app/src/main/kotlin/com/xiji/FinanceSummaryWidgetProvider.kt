@@ -40,13 +40,17 @@ class FinanceSummaryWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
 
-        // 处理整卡点击事件，跳转到首页
-        if (intent.action == "com.xiji.FINANCE_SUMMARY_HOME_ACTION") {
-            // 打开应用并导航到首页
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            launchIntent?.putExtra("route", "/home")
-            context.startActivity(launchIntent)
+        when (intent.action) {
+            // 处理整卡点击事件，跳转到首页
+            "com.xiji.FINANCE_SUMMARY_HOME_ACTION" -> {
+                // 打开应用并导航到首页
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                launchIntent?.putExtra("route", "/home")
+                context.startActivity(launchIntent)
+            }
+            // 系统语言切换后主动重绘，避免小部件继续显示旧语言文案
+            Intent.ACTION_LOCALE_CHANGED -> updateAllWidgets(context)
         }
     }
 
@@ -75,22 +79,40 @@ class FinanceSummaryWidgetProvider : AppWidgetProvider() {
 
         // 顶部标签：本月支出 · N月
         val month = Calendar.getInstance().get(Calendar.MONTH) + 1
-        views.setTextViewText(R.id.widget_title, "本月支出 · ${month}月")
+        views.setTextViewText(
+            R.id.widget_title,
+            context.getString(R.string.finance_widget_title, month)
+        )
 
         // 主数字：本月支出（千分位，保留两位小数）
-        views.setTextViewText(R.id.expense_text, "¥${String.format("%,.2f", expenseValue)}")
+        views.setTextViewText(
+            R.id.expense_text,
+            context.getString(
+                R.string.finance_widget_expense_value,
+                String.format("%,.2f", expenseValue)
+            )
+        )
 
         // 脚注：收入（千分位）
-        views.setTextViewText(R.id.income_text, "收入 ¥${String.format("%,.2f", incomeValue)}")
+        views.setTextViewText(
+            R.id.income_text,
+            context.getString(
+                R.string.finance_widget_income,
+                String.format("%,.2f", incomeValue)
+            )
+        )
 
         // 脚注：结余 = 收入 - 支出（正数带 +，负数带 -，零无符号）
         val balanceValue = incomeValue - expenseValue
-        val balanceText = when {
+        val balanceAmount = when {
             balanceValue > 0 -> "+¥${String.format("%,.2f", balanceValue)}"
             balanceValue < 0 -> "-¥${String.format("%,.2f", -balanceValue)}"
             else -> "¥0.00"
         }
-        views.setTextViewText(R.id.balance_text, "结余 $balanceText")
+        views.setTextViewText(
+            R.id.balance_text,
+            context.getString(R.string.finance_widget_balance, balanceAmount)
+        )
 
         // 设置整卡点击事件（挂载根布局，跳转到首页）
         val homeIntent = Intent(context, FinanceSummaryWidgetProvider::class.java)
