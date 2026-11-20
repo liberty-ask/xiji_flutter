@@ -684,24 +684,32 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
                       large: 16,
                     ),
                   ),
-                  ScaledText(
-                    _isSubmitting
-                        ? AppLocalizations.of(context)!.processing
-                        : _isListening
-                            ? AppLocalizations.of(context)!.releaseToStop
-                            : AppLocalizations.of(context)!.pressAndHoldToSpeak,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ResponsiveHelper.responsiveTextStyle(
-                      context,
-                      fontSize: ResponsiveHelper.spacing(
-                        context,
-                        small: 14,
-                        normal: 16,
-                        large: 18,
+                  // FittedBox 等比缩放：英文等长文案在圆按钮内自动缩小
+                  // 不溢出不截断（与记一笔收支切换同一方案）
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: ScaledText(
+                        _isSubmitting
+                            ? AppLocalizations.of(context)!.processing
+                            : _isListening
+                                ? AppLocalizations.of(context)!.releaseToStop
+                                : AppLocalizations.of(context)!
+                                    .pressAndHoldToSpeak,
+                        maxLines: 1,
+                        style: ResponsiveHelper.responsiveTextStyle(
+                          context,
+                          fontSize: ResponsiveHelper.spacing(
+                            context,
+                            small: 14,
+                            normal: 16,
+                            large: 18,
+                          ),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
