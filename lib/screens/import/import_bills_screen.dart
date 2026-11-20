@@ -112,6 +112,8 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
     BillPlatform(code: 'alipay', name: '支付宝', supportedFormats: ['csv']),
     BillPlatform(code: 'wechat', name: '微信', supportedFormats: ['xlsx']),
     BillPlatform(code: 'jd', name: '京东', supportedFormats: ['csv']),
+    // 注：name 为数据层默认标识（备份/恢复序列化用）；UI 展示一律走
+    // _platformName 的 l10n 词条（platform.name 不直接进界面）
   ];
 
   BillImportService? _service; // 首次选文件时异步初始化（含规则库加载）
@@ -219,6 +221,22 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
 
   // ---------------- 平台选择 ----------------
 
+  /// 平台名 l10n：展示层唯一入口，按 code 映射词条（fallback 用
+  /// 数据层 name，防未知 code 空 tag）
+  String _platformName(BuildContext context, String code) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (code) {
+      case 'alipay':
+        return l10n.platformAlipay;
+      case 'wechat':
+        return l10n.platformWechat;
+      case 'jd':
+        return l10n.platformJd;
+      default:
+        return code;
+    }
+  }
+
   Widget _buildPlatformList() {
     return SingleChildScrollView(
       padding: ResponsiveHelper.containerMargin(context),
@@ -293,7 +311,7 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ScaledText(
-                    platform.name,
+                    _platformName(context, platform.code),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
