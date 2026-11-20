@@ -5,6 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/crypto/key_vault.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
+import 'package:xiji_flutter/data/local/local_family_cache.dart';
+import 'package:xiji_flutter/data/local/local_user.dart';
+import 'package:xiji_flutter/models/family.dart';
+import 'package:xiji_flutter/models/user.dart';
 import 'package:xiji_flutter/services/api/api_client.dart';
 import 'package:xiji_flutter/sync/sync_outbox.dart';
 import 'package:xiji_flutter/sync/sync_cursor_store.dart';
@@ -106,7 +110,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'backup_enabled': true,
+      'current_family_id': 'f1',
     });
     db = AppDatabase(NativeDatabase.memory());
     port = FakePort();
@@ -114,6 +118,8 @@ void main() {
     await vault.setup('pw123456'); // setup 后即解锁态
     // 8.4 后业务推送用家庭数据密钥：预置 f1 的 F 走通推送链路
     await vault.putFamilyKey('f1', KeyVault.generateFamilyKey());
+    // 家庭维度备份开关（f1 开启，测试未登录态归 anonymous）
+    await vault.setBackupEnabled('f1', true);
     scheduler = SyncScheduler(
       db: db,
       port: port,
@@ -190,7 +196,7 @@ void main() {
 
       // 关=停止上传下拉：门控短路，无任何同步请求发出
       await insertTx('tx-2');
-      await vault.setBackupEnabled(false);
+      await vault.setBackupEnabled('f1', false);
       await stateScheduler.maybePush();
       expect(port.calls, hasLength(1), reason: '关闭后不得再发推送请求');
       expect(pullPort.calls, 1, reason: '关闭后不得再发拉取请求');
@@ -203,7 +209,7 @@ void main() {
       expect(await pendingCount('transactions'), 1);
 
       // 重开=自动恢复同步：遗留 pending 存量自动补推
-      await vault.setBackupEnabled(true);
+      await vault.setBackupEnabled('f1', true);
       await stateScheduler.maybePush();
       expect(port.calls.last.records.single['id'], 'tx-2');
       expect(await pendingCount('transactions'), 0);
@@ -370,8 +376,9 @@ void main() {
     });
 
     test('多家庭分组：跨家庭记录分批各自推送', () async {
-      // f2 也预置 F（8.4：无 F 的家庭业务推送跳过）
+      // f2 也预置 F 与备份开关（8.4：无 F 跳过；开关关闭跳过）
       await vault.putFamilyKey('f2', KeyVault.generateFamilyKey());
+      await vault.setBackupEnabled('f2', true);
       await insertTx('tx-1', familyId: 'f1');
       await insertTx('tx-2', familyId: 'f1');
       await insertTx('tx-3', familyId: 'f2');
@@ -383,6 +390,64 @@ void main() {
       expect(f1.records, hasLength(2));
       expect(f2.records, hasLength(1));
       expect(await pendingCount('transactions'), 0);
+    });
+
+    test('家庭开关关闭：该家庭业务推送跳过，标记保留（L2 门控）',
+        () async {
+      // f2 有 F 但备份开关关闭：业务推送整组跳过，标记保留
+      await vault.putFamilyKey('f2', KeyVault.generateFamilyKey());
+      await insertTx('tx-1', familyId: 'f1');
+      await insertTx('tx-2', familyId: 'f2');
+
+      await scheduler.maybePush();
+      expect(port.calls.map((c) => c.familyId), ['f1'],
+          reason: 'f2 开关关闭整组跳过');
+      expect(port.calls.single.records, hasLength(1));
+      // f2 的待推标记保留：重开后自动补推
+      expect(await pendingCount('transactions'), 1);
+    });
+
+    test('重装首启：迁移铺开关后本轮即拉取（判定顺序回归）', () async {
+      // familySwitchOn 必须在存量迁移之后读取：重装场景迁移把开关
+      // 从空铺成开启，判定用旧值则首轮拉取被 L2 挡住，表现为
+      // 「解锁后首页空、切 tab 才恢复」
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'current_family_id': 'f1',
+      });
+      await LocalUser.cache(User(
+        id: 'user-1',
+        nickname: 'u-1',
+        phone: '13800000000',
+      ));
+      final vault2 =
+          KeyVault(InMemoryVaultStore(), profile: Argon2Profile.fast());
+      await vault2.setup('pw123456');
+      await vault2.injectLegacyBackupFlag(true); // 云端旧文档冻结 enabled=true
+      await LocalFamilyCache.cache([
+        Family(id: 'f1', name: 'F1', isCurrent: true, role: 1),
+      ]);
+      // 开关存储为空（重装），无家庭密钥 F
+      expect(await vault2.isBackupEnabled('f1'), isFalse);
+
+      final pullPort = CountingPullPort();
+      final scheduler2 = SyncScheduler(
+        db: db,
+        port: port,
+        pullPort: pullPort,
+        vault: vault2,
+        isSignedIn: () async => true,
+        currentFamilyId: () async => 'f1',
+        membersProvider: () async => const [],
+        publicKeyReporter: () async {},
+      );
+
+      await scheduler2.maybePush();
+
+      // 迁移铺开开关 + 本轮拉取即放行（修复前首轮拉取数为 0）
+      expect(await vault2.isBackupEnabled('f1'), isTrue,
+          reason: '迁移把 legacy 开启铺到家庭开关');
+      expect(pullPort.calls, greaterThanOrEqualTo(1),
+          reason: '首轮同步即执行拉取，不等下一轮');
     });
 
     test('单飞：运行中重复触发合并为一轮，不重复推', () async {
@@ -512,6 +577,7 @@ void main() {
 
     test('单家庭失败不影响其他家庭推送', () async {
       await vault.putFamilyKey('f2', KeyVault.generateFamilyKey());
+      await vault.setBackupEnabled('f2', true);
       await insertTx('tx-f1', familyId: 'f1');
       await insertTx('tx-f2', familyId: 'f2');
       port.handler = (familyId, records) async {

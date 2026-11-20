@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xiji_flutter/crypto/crypto_primitives.dart';
 import 'package:xiji_flutter/crypto/key_vault.dart';
+import 'package:xiji_flutter/data/local/backup_switch_store.dart';
+import 'package:xiji_flutter/sync/backup_switch_service.dart';
 import 'package:xiji_flutter/crypto/vault_store.dart';
 import 'package:xiji_flutter/data/local/app_database.dart';
 import 'package:xiji_flutter/data/local/local_user.dart';
@@ -571,9 +573,7 @@ void main() {
   group('8.4e：存量重密封与推送门控（调度器集成）', () {
     test('首次同步：存量已上云密文重标并以家庭 key 重推，幂等不重复',
         () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        'backup_enabled': true,
-      });
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       await loginAs('user-1');
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -581,6 +581,9 @@ void main() {
       final vault = newVault();
       await vault.setup('pw123456');
       await vault.putFamilyKey('f1', KeyVault.generateFamilyKey());
+      await vault.setBackupEnabled('f1', true);
+      // 开关已漫游上云（bksw 不计入本测的业务推送断言）
+      await BackupSwitchStore.clearDirty('f1');
 
       // 存量行：已推送状态（syncPending=false）、老 updated_at
       await db.into(db.transactions).insertReturning(
@@ -633,15 +636,14 @@ void main() {
     });
 
     test('无 F：业务推送跳过标记保留，不产生任何请求', () async {
-      SharedPreferences.setMockInitialValues(<String, Object>{
-        'backup_enabled': true,
-      });
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       await loginAs('user-1');
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final port = _FakePushPort();
       final vault = newVault();
       await vault.setup('pw123456');
+      await vault.setBackupEnabled('f1', true);
       // 不预置 F：模拟成员尚未收到 admin 分发
 
       await db.into(db.transactions).insertReturning(
@@ -667,7 +669,14 @@ void main() {
 
       await scheduler.maybePush();
 
-      expect(port.calls, isEmpty, reason: '无 F 跳过业务推送');
+      // 无 F 跳过业务推送：不产生交易记录请求（bksw 开关漫游属
+      // 账号级保障，不受 F 影响，为预期行为）
+      final pushedIds = port.calls
+          .expand((c) => c.records)
+          .map((r) => r['id'] as String)
+          .toList();
+      expect(pushedIds.where((id) => !id.startsWith('bksw-')), isEmpty,
+          reason: '无 F 跳过业务推送');
       final row = await (db.select(db.transactions)
             ..where((t) => t.id.equals('tx-1')))
           .getSingle();
@@ -697,14 +706,13 @@ void main() {
       await loginAs('user-1');
       final vaultA = newVault();
       await vaultA.setup('pw123456');
-      // 开关真值源在 vault.enabled（setBackupEnabled 也要求归属
-      // 用户登录态，否则写错账号的键）；不走 prefs backup_enabled
-      // 迁移路径——A 的迁移会删该键，共享 prefs mock 的 B 读不到
-      await vaultA.setBackupEnabled(true);
+      // 开关真值源为家庭×账号维度本地存储（BackupSwitchStore），
+      // setBackupEnabled 要求归属用户登录态（否则写错账号的键）
+      await vaultA.setBackupEnabled('f1', true);
       await loginAs('user-2');
       final vaultB = newVault();
       await vaultB.setup('pw123456');
-      await vaultB.setBackupEnabled(true);
+      await vaultB.setBackupEnabled('f1', true);
       await MemberPublicKeyStore.setForTesting(<String, String>{
         'user-1': await pubBase64Of(vaultA),
         'user-2': await pubBase64Of(vaultB),
@@ -804,6 +812,121 @@ void main() {
       expect(txs.first.description, '午餐');
       expect(schedulerB.isWaitingForFamilyKey, isFalse,
           reason: 'F 到达后等待态解除');
+    });
+
+    test('家庭开关关闭期间 F 轮换 → 重开清游标全量重拉自愈', () async {
+      // family-scoped-backup-switch 核心场景：关闭期间游标冻结、
+      // 重开后全量重拉使新 F 与新密文一次到位（含同页旧→新自愈）
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await loginAs('user-1');
+      final vaultA = newVault();
+      await vaultA.setup('pw123456');
+      await vaultA.setBackupEnabled('f1', true);
+      await loginAs('user-2');
+      final vaultB = newVault();
+      await vaultB.setup('pw123456');
+      await vaultB.setBackupEnabled('f1', true);
+      await MemberPublicKeyStore.setForTesting(<String, String>{
+        'user-1': await pubBase64Of(vaultA),
+        'user-2': await pubBase64Of(vaultB),
+      });
+      final server = FakeSyncServer();
+      final members = [
+        (id: 'user-1', role: FamilyMemberRole.admin),
+        (id: 'user-2', role: FamilyMemberRole.member),
+      ];
+
+      // ── A 首轮：生成 F 并分发，推 tx-1（3000 分）──
+      await loginAs('user-1');
+      final dbA = AppDatabase(NativeDatabase.memory());
+      addTearDown(dbA.close);
+      await dbA.into(dbA.transactions).insertReturning(
+          TransactionsCompanion.insert(
+        id: const Value('tx-1'),
+        type: 1,
+        categoryId: diningId,
+        amountCents: 3000,
+        date: DateTime(2026, 10, 1),
+        userId: 'user-1',
+        familyId: const Value('f1'),
+        description: const Value('午餐'),
+      ));
+      final schedulerA = SyncScheduler(
+        db: dbA,
+        port: _RecordingPushPort(server),
+        pullPort: _NoopPullPort(),
+        vault: vaultA,
+        isSignedIn: () async => true,
+        currentFamilyId: () async => 'f1',
+        membersProvider: () async => members,
+        publicKeyReporter: () async {},
+      );
+      await schedulerA.maybePush();
+      final fOld = await vaultA.getFamilyKey('f1');
+      expect(fOld, isNotNull);
+
+      // ── B 首轮：拉到 F_old 与 tx-1，游标建立 ──
+      await loginAs('user-2');
+      final dbB = AppDatabase(NativeDatabase.memory());
+      addTearDown(dbB.close);
+      final schedulerB = SyncScheduler(
+        db: dbB,
+        port: _RecordingPushPort(server),
+        pullPort: FakeServerPullPort(server),
+        vault: vaultB,
+        isSignedIn: () async => true,
+        currentFamilyId: () async => 'f1',
+        membersProvider: () async => members,
+        publicKeyReporter: () async {},
+      );
+      await schedulerB.maybePush();
+      expect(await vaultB.getFamilyKey('f1'), equals(fOld));
+      expect((await dbB.select(dbB.transactions).get()).single.amountCents,
+          3000);
+      final cursor = await SyncCursorStore.load('f1', 'user-2');
+      expect(cursor, isNotNull, reason: '游标已建立');
+
+      // ── B 关闭家庭备份：一轮同步零拉取（游标冻结）──
+      await vaultB.setBackupEnabled('f1', false);
+      await BackupSwitchStore.clearDirty('f1'); // bksw 漫游不在本测断言
+      final pullRequestsBefore = server.requests.length;
+      await schedulerB.maybePush();
+      expect(server.requests.length, pullRequestsBefore,
+          reason: '关闭期间该家庭零拉取请求');
+      expect(await SyncCursorStore.load('f1', 'user-2'), cursor,
+          reason: '游标冻结');
+
+      // ── A 轮换 F：换新密钥 + 改 tx-1 金额 v2 + 重新分发包裹 ──
+      await loginAs('user-1');
+      final fNew = KeyVault.generateFamilyKey();
+      await vaultA.putFamilyKey('f1', fNew);
+      await (dbA.update(dbA.transactions)
+            ..where((t) => t.id.equals('tx-1')))
+          .write(const TransactionsCompanion(
+        amountCents: Value(5000),
+        version: Value(2),
+        syncPending: Value(true),
+      ));
+      // 模拟互救重置废弃旧包裹：云端移除 B 的旧包裹，A 下轮补发新包裹
+      server.remove(await FamilyKeyService.familyKeyRecordId('f1', 'user-2'));
+      await schedulerA.maybePush();
+      expect(
+          server
+              .record(await FamilyKeyService.familyKeyRecordId('f1', 'user-2')),
+          isNotNull,
+          reason: 'A 已按新 F 重新分发包裹');
+
+      // ── B 重开：清游标 → 全量重拉 → 新 F 与新密文一次到位 ──
+      await loginAs('user-2');
+      await vaultB.setBackupEnabled('f1', true);
+      await BackupSwitchService.clearCursorOnReenable('f1');
+      await schedulerB.maybePush();
+
+      expect(await vaultB.getFamilyKey('f1'), equals(fNew),
+          reason: '全量重拉首页送达新包裹，旧→新覆盖落库');
+      final txs = await dbB.select(dbB.transactions).get();
+      expect(txs.single.amountCents, 5000,
+          reason: '后续分段以新 F 解开 v2 密文入库（关闭期间变更补齐）');
     });
   });
 

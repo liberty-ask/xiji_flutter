@@ -38,7 +38,12 @@ class _ApplyFamilyScreenState extends State<ApplyFamilyScreen> {
   }
 
   Future<void> _loadBackupState() async {
-    final enabled = await VaultProvider.vault.isBackupEnabled();
+    // 开关按家庭维度读取：此处用「正在申请加入的家庭」的开关状态
+    // 判定入伙前置提示
+    final familyId = widget.familyId ?? '';
+    final enabled = familyId.isEmpty
+        ? false
+        : await VaultProvider.vault.isBackupEnabled(familyId);
     if (mounted) {
       setState(() {
         _backupDisabled = !enabled;

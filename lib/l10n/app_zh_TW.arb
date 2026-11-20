@@ -141,6 +141,12 @@
   "backupE2eDescription": "開啟後，記帳資料將以端對端加密方式備份到雲端。伺服器僅儲存密文，任何人（包括營運者）都無法查看內容。",
   "backupDataLocalOnly": "資料僅存本機",
   "backupEnabled": "端對端加密備份已開啟",
+  "backupSwitchScope": "目前家庭：{familyName}",
+  "@backupSwitchScope": {
+    "placeholders": {
+      "familyName": {}
+    }
+  },
   "backupSetPasswordTitle": "設定加密口令",
   "backupSetPasswordDesc": "該口令用於加密備份資料，與登入密碼無關。口令一旦遺忘，只能憑恢復碼找回。",
   "backupPasswordLabel": "加密口令",
@@ -183,6 +189,7 @@
   "backupRestoreUnlockTitle": "恢復雲端備份",
   "backupRestoreUnlockDesc": "此帳號已開啟雲端備份，請輸入備份口令，將雲端資料恢復到本機。之後開啟應用無需再次輸入。",
   "backupRestoreWrongPassword": "口令不正確，請重新輸入",
+  "backupSyncInProgressHint": "正在同步雲端資料，請稍後再關閉備份",
   "backupRestoreStarted": "已解鎖，正在從雲端恢復資料…",
   "backupCheckingCloudVault": "正在檢查雲端備份…",
   "monthlyBudget": "月度預算",
@@ -405,6 +412,9 @@
   "success": "成功",
   "fail": "失敗",
   "supportedFormats": "支持格式：",
+  "platformAlipay": "支付寶",
+  "platformWechat": "微信",
+  "platformJd": "京東",
   "to": "至",
   "items": "條",
   "unknown": "未知",

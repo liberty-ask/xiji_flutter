@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../crypto/vault_provider.dart';
 import '../../data/local/backup_import_service.dart';
+import '../../data/local/current_family_store.dart';
 import '../../data/local/db_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api/family_service.dart';
@@ -40,8 +41,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadBackupState() async {
-    // 开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游）
-    final enabled = await VaultProvider.vault.isBackupEnabled();
+    // 开关真值源 = 家庭×账号维度本地存储（按当前家庭读取）
+    final familyId = await CurrentFamilyStore.get();
+    final enabled = familyId.isEmpty
+        ? false
+        : await VaultProvider.vault.isBackupEnabled(familyId);
     if (mounted) setState(() => _backupEnabled = enabled);
   }
 

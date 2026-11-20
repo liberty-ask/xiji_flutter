@@ -50,7 +50,8 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'backup_enabled': true,
+      // 家庭维度备份开关（f1 开启，测试未登录态归 anonymous）
+      'backup_enabled@f1@anonymous': true,
     });
     db = AppDatabase(NativeDatabase.memory());
   });

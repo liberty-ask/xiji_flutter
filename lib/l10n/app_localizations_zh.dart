@@ -395,6 +395,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupEnabled => '端到端加密备份已开启';
 
   @override
+  String backupSwitchScope(Object familyName) {
+    return '当前家庭：$familyName';
+  }
+
+  @override
   String get backupSetPasswordTitle => '设置加密口令';
 
   @override
@@ -522,6 +527,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupRestoreWrongPassword => '口令不正确，请重新输入';
+
+  @override
+  String get backupSyncInProgressHint => '正在同步云端数据，请稍后再关闭备份';
 
   @override
   String get backupRestoreStarted => '已解锁，正在从云端恢复数据…';
@@ -1169,6 +1177,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get supportedFormats => '支持格式：';
+
+  @override
+  String get platformAlipay => '支付宝';
+
+  @override
+  String get platformWechat => '微信';
+
+  @override
+  String get platformJd => '京东';
 
   @override
   String get items => '条';
@@ -1910,6 +1927,11 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get backupEnabled => '端到端加密备份已开启';
 
   @override
+  String backupSwitchScope(Object familyName) {
+    return '当前家庭：$familyName';
+  }
+
+  @override
   String get backupSetPasswordTitle => '设置加密口令';
 
   @override
@@ -2037,6 +2059,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get backupRestoreWrongPassword => '口令不正确，请重新输入';
+
+  @override
+  String get backupSyncInProgressHint => '正在同步云端数据，请稍后再关闭备份';
 
   @override
   String get backupRestoreStarted => '已解锁，正在从云端恢复数据…';
@@ -2677,6 +2702,15 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get supportedFormats => '支持格式：';
+
+  @override
+  String get platformAlipay => '支付宝';
+
+  @override
+  String get platformWechat => '微信';
+
+  @override
+  String get platformJd => '京东';
 
   @override
   String get items => '条';
@@ -3420,6 +3454,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get backupEnabled => '端對端加密備份已開啟';
 
   @override
+  String backupSwitchScope(Object familyName) {
+    return '目前家庭：$familyName';
+  }
+
+  @override
   String get backupSetPasswordTitle => '設定加密口令';
 
   @override
@@ -3548,6 +3587,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get backupRestoreWrongPassword => '口令不正確，請重新輸入';
+
+  @override
+  String get backupSyncInProgressHint => '正在同步雲端資料，請稍後再關閉備份';
 
   @override
   String get backupRestoreStarted => '已解鎖，正在從雲端恢復資料…';
@@ -4188,6 +4230,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get supportedFormats => '支持格式：';
+
+  @override
+  String get platformAlipay => '支付寶';
+
+  @override
+  String get platformWechat => '微信';
+
+  @override
+  String get platformJd => '京東';
 
   @override
   String get items => '條';

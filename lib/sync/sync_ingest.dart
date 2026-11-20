@@ -5,8 +5,10 @@ import 'package:drift/drift.dart';
 import '../crypto/key_vault.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/app_database.dart';
+import '../data/local/backup_switch_store.dart';
 import '../data/local/member_public_key_store.dart';
 import '../data/local/transaction_fts.dart';
+import 'backup_switch_service.dart';
 import 'family_key_service.dart';
 import 'sync_outbox.dart';
 import 'vault_sync_service.dart';
@@ -76,12 +78,15 @@ class SyncIngest {
     }
 
     if (payload == null) {
-      // 机制记录（传输密钥加密）：vault / fkey 特判
+      // 机制记录（传输密钥加密）：vault / fkey / bksw 特判
       if (id.startsWith('vault-')) {
         return _ingestVaultDoc(record);
       }
       if (id.startsWith('fk-')) {
         return _ingestFamilyKeyWrap(record);
+      }
+      if (id.startsWith('bksw-')) {
+        return _ingestBackupSwitch(record);
       }
       // 其他成员未重密封的旧密文：本人无其个人 key，解不开是预期。
       // 跳过且游标照常推进（重密封方重推后版本更新可增量拉到可解版）。
@@ -197,6 +202,11 @@ class SyncIngest {
             result == IngestResult.skipped ? skipped++ : applied++;
             continue;
           }
+          if ((record['id'] as String).startsWith('bksw-')) {
+            final result = await _ingestBackupSwitch(record);
+            result == IngestResult.skipped ? skipped++ : applied++;
+            continue;
+          }
           // 其他成员未重密封的旧密文：本人无其个人 key，解不开是预期。
           // 跳过且游标照常推进（重密封方重推后版本更新可增量拉到可解版）。
           skipped++;
@@ -241,11 +251,15 @@ class SyncIngest {
       final hadNoFamilyKey = familyKey == null;
       final result = await _ingestFamilyKeyWrap(record);
       result == IngestResult.skipped ? skipped++ : applied++;
-      if (hadNoFamilyKey && result == IngestResult.updated) {
-        final gained = await familyDataKeyProvider?.call();
-        if (gained != null) {
-          familyKey = gained;
-          familyKeyGained = true;
+      if (result == IngestResult.updated) {
+        // F 落库后刷新页内密钥：无→有（后开成员首拉）与旧→新
+        // （重开自愈轮换场景）均让后续分段立即改用新 F 解密；
+        // familyKeyGained 仅在首获（无→有）时置位——旧→新的游标
+        // 管理由开关重开的清游标动作负责，不在此触发
+        final refreshed = await familyDataKeyProvider?.call();
+        if (refreshed != null) {
+          familyKey = refreshed;
+          if (hadNoFamilyKey) familyKeyGained = true;
         }
       }
     }
@@ -350,6 +364,40 @@ class SyncIngest {
       // 私钥对不上（老包裹份/异常数据）：静默跳过
       return IngestResult.skipped;
     }
+  }
+
+  /// bksw 家庭维度备份开关记录（family-scoped-backup-switch）：拉到
+  /// 自己的开关记录时按 version LWW 仲裁写入本地开关存储（多设备
+  /// 漫游：version 高者胜，平局/更低忽略幂等）。他人开关记录传输
+  /// 密钥不匹配，解不开是预期，静默跳过。
+  Future<IngestResult> _ingestBackupSwitch(
+      Map<String, dynamic> record) async {
+    final userId = await (_userId?.call());
+    if (userId == null) return IngestResult.skipped;
+    if ((record['deleted'] as num?)?.toInt() == 1 ||
+        record['deleted'] == true) {
+      return IngestResult.skipped; // 开关记录只 upsert 不删（防御）
+    }
+    Map<String, dynamic> payload;
+    try {
+      payload = await SyncOutbox.decryptRecord(
+          KeyVault.vaultTransportKey(userId), record);
+    } on SecretBoxAuthenticationError {
+      return IngestResult.skipped; // 他人开关记录：解不开是预期
+    }
+    if (payload['recordType'] != BackupSwitchService.kRecordType) {
+      return IngestResult.skipped;
+    }
+    if (payload['userId'] != userId) return IngestResult.skipped;
+    final familyId = payload['familyId'] as String?;
+    if (familyId == null || familyId.isEmpty) return IngestResult.skipped;
+    final enabled = payload['enabled'];
+    if (enabled is! bool) return IngestResult.skipped;
+    // version 取服务端明文机制字段（与 fkey 探测同口径）
+    final version = (record['version'] as num?)?.toInt() ?? 1;
+    final applied =
+        await BackupSwitchStore.applyRemote(familyId, enabled, version);
+    return applied ? IngestResult.updated : IngestResult.skipped;
   }
 
   /// 同步机制字段（三类表共用）

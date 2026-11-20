@@ -141,6 +141,12 @@
   "backupE2eDescription": "When enabled, your records are backed up to the cloud with end-to-end encryption. The server stores only ciphertext — no one, not even the operator, can read your data.",
   "backupDataLocalOnly": "Data stays on this device only",
   "backupEnabled": "End-to-end encrypted backup is on",
+  "backupSwitchScope": "Current family: {familyName}",
+  "@backupSwitchScope": {
+    "placeholders": {
+      "familyName": {}
+    }
+  },
   "backupSetPasswordTitle": "Set Encryption Password",
   "backupSetPasswordDesc": "This password protects your backed-up data and is unrelated to your login password. If you forget it, the recovery code is the only way to recover your data.",
   "backupPasswordLabel": "Encryption password",
@@ -183,6 +189,7 @@
   "backupRestoreUnlockTitle": "Restore Cloud Backup",
   "backupRestoreUnlockDesc": "Cloud backup is enabled for this account. Enter the backup password to restore your data to this device. You won't be asked again afterwards.",
   "backupRestoreWrongPassword": "Incorrect password, please try again",
+  "backupSyncInProgressHint": "Syncing cloud data. Please wait before turning off backup.",
   "backupRestoreStarted": "Unlocked. Restoring data from cloud…",
   "backupCheckingCloudVault": "Checking cloud backup…",
   "monthlyBudget": "Monthly Budget",
@@ -416,6 +423,9 @@
   "success": "Success",
   "fail": "Fail",
   "supportedFormats": "Supported formats:",
+  "platformAlipay": "Alipay",
+  "platformWechat": "WeChat",
+  "platformJd": "JD",
   "to": "to",
   "items": "items",
   "unknown": "Unknown",

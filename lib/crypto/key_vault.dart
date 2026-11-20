@@ -5,7 +5,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 
 import 'crypto_primitives.dart';
-import '../data/local/backup_flag_store.dart';
+import '../data/local/backup_switch_store.dart';
 import '../data/local/local_user.dart';
 import 'vault_store.dart';
 
@@ -418,10 +418,11 @@ class KeyVault {
   }
 
   /// 互救重置流（8.6）：口令+恢复码双丢且 vault 已锁死时，销毁本机
-  /// vault（口令/恢复码包裹、开关状态、syncVersion 全清），供 setup
-  /// 重建新密钥对。家庭密钥 F 存储独立于 vault 文档键，不受影响
-  /// （本机家庭数据继续可用）。调用方必须走完整互救流程：新
-  /// vault 上云 + 旧包裹墓碑废弃，老成员重包裹后新设备链路才完整。
+  /// vault（口令/恢复码包裹、syncVersion 全清），供 setup
+  /// 重建新密钥对。家庭密钥 F 与家庭维度备份开关均独立于 vault
+  /// 文档键，不受影响（本机家庭数据继续可用）。调用方必须走完整
+  /// 互救流程：新 vault 上云 + 旧包裹墓碑废弃，老成员重包裹后新
+  /// 设备链路才完整。
   Future<void> destroyVault() async {
     await _store.delete(await _vaultKey());
   }
@@ -445,32 +446,26 @@ class KeyVault {
     await _writeVault(vault);
   }
 
-  /// 云备份开关（6.8 修订）：开关真值源在 vault 文档内（enabled 字段），
-  /// 随 vault 云端托管漫游——重装/换设备登录后开关状态自动恢复，
-  /// 不再出现「明明开了怎么又关了」。未配置 vault 时恒为 false。
-  Future<bool> isBackupEnabled() async {
-    final raw = await _readVaultRaw();
-    if (raw == null) return false;
-    final doc = jsonDecode(raw);
-    if (doc is! Map<String, dynamic>) return false;
-    final enabled = doc['enabled'];
-    if (enabled is bool) return enabled;
-    // 一次性迁移：老 vault 文档无 enabled 字段，映射旧 BackupFlagStore
-    // 本地缓存（曾开启过备份的忠实迁移），回填落盘
-    final migrated = await BackupFlagStore.isEnabled();
-    doc['enabled'] = migrated;
-    await _writeVault(doc);
-    return migrated;
+  /// 云备份开关（family-scoped-backup-switch）：真值源为按家庭×账号
+  /// 双维度隔离的本地存储（BackupSwitchStore），每次切换递增版本号
+  /// 供 bksw 云端记录 LWW 仲裁。vault 文档内旧 enabled 字段已退役：
+  /// 不参与运行时开关判定（真值未恢复前显示关闭是正确语义），仅剩
+  /// 存量迁移（migrateLegacySwitch）一个只读消费者。
+  Future<bool> isBackupEnabled(String familyId) =>
+      BackupSwitchStore.isEnabled(familyId);
+
+  /// 写当前家庭的云备份开关（版本随切换递增，关闭动作经 bksw 记录
+  /// 漫游云端——否则重装后弹回开启）。
+  Future<void> setBackupEnabled(String familyId, bool value) async {
+    await BackupSwitchStore.setEnabled(familyId, value);
   }
 
-  /// 写云备份开关并落盘（经 _writeVault 递增 syncVersion，随下轮
-  /// vault 推送漫游到云端——关闭动作也必须推：否则重装后弹回开启）。
-  Future<void> setBackupEnabled(bool value) async {
-    final raw = await _readVaultRaw();
-    if (raw == null) return; // vault 未配置：无开关可言（UI 层不应到达）
-    final doc = jsonDecode(raw);
-    if (doc is! Map<String, dynamic>) return;
-    doc['enabled'] = value;
+  /// 老开关迁移源注入（仅测试构造 legacy 文档用）：真实环境中带
+  /// enabled 字段的 vault 文档来自老版本升级/云端旧记录，迁移逻辑
+  /// 经 exportVaultDoc 只读消费。运行时不写该字段。
+  Future<void> injectLegacyBackupFlag(bool enabled) async {
+    final doc = await _readVault();
+    doc['enabled'] = enabled;
     await _writeVault(doc);
   }
 

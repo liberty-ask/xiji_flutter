@@ -398,6 +398,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupEnabled => 'End-to-end encrypted backup is on';
 
   @override
+  String backupSwitchScope(Object familyName) {
+    return 'Current family: $familyName';
+  }
+
+  @override
   String get backupSetPasswordTitle => 'Set Encryption Password';
 
   @override
@@ -537,6 +542,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backupRestoreWrongPassword =>
       'Incorrect password, please try again';
+
+  @override
+  String get backupSyncInProgressHint =>
+      'Syncing cloud data. Please wait before turning off backup.';
 
   @override
   String get backupRestoreStarted => 'Unlocked. Restoring data from cloud…';
@@ -1206,6 +1215,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get supportedFormats => 'Supported formats:';
+
+  @override
+  String get platformAlipay => 'Alipay';
+
+  @override
+  String get platformWechat => 'WeChat';
+
+  @override
+  String get platformJd => 'JD';
 
   @override
   String get items => 'items';

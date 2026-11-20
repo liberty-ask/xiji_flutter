@@ -10,6 +10,9 @@ import '../../services/api/family_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/theme_helper.dart';
+import '../../data/local/current_family_store.dart';
+import '../../data/local/local_family_cache.dart';
+import '../../sync/backup_switch_service.dart';
 import '../../sync/family_key_service.dart';
 import '../../sync/sync_scheduler.dart';
 import '../../sync/vault_sync_service.dart';
@@ -37,6 +40,8 @@ class _BackupScreenState extends State<BackupScreen> {
   bool _enabled = false;
   bool _configured = false;
   bool _vaultUnlocked = false;
+  // 开关作用域标注（family-scoped-backup-switch）：当前家庭名
+  String? _familyName;
   // 同步执行中：仅禁用「关闭备份 / 重置密钥」这类会改写密钥或
   // 中断在途推送的操作，其余交互不受影响（P1-6）
   bool _syncing = false;
@@ -61,15 +66,27 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _loadState() async {
-    // 开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游；
-    // 本机未配置 vault 时恒为 false——登录后自动探测已恢复）
-    final enabled = await _vault.isBackupEnabled();
+    // 开关真值源 = 家庭×账号维度本地存储（family-scoped-backup-switch，
+    // 按当前家庭读取；无家庭上下文时恒为 false）
+    final familyId = await CurrentFamilyStore.get();
+    final enabled =
+        familyId.isEmpty ? false : await _vault.isBackupEnabled(familyId);
+    // 作用域标注：解析当前家庭名（缓存缺失时静默无标注）
+    String? familyName;
+    if (familyId.isNotEmpty) {
+      final families = await LocalFamilyCache.load();
+      familyName = families
+          ?.where((f) => f.id == familyId)
+          .map((f) => f.name)
+          .firstOrNull;
+    }
     final configured = await _vault.isConfigured();
     if (mounted) {
       setState(() {
         _enabled = enabled;
         _configured = configured;
         _vaultUnlocked = _vault.isUnlocked;
+        _familyName = familyName;
       });
     }
   }
@@ -105,6 +122,12 @@ class _BackupScreenState extends State<BackupScreen> {
   /// 关闭需二次确认。开启成功即触发一轮同步：存量数据立即上云
   /// （密钥未解锁等门控不满足时静默跳过，待下次触发补推）。
   Future<void> _onSwitchChanged(bool value) async {
+    // 开关按当前家庭维度切换：无家庭上下文时无从归属，开关回弹
+    final familyId = await CurrentFamilyStore.get();
+    if (familyId.isEmpty) return;
+    // 重开自愈判定：off→on 跃迁需清游标走全量重拉（fkey 排最前
+    // 必达，关闭期间的数据与密钥轮换一次补齐）
+    final wasEnabled = await _vault.isBackupEnabled(familyId);
     if (value) {
       // 重装/换设备恢复（6.7）：本机未配置但云端可能有托管 vault，
       // 先探测拉取（口令包裹的密文，导入后仍需口令解锁才可用）
@@ -139,8 +162,14 @@ class _BackupScreenState extends State<BackupScreen> {
             return; // 解锁失败，开关回弹
           }
         }
-        await _vault.setBackupEnabled(true);
+        await _vault.setBackupEnabled(familyId, true);
+        if (!wasEnabled) {
+          await BackupSwitchService.clearCursorOnReenable(familyId);
+        }
         _reportSyncStatus(true);
+        // 开关状态立即漫游上云（失败由脏标记+下轮同步补位）
+        unawaited(BackupSwitchService.pushBackupSwitch(
+            familyId: familyId));
         unawaited(SyncScheduler.instance.maybePush());
         if (mounted) {
           setState(() {
@@ -156,9 +185,13 @@ class _BackupScreenState extends State<BackupScreen> {
       if (result == null || !mounted) return;
       final saved = await _showRecoveryCodeDialog(result.recoveryCode);
       if (!saved || !mounted) return;
-      await _vault.setBackupEnabled(true);
+      await _vault.setBackupEnabled(familyId, true);
       // setup 完成即解锁，开关打开即满足门控，直接开始首轮同步
+      // （首开无游标，清游标为幂等 no-op，统一走重开自愈入口）
+      await BackupSwitchService.clearCursorOnReenable(familyId);
       _reportSyncStatus(true);
+      unawaited(BackupSwitchService.pushBackupSwitch(
+          familyId: familyId));
       unawaited(SyncScheduler.instance.maybePush());
       if (mounted) {
         setState(() {
@@ -167,13 +200,24 @@ class _BackupScreenState extends State<BackupScreen> {
         });
       }
     } else {
+      // 同步在途不弹确认、不置灰开关（防中断语义改为提示拦截）：
+      // 中途关闭会把在途的推送/恢复拦腰截断
+      if (_syncing) {
+        if (mounted) {
+          CustomSnackBar.showError(context,
+              AppLocalizations.of(context)!.backupSyncInProgressHint);
+        }
+        return; // 开关视觉由 _enabled 控制，不 setState 即自动回弹
+      }
       final confirmed = await _showDisableConfirm();
       if (confirmed != true || !mounted) return;
-      await _vault.setBackupEnabled(false);
+      await _vault.setBackupEnabled(familyId, false);
       _reportSyncStatus(false);
-      // 关闭动作也必须把 enabled=false 推上云（6.8）：否则重装/换设备
-      // 后开关又弹回开启。pushVault 不走业务备份门控，直接推送
-      unawaited(VaultSyncService.pushVault());
+      // 关闭动作也必须上云（否则重装/换设备后开关又弹回开启）：
+      // bksw(false) 走账号级保障层推送，不受家庭业务门控约束；
+      // 失败由脏标记+下轮同步补位（family-scoped-backup-switch）
+      unawaited(BackupSwitchService.pushBackupSwitch(
+          familyId: familyId));
       if (mounted) setState(() => _enabled = false);
     }
   }
@@ -300,6 +344,9 @@ class _BackupScreenState extends State<BackupScreen> {
         false;
     if (!confirmed || !mounted) return;
 
+    final familyId = await CurrentFamilyStore.get();
+    if (familyId.isEmpty) return;
+
     final password = await _showPasswordDialog();
     if (password == null || !mounted) return;
 
@@ -309,11 +356,12 @@ class _BackupScreenState extends State<BackupScreen> {
     if (result == null || !mounted) return;
     final saved = await _showRecoveryCodeDialog(result.recoveryCode);
     if (!saved || !mounted) return;
-    await _vault.setBackupEnabled(true);
+    await _vault.setBackupEnabled(familyId, true);
 
     // 互救机制动作（尽力而为，失败由下轮同步重试收敛）：
     // 旧 vaultDoc 版本 seed → 新文档才能 LWW 胜出；
-    // 旧包裹墓碑 → 老成员探测到即重包裹；新 vault 上云。
+    // 旧包裹墓碑 → 老成员探测到即重包裹；新 vault 上云；
+    // 家庭开关 bksw 上云（开启状态漫游）。
     try {
       final oldDoc = await VaultSyncService.pullVaultDoc();
       if (oldDoc != null) {
@@ -321,6 +369,7 @@ class _BackupScreenState extends State<BackupScreen> {
       }
       await FamilyKeyService.requestRewrapAfterReset();
       await VaultSyncService.pushVault();
+      await BackupSwitchService.pushBackupSwitch(familyId: familyId);
     } catch (_) {
       // 网络异常：下轮同步继续（调度器每轮 pushVault + 墓碑重试）
     }
@@ -830,17 +879,33 @@ class _BackupScreenState extends State<BackupScreen> {
                     color: Colors.white,
                   ),
                 ),
-                subtitle: ScaledText(
-                  _enabled ? l10n.backupEnabled : l10n.backupDataLocalOnly,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.5),
-                  ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 开关作用域标注：本开关仅控制当前家庭的备份
+                    if (_familyName != null)
+                      ScaledText(
+                        l10n.backupSwitchScope(_familyName!),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ScaledText(
+                      _enabled ? l10n.backupEnabled : l10n.backupDataLocalOnly,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
                 ),
                 trailing: Switch(
                   value: _enabled,
-                  // 同步在途禁用开关（关闭备份会中断本轮推送/恢复）
-                  onChanged: _syncing ? null : _onSwitchChanged,
+                  // 开关不再因同步在途置灰（P1-6 语义改为关闭时提示
+                  // 拦截）：刚开启即触发同步，禁用会让开关灰掉几秒，
+                  // 看起来像故障；关闭分支内拦截保住防中断语义
+                  onChanged: _onSwitchChanged,
                 ),
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../crypto/vault_provider.dart';
+import '../../data/local/current_family_store.dart';
 import '../../l10n/app_localizations.dart';
 
 /// 首次记账后的云备份引导（tasks.md 6.4，见 design.md Risks：
@@ -15,8 +16,13 @@ class BackupGuidance {
 
   /// 记账保存成功后调用：满足条件则弹出一次性备份引导对话框。
   static Future<void> maybeShowAfterFirstSave(BuildContext context) async {
-    // 开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游）
-    if (await VaultProvider.vault.isBackupEnabled()) return;
+    // 开关真值源 = 家庭×账号维度本地存储（按当前家庭读取；
+    // 无家庭上下文视为未开启，不弹引导）
+    final familyId = await CurrentFamilyStore.get();
+    if (familyId.isEmpty ||
+        await VaultProvider.vault.isBackupEnabled(familyId)) {
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_shownKey) ?? false) return;
     await prefs.setBool(_shownKey, true); // 展示一次即标记，不再自动打扰

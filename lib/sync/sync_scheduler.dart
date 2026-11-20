@@ -13,6 +13,7 @@ import '../data/local/db_provider.dart';
 import '../data/local/local_user.dart';
 import '../data/local/member_public_key_store.dart';
 import '../services/api/api_client.dart';
+import 'backup_switch_service.dart';
 import 'family_key_service.dart';
 import 'sync_cursor_store.dart';
 import 'sync_outbox.dart';
@@ -325,14 +326,30 @@ class SyncScheduler {
   }
 
   Future<void> _syncOnce() async {
-    final gate = await _gate();
-    if (gate == null) {
+    // L1 账号级门控（family-scoped-backup-switch）：登录 + vault 已
+    // 配置 + 已解锁。备份开关不在此层判定——开关只门控该家庭的
+    // 业务推/拉（L2），账号级保障（bksw 补位/vault 托管/公钥上报/
+    // fkey 分发）在家庭开关全关时照常运行
+    final personal = await _gateAccountLevel();
+    if (personal == null) {
       debugPrint('[SyncScheduler] 门控未通过，本轮跳过');
       return;
     }
     _syncing.value = true;
     debugPrint('[SyncScheduler] 门控通过，开始同步');
     final familyId = await _currentFamilyId();
+    final hasFamily = familyId != null && familyId.isNotEmpty;
+
+    // ── 账号级保障（不看任何家庭开关）──
+    // 存量迁移：老账号级开关一次性铺到全部家庭（幂等，见方法注释）。
+    // 必须先于 familySwitchOn 判定——重装首启迁移会把开关从空铺成
+    // 开启，判定在迁移之后本轮拉取才能放行，否则要等下一轮同步
+    // （切页面触发）才有数据，表现为「解锁后首页空、切 tab 才恢复」
+    await BackupSwitchService.migrateLegacySwitch(
+        vault: _vault, port: _port);
+    // bksw 补位：本地切换过但推送失败的开关记录重推（关闭动作必须
+    // 上云，否则重装后开关状态回弹）
+    await BackupSwitchService.pushAllDirty(port: _port);
     // vault 托管补位（6.7）：每轮幂等推送最新 vault 到当前家庭通道，
     // 云端 upsert 覆盖——改口令/重置后下轮同步自动更新云端副本；
     // 新开启用户首轮同步即补上云端 vault。内部自吞异常，失败下轮重试
@@ -341,46 +358,55 @@ class SyncScheduler {
     // 入伙后首轮上报即把公钥写进新建的成员行，持钥方下一轮拉成员
     // 列表就能包裹 F——不再依赖 vaultDoc 的增量可达性。
     await _publicKeyReporter();
+    // L2 当前家庭开关（其余家庭的开关在推送分组时逐家庭判定）：
+    // 在迁移之后读取，本轮即用铺开后的新值
+    final familySwitchOn = hasFamily && await _vault.isBackupEnabled(familyId);
 
-    // 三期 8.4：家庭密钥 F 保障。先做自身包裹探测（缺陷修复）：
-    // fkey 记录为 epoch 时间戳，在已推进的游标之前——增量拉取永远
-    // 够不到，后开启成员首拉错过包裹会导致 F 永久失联。无 F 时用
-    // recordId 精确拉取（不走游标），命中即解 F 落库（普通成员后
-    // 开启、admin 换设备恢复同一把 F，避免误生成裂脑）。
+    // ── 家庭密钥保障（L2：按当前家庭开关收口，关闭期间该家庭零请求；
+    // 重开时清游标全量重拉兜底——fkey 排最前必达，含轮换自愈）──
+    // fkey 自身包裹探测：记录为 epoch 时间戳，在已推进的游标之前——
+    // 增量拉取永远够不到，无 F 时用 recordId 精确拉取，命中即解 F
+    // 落库（普通成员后开启、admin 换设备恢复同一把 F，避免裂脑）。
     // 探测先于分发：恢复到的 F 直接进入下方分发/重密封链路
-    final gainedFamilyKey = await FamilyKeyService.ensureOwnFamilyKey(
-      vault: _vault,
-      pullPort: _pullPort,
-      currentFamilyId: _currentFamilyId,
-    );
+    final gainedFamilyKey = !familySwitchOn
+        ? false
+        : await FamilyKeyService.ensureOwnFamilyKey(
+            vault: _vault,
+            pullPort: _pullPort,
+            currentFamilyId: _currentFamilyId,
+          );
 
-    // admin 首次生成 / 云端缺份的成员补包裹分发。成员列表拉取失败
-    // 静默跳过（下轮重试），不阻断同步
-    final members = await _loadMembers();
-    // 新成员公钥保障：其 vaultDoc 固定 epoch 时间戳，落在已推进的
-    // 游标之前，增量拉取永远够不到——不靠 recordId 精确探测补公钥，
-    // admin 就永远发不出其 F 包裹（新成员空库的直接原因）
-    await VaultSyncService.ensureMemberPublicKeys(
-      members: members,
-      port: _pullPort,
-      currentFamilyId: _currentFamilyId,
-    );
-    await FamilyKeyService.ensureDistributed(
-      members: members,
-      vault: _vault,
-      pushPort: _port,
-      pullPort: _pullPort,
-      currentFamilyId: _currentFamilyId,
-    );
+    // admin 首次生成 / 云端缺份的成员补包裹分发。成员公钥探测与
+    // 包裹分发均属家庭通道请求，随当前家庭开关收口（关闭=零请求，
+    // 重开下轮自动补分发）。成员列表拉取失败静默跳过（下轮重试），
+    // 不阻断同步
+    if (familySwitchOn) {
+      final members = await _loadMembers();
+      // 新成员公钥保障：其 vaultDoc 固定 epoch 时间戳，落在已推进的
+      // 游标之前，增量拉取永远够不到——不靠 recordId 精确探测补公钥，
+      // admin 就永远发不出其 F 包裹（新成员空库的直接原因）
+      await VaultSyncService.ensureMemberPublicKeys(
+        members: members,
+        port: _pullPort,
+        currentFamilyId: _currentFamilyId,
+      );
+      await FamilyKeyService.ensureDistributed(
+        members: members,
+        vault: _vault,
+        pushPort: _port,
+        pullPort: _pullPort,
+        currentFamilyId: _currentFamilyId,
+      );
+    }
 
     // F 分发可能本轮新生成（admin 路径），重新读取
     final familyKey =
-        familyId == null ? null : await _vault.familyDataKey(familyId);
+        hasFamily ? await _vault.familyDataKey(familyId) : null;
 
     // 存量重密封（8.4）：首次拿到 F 时把该家庭已上云密文从个人 key
     // 迁移到家庭 key——version 不变、updated_at 刷新、syncPending 重标，
     // 下方推送环节用家庭 key 全量重推（LWW 同 version 时间新者胜覆盖）
-    if (familyId != null && familyKey != null) {
+    if (hasFamily && familyKey != null) {
       // 升级一次性迁移：清全部家庭游标做一轮全量重拉（见方法注释）
       await _maybeFullRespullOnUpgrade();
       await _maybeReseal(familyId);
@@ -406,28 +432,33 @@ class SyncScheduler {
     Object? pullError;
     ({int pulled, int applied, int skipped, int unreadable, bool needsFullRespull})?
         pullOutcome;
-    try {
-      pullOutcome = await _puller.pullAll(
-        gate.personal,
-        // 惰性家庭密钥源：fkey 记录可能在本轮拉取中途送达 F（后加入
-        // 成员首拉），解出后同页后续业务记录立即可解
-        familyDataKeyProvider: familyId == null
-            ? null
-            : () async => await _vault.familyDataKey(familyId),
-        // 每页进度（P1-6）：仅首轮全量恢复对外呈现；日常增量拉取
-        // （有游标）不上报，保持全程静默
-        onPage: (processed, isFullRestore) {
-          if (isFullRestore) {
-            _progress.value = SyncProgress(
-              phase: SyncPhase.restoring,
-              processed: processed,
-            );
-          }
-        },
-      );
-    } catch (e) {
-      pullError = e;
-      debugPrint('[SyncScheduler] 拉取阶段异常，继续对账补推: $e');
+    // 拉取 L2 门控：当前家庭备份开关关闭则跳过（游标冻结——关闭期间
+    // 本机不拉取，游标不推进；重开时清游标全量重拉补齐）
+    if (!familySwitchOn) {
+      debugPrint('[SyncScheduler] 当前家庭备份开关关闭，拉取跳过（游标保留）');
+    } else {
+      try {
+        pullOutcome = await _puller.pullAll(
+          personal,
+          // 惰性家庭密钥源：fkey 记录可能在本轮拉取中途送达 F（后加入
+          // 成员首拉），解出后同页后续业务记录立即可解
+          familyDataKeyProvider: () async =>
+              await _vault.familyDataKey(familyId),
+          // 每页进度（P1-6）：仅首轮全量恢复对外呈现；日常增量拉取
+          // （有游标）不上报，保持全程静默
+          onPage: (processed, isFullRestore) {
+            if (isFullRestore) {
+              _progress.value = SyncProgress(
+                phase: SyncPhase.restoring,
+                processed: processed,
+              );
+            }
+          },
+        );
+      } catch (e) {
+        pullError = e;
+        debugPrint('[SyncScheduler] 拉取阶段异常，继续对账补推: $e');
+      }
     }
 
     // 拉取结束即撤下恢复进度（对账补推若量大再按推送阶段呈现）
@@ -611,18 +642,19 @@ class SyncScheduler {
         '家庭游标，本轮全量重拉');
   }
 
-  /// 门控：备份开关 → 登录态 → 密钥解锁 → 派生双数据密钥。
-  /// 任一不满足返回 null（静默跳过，标记与游标保留）。
-  /// 备份开关真值源 = vault.enabled（6.8：账号级，随 vault 云端漫游）。
-  /// 返回个人密钥（回落解密/无 F 家庭兜底）与当前家庭密钥（8.4；
-  /// 未获 F 为 null——业务推送跳过、拉取保留）。
-  Future<({Uint8List personal, Uint8List? family})?> _gate() async {
-    if (!await _vault.isBackupEnabled()) {
-      debugPrint('[SyncScheduler] 门控跳过：备份开关未开');
-      return null;
-    }
+  /// L1 账号级门控（family-scoped-backup-switch）：登录态 → vault 已
+  /// 配置 → 密钥解锁 → 派生个人数据密钥。任一不满足返回 null（静默
+  /// 跳过，标记与游标保留）。备份开关不在本层判定——家庭维度的
+  /// 开关只门控该家庭的业务推/拉（L2，见 _syncOnce 与 _pushAll），
+  /// 账号级保障（bksw 补位/vault 托管/公钥上报/fkey 分发）在开关
+  /// 全关时照常运行（每轮几十字节）。
+  Future<Uint8List?> _gateAccountLevel() async {
     if (!await _isSignedIn()) {
       debugPrint('[SyncScheduler] 门控跳过：未登录');
+      return null;
+    }
+    if (!await _vault.isConfigured()) {
+      debugPrint('[SyncScheduler] 门控跳过：vault 未配置');
       return null;
     }
     final keyPair = _vault.unlockedKeyPair;
@@ -630,12 +662,10 @@ class SyncScheduler {
       debugPrint('[SyncScheduler] 门控跳过：密钥未解锁');
       return null;
     }
-    final privateKey = Uint8List.fromList(await keyPair.extractPrivateKeyBytes());
-    final personal = CryptoPrimitives.hkdfSha256(privateKey,
+    final privateKey =
+        Uint8List.fromList(await keyPair.extractPrivateKeyBytes());
+    return CryptoPrimitives.hkdfSha256(privateKey,
         info: CryptoPrimitives.kSyncDataKeyInfo);
-    final familyId = await _currentFamilyId();
-    final family = familyId == null ? null : await _vault.familyDataKey(familyId);
-    return (personal: personal, family: family);
   }
 
   /// 确定性失败记录隔离账本键前缀：值记录 version + updatedAt 指纹，
@@ -684,8 +714,15 @@ class SyncScheduler {
     // 无 F（未获分发的家庭）跳过推送，标记保留待拿到 F 后重推。
     // 预取各家庭密钥：无 F 家庭整组跳过，不计入进度总量（否则进度
     // 永远到不了 100% 才消失）。
+    // family-scoped-backup-switch：备份开关关闭的家庭整组跳过推送
+    // （标记保留），重开时自动补推遗留存量——关闭只停同步不删数据。
     final familyKeys = <String, Uint8List>{};
     for (final entry in byFamily.entries) {
+      if (!await _vault.isBackupEnabled(entry.key)) {
+        debugPrint('[SyncScheduler] 家庭 ${entry.key} 备份开关关闭，'
+            '业务推送跳过（标记保留）');
+        continue;
+      }
       final key = await _vault.familyDataKey(entry.key);
       if (key == null) {
         debugPrint('[SyncScheduler] 家庭 ${entry.key} 未获 F，'

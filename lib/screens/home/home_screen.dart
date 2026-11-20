@@ -155,18 +155,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// 家庭上下文就绪后的 vault 探测恢复（6.8/6.9）：本机未配置时从云端
-  /// 拉取 vault 导入（免口令，开关状态随 vault 恢复——重装/换设备
-  /// 后开关不再显示关闭）；已配置时探测内部直接跳过（幂等）。探测/
-  /// 导入后自动尝试自动解锁（6.9 自动解锁份：不卸载免口令）。
+  /// 拉取 vault 导入（免口令）；已配置时探测内部直接跳过（幂等）。
+  /// 探测/导入后自动尝试自动解锁（6.9 自动解锁份：不卸载免口令）。
   ///
-  /// 云备份已开但密钥仍锁定（自动解锁份缺失：重装/换设备/老版本升级
-  /// 首启）时主动弹口令框完成恢复——不能等用户逛到备份页才发现记录
-  /// 没上云；输对口令即解锁并触发全量拉取恢复。会话内只弹一次。
+  /// 弹框判定就两个条件：设置过口令（vault 已配置）+ 本机锁定
+  /// （重装/换设备/首启无自动解锁份）→ 引导输口令完成恢复——
+  /// 不依赖备份开关状态（开关真值恢复本身依赖解锁，判它必死锁）；
+  /// 从未设置过口令的用户 isConfigured=false 不弹。会话内只弹一次。
   Future<void> _restoreVaultThenSync() async {
     try {
       await VaultSyncService.restoreFromCloud();
       final vault = VaultProvider.vault;
-      if (await vault.isBackupEnabled() &&
+      if (await vault.isConfigured() &&
           !vault.isUnlocked &&
           !_restorePromptShown &&
           mounted) {

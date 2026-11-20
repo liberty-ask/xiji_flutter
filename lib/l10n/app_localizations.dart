@@ -857,6 +857,12 @@ abstract class AppLocalizations {
   /// **'End-to-end encrypted backup is on'**
   String get backupEnabled;
 
+  /// No description provided for @backupSwitchScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Current family: {familyName}'**
+  String backupSwitchScope(Object familyName);
+
   /// No description provided for @backupSetPasswordTitle.
   ///
   /// In en, this message translates to:
@@ -1108,6 +1114,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Incorrect password, please try again'**
   String get backupRestoreWrongPassword;
+
+  /// No description provided for @backupSyncInProgressHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing cloud data. Please wait before turning off backup.'**
+  String get backupSyncInProgressHint;
 
   /// No description provided for @backupRestoreStarted.
   ///
@@ -2374,6 +2386,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Supported formats:'**
   String get supportedFormats;
+
+  /// No description provided for @platformAlipay.
+  ///
+  /// In en, this message translates to:
+  /// **'Alipay'**
+  String get platformAlipay;
+
+  /// No description provided for @platformWechat.
+  ///
+  /// In en, this message translates to:
+  /// **'WeChat'**
+  String get platformWechat;
+
+  /// No description provided for @platformJd.
+  ///
+  /// In en, this message translates to:
+  /// **'JD'**
+  String get platformJd;
 
   /// No description provided for @items.
   ///
