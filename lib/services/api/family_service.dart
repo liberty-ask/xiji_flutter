@@ -4,6 +4,8 @@ import 'api_client.dart';
 import '../../models/family_member.dart';
 import '../../models/application.dart';
 import '../../models/family.dart';
+import '../../data/local/current_family_store.dart';
+import '../../data/local/family_member_cache.dart';
 import '../../data/local/member_nicknames.dart';
 
 class FamilyService {
@@ -36,12 +38,23 @@ class FamilyService {
   }
 
   // 获取家庭成员列表
+  //
+  // 离线优先：按当前家庭缓存成员列表，网络失败时回退缓存（家庭成员页
+  // 与首页 X/N 统计在断网时仍可用），无缓存才抛错。
   Future<List<FamilyMember>> getMembers() async {
-    final result = await _api.get('/v1/families/members');
-    final List<dynamic> list = result as List<dynamic>;
-    final members =
-        list.map((json) => FamilyMember.fromJson(json as Map<String, dynamic>)).toList();
-    // 昵称缓存随成员列表刷新（近期动态归属者显示离线可用）
+    final familyId = await CurrentFamilyStore.get();
+    final members = await FamilyMemberCache.fetchWithFallback(
+      familyId: familyId,
+      fetch: () async {
+        final result = await _api.get('/v1/families/members');
+        final List<dynamic> list = result as List<dynamic>;
+        return list
+            .map((json) => FamilyMember.fromJson(json as Map<String, dynamic>))
+            .toList();
+      },
+    );
+    // 昵称缓存随成员列表刷新（近期动态归属者显示离线可用）；
+    // 离线回退时是同一份数据的幂等覆盖
     unawaited(MemberNicknames.cacheAll(
         {for (final m in members) m.id: m.name}));
     return members;

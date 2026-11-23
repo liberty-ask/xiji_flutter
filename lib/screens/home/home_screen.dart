@@ -22,11 +22,14 @@ import '../../utils/icon_constants.dart';
 import '../../utils/amount_format.dart';
 import '../../services/api/family_service.dart';
 import '../../data/local/current_family_store.dart';
+import '../../data/local/family_member_cache.dart';
 import '../../data/local/local_family_cache.dart';
+import '../../data/local/pending_family_switch_store.dart';
 import '../../models/family.dart';
 import '../../models/family_member.dart';
 import '../../sync/sync_scheduler.dart';
 import '../../sync/vault_sync_service.dart';
+import '../../sync/vault_prompt_coordinator.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/category_l10n.dart';
 
@@ -37,17 +40,27 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   final FamilyService _familyService = FamilyService();
   List<Family> _families = [];
   Family? _currentFamily;
   List<FamilyMember> _members = [];
+  // 家庭切换期间的加载态：切换后立即隐藏旧家庭的成员/预算数据
+  bool _familySwitching = false;
+  // 切换请求序号：快速连续切换时只让最新一次结果落地
+  int _familySwitchSeq = 0;
+  // 服务端「切换当前家庭」串行队列：保证连续切换按点击顺序补发，
+  // 失败只记待补发，不影响本地已生效的切换
+  Future<void> _serverSwitchQueue = Future<void>.value();
   // 上次见到的登录用户：检测「登出再登录」后账号变化重拉首页数据
   String? _lastUserId;
-  // 重装恢复口令框会话内只弹一次（取消/输错关闭后不再打扰，
-  // 下次启动再提示）
-  bool _restorePromptShown = false;
+  // 重装恢复口令框：幂等协调器（会话内只弹一次；探测失败可重试，
+  // 不依赖页面重建）
+  late final VaultPromptCoordinator _vaultPrompt = VaultPromptCoordinator(
+    probe: _probeVault,
+    prompt: _showRestoreUnlockDialog,
+  );
   // 同步轮完成订阅：恢复/增量同步落库后停留页主动重拉
   StreamSubscription<void>? _syncRoundSub;
   // 手动刷新转圈：stale-while-revalidate 下静默刷新无任何视觉
@@ -62,12 +75,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _lastUserId = context.read<AuthProvider>().user?.id;
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
     // 恢复完成时用户通常停在首页盯着看：拉取模式 Provider 不感知
     // 本地库逐页入库，须靠同步完成事件刷新停留页（否则恢复完
     // 数据仍空，要切页面才显示）
     _syncRoundSub = SyncScheduler.instance.onRoundCompleted.listen((_) {
       if (mounted) {
+        // 联网恢复/同步轮完成后补发离线切换的家庭
+        _flushPendingFamilySwitch();
+        // 冷启动探测失败（网络/上下文未就绪）时，联网后补弹口令框
+        unawaited(_ensureVaultPrompt());
         context.read<HomeProvider>().fetchHomeData();
       }
     });
@@ -75,7 +93,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 回前台补一次探测：冷启动首探失败后不依赖用户切页面
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_ensureVaultPrompt());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _syncRoundSub?.cancel();
     _progressRefreshTimer?.cancel();
     SyncScheduler.instance.progress.removeListener(_onSyncProgress);
@@ -129,6 +156,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// 后台追平服务端当前家庭：串行执行避免乱序；失败只记待补发，
+  /// 不回滚本地状态、不弹错（离线优先）。
+  void _enqueueServerSwitch(String familyId) {
+    _serverSwitchQueue = _serverSwitchQueue.then((_) async {
+      try {
+        await _familyService.switchFamily(familyId);
+        await PendingFamilySwitchStore.clear();
+      } catch (_) {
+        await PendingFamilySwitchStore.save(familyId);
+      }
+    });
+  }
+
+  /// 补发上次离线切换（启动/手动刷新/下一轮同步时调用），失败静默保留
+  void _flushPendingFamilySwitch() {
+    _serverSwitchQueue = _serverSwitchQueue.then((_) async {
+      final pending = await PendingFamilySwitchStore.load();
+      if (pending == null) return;
+      try {
+        await _familyService.switchFamily(pending);
+        await PendingFamilySwitchStore.clear();
+      } catch (_) {
+        // 仍未联网，保留待补发，下次再试
+      }
+    });
+  }
+
+  Future<void> _refreshUserQuietly(AuthProvider authProvider) async {
+    try {
+      await authProvider.refreshUser();
+    } catch (_) {
+      // 离线/失败不影响切换结果，资料缓存保留上次内容
+    }
+  }
+
   /// 首页数据引导：先回填当前家庭再拉数据。
   /// fetchHomeData 按家庭 ID 过滤查询，登出会清空 CurrentFamilyStore，
   /// ID 未回填时 SQL family_id = null 必然空集——登录后首页空、
@@ -137,47 +199,73 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _bootstrap() async {
     await _loadFamilies();
     if (!mounted) return;
+    // 启动即补发上次离线切换（失败静默保留待补发）
+    _flushPendingFamilySwitch();
+    // 家庭上下文就绪后、首页数据加载前判定口令框：重装 + 云端有 vault
+    // 时首屏即弹，不依赖用户切页面
+    await _ensureVaultPrompt();
+    if (!mounted) return;
     await context.read<HomeProvider>().fetchHomeData();
     _loadMembers();
+    // 冷启动主动触发一轮同步（密钥锁定时调度器自行跳过）
+    unawaited(SyncScheduler.instance.maybePush());
   }
   
-  Future<void> _loadMembers() async {
+  /// 本地成员缓存先行：切换家庭/进入首页时立即用缓存还原 N，
+  /// 随后网络结果覆盖；缓存缺失则保持隐藏（不报错）
+  Future<void> _applyCachedMembers(String familyId, int? seq) async {
+    if (familyId.isEmpty) return;
+    final cached = await FamilyMemberCache.load(familyId);
+    if (cached == null || cached.isEmpty || !mounted) return;
+    if (seq != null && seq != _familySwitchSeq) return;
+    if (familyId != _currentFamily?.id) return;
+    setState(() {
+      _members = cached;
+    });
+  }
+
+  /// [expectedFamilyId]/[seq]：家庭切换场景传入，晚到的旧请求不落地
+  Future<void> _loadMembers({String? expectedFamilyId, int? seq}) async {
+    final familyId = expectedFamilyId ?? _currentFamily?.id;
+    if (familyId != null) {
+      await _applyCachedMembers(familyId, seq);
+    }
     try {
       final members = await _familyService.getMembers();
-      if (mounted) {
-        setState(() {
-          _members = members;
-        });
+      if (!mounted) return;
+      if (seq != null && seq != _familySwitchSeq) return;
+      if (expectedFamilyId != null && expectedFamilyId != _currentFamily?.id) {
+        return;
       }
+      setState(() {
+        _members = members;
+      });
     } catch (e) {
-      // 加载成员失败不影响主功能
+      // 加载成员失败不影响主功能（服务层已尝试回退本地缓存）
     }
   }
 
-  /// 家庭上下文就绪后的 vault 探测恢复（6.8/6.9）：本机未配置时从云端
-  /// 拉取 vault 导入（免口令）；已配置时探测内部直接跳过（幂等）。
-  /// 探测/导入后自动尝试自动解锁（6.9 自动解锁份：不卸载免口令）。
+  /// 探测 vault 状态：本机未配置时从云端拉取 vault 导入（免口令），
+  /// 再尝试自动解锁（不卸载场景免口令）。
   ///
-  /// 弹框判定就两个条件：设置过口令（vault 已配置）+ 本机锁定
-  /// （重装/换设备/首启无自动解锁份）→ 引导输口令完成恢复——
-  /// 不依赖备份开关状态（开关真值恢复本身依赖解锁，判它必死锁）；
-  /// 从未设置过口令的用户 isConfigured=false 不弹。会话内只弹一次。
-  Future<void> _restoreVaultThenSync() async {
-    try {
-      await VaultSyncService.restoreFromCloud();
-      final vault = VaultProvider.vault;
-      if (await vault.isConfigured() &&
-          !vault.isUnlocked &&
-          !_restorePromptShown &&
-          mounted) {
-        _restorePromptShown = true;
-        await _showRestoreUnlockDialog();
-        return;
-      }
-      await SyncScheduler.instance.maybePush();
-    } catch (_) {
-      // 探测失败静默：下次家庭上下文就绪再试
-    }
+  /// 判定只看两点：设置过口令（vault 已配置）+ 本机锁定（重装/换设备/
+  /// 首启无自动解锁份）→ 需要口令；不依赖备份开关状态（开关真值恢复
+  /// 本身依赖解锁，判它必死锁）。家庭上下文未就绪/网络失败会向上抛，
+  /// 由协调器重试，而不是被误判成「云端无 vault」。
+  Future<({bool configured, bool unlocked})> _probeVault() async {
+    await VaultSyncService.restoreFromCloud(throwOnError: true);
+    final vault = VaultProvider.vault;
+    return (
+      configured: await vault.isConfigured(),
+      unlocked: vault.isUnlocked,
+    );
+  }
+
+  /// 幂等确保重装口令框弹出：启动、同步轮完成、回前台都会调用，
+  /// 会话内只弹一次（取消/输错关闭后不再打扰）
+  Future<void> _ensureVaultPrompt() async {
+    if (!mounted) return;
+    await _vaultPrompt.ensurePrompt();
   }
 
   /// 云备份重装恢复口令框：输对口令解锁并触发全量恢复（自动解锁份
@@ -264,8 +352,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadFamilies() async {
+    final authProvider = context.read<AuthProvider>();
+    // 期间发生过家庭切换（本地已立即生效）时，本次结果整体作废，
+    // 避免晚到的旧家庭列表/缓存覆盖刚切好的新家庭
+    final startSwitchSeq = _familySwitchSeq;
+    bool staledBySwitch() => startSwitchSeq != _familySwitchSeq;
+
     // 先用本地缓存渲染（离线优先，无网络也显示上次家庭信息）
     final cached = await LocalFamilyCache.load();
+    if (staledBySwitch()) return;
     if (cached != null && cached.isNotEmpty && mounted) {
       final current = cached.firstWhere(
         (f) => f.isCurrent,
@@ -273,10 +368,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       // 同步当前家庭到路由源（本地库家庭维度的写入依据）
       await CurrentFamilyStore.set(current.id);
-      // 家庭上下文就绪：云端探测 vault 恢复（6.8——重装/换设备后
-      // 登录瞬间 CurrentFamilyStore 尚空，探测需等家庭就绪；免口令，
-      // 开关状态随 vault 恢复），恢复成功且已开启则触发一轮同步
-      unawaited(_restoreVaultThenSync());
+      // 角色随家庭变化：切家庭后立即纠正鉴权快照（加入审核等入口依赖它）
+      await authProvider.updateCurrentFamilyRole(current.role);
+      if (staledBySwitch()) return;
       setState(() {
         _families = cached;
         _currentFamily = current;
@@ -284,16 +378,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     try {
       final families = await _familyService.getFamiliesList();
+      if (staledBySwitch()) return;
       await LocalFamilyCache.cache(families);
+      if (staledBySwitch()) return;
       if (families.isNotEmpty) {
-        await CurrentFamilyStore.set(
-          families.firstWhere(
-            (f) => f.isCurrent,
-            orElse: () => families.first,
-          ).id,
+        final currentFamily = families.firstWhere(
+          (f) => f.isCurrent,
+          orElse: () => families.first,
         );
-        // 同步当前家庭到路由源（本地库家庭维度的写入依据）
-        unawaited(_restoreVaultThenSync());
+        await CurrentFamilyStore.set(currentFamily.id);
+        // 角色随家庭变化：以服务端家庭列表的角色为准，非管理员不再
+        // 沿用「个人家庭管理员」的旧快照
+        await authProvider.updateCurrentFamilyRole(currentFamily.role);
+        if (staledBySwitch()) return;
       }
       setState(() {
         _families = families;
@@ -379,6 +476,14 @@ class _HomeScreenState extends State<HomeScreen> {
           final income = _formatAmount((data['income'] as num?)?.toDouble() ?? 0.0);
           final expense = _formatAmount((data['expense'] as num?)?.toDouble() ?? 0.0);
           final budget = data['budget'] as Map<String, dynamic>? ?? {};
+          // 家庭切换中，或当前数据仍属于旧家庭：预算区块按加载态处理，
+          // 不闪一下旧家庭的数字
+          final currentFamilyId = _currentFamily?.id;
+          final providerFamilyId = provider.dataFamilyId;
+          final budgetSwitching = _familySwitching ||
+              (currentFamilyId != null &&
+                  providerFamilyId != null &&
+                  providerFamilyId != currentFamilyId);
           final todayExpense = _formatAmount(todayExpenseNum);
           final activities = data['activities'] as List<dynamic>? ?? [];
           final currency = AppLocalizations.of(context)!.currencySymbol;
@@ -551,30 +656,60 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onSelected: (selectedFamily) async {
                                   // 同步段先取引用，避免 async gap 后使用 context
                                   final authProvider = context.read<AuthProvider>();
-                                  if (selectedFamily.id != _currentFamily?.id) {
-                                    try {
-                                      // 调用切换家庭接口
-                                      await _familyService.switchFamily(selectedFamily.id);
-                                      // 刷新家庭列表以获取最新的isCurrent状态
-                                      await _loadFamilies();
-                                      // 按当前家庭刷新用户资料缓存（role 随新家庭归位，
-                                      // "我的"页入口与 /audit 守卫随 notifyListeners 重绘）；
-                                      // 失败不阻断切换，资料缓存保留上次内容
-                                      try {
-                                        await authProvider.refreshUser();
-                                      } catch (_) {}
-                                      // 刷新首页数据
-                                      if (mounted) {
-                                        context.read<HomeProvider>().fetchHomeData();
-                                      }
-                                    } catch (e) {
-                                      // 切换失败，显示错误提示
-                                      if (mounted) {
-                                        final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.changeFailed);
-                                        CustomSnackBar.showError(context, errorMessage);
-                                      }
+                                  if (selectedFamily.id == _currentFamily?.id) return;
+
+                                  // 切换一开始就进入加载态并清空旧成员，避免
+                                  // 「成员数是旧家庭、预算也是旧家庭」的过渡态
+                                  final switchSeq = ++_familySwitchSeq;
+                                  setState(() {
+                                    _familySwitching = true;
+                                    _members = const [];
+                                  });
+                                  try {
+                                    // 离线优先：本地立即生效，不等待服务端
+                                    await CurrentFamilyStore.set(selectedFamily.id);
+                                    await LocalFamilyCache.setCurrent(selectedFamily.id);
+                                    // 角色随家庭走：立即纠正鉴权快照，避免
+                                    // 用旧家庭的 admin 身份看到「加入审核」
+                                    await authProvider.updateCurrentFamilyRole(selectedFamily.role);
+                                    if (!mounted || switchSeq != _familySwitchSeq) return;
+                                    setState(() {
+                                      _currentFamily = selectedFamily;
+                                      _families = [
+                                        for (final f in _families)
+                                          Family(
+                                            id: f.id,
+                                            name: f.name,
+                                            isCurrent: f.id == selectedFamily.id,
+                                            role: f.role,
+                                            avatar: f.avatar,
+                                          ),
+                                      ];
+                                    });
+                                    // 本地库数据刷新（预算进度/收支，不触网）
+                                    await context.read<HomeProvider>().fetchHomeData();
+                                    // 本地成员缓存先行，N 在结束加载态前就位
+                                    await _applyCachedMembers(selectedFamily.id, switchSeq);
+                                  } catch (e) {
+                                    // 本地写入失败才会走到这里（罕见），提示后结束
+                                    if (mounted) {
+                                      final errorMessage = ErrorHelper.extractErrorMessage(e, defaultMessage: AppLocalizations.of(context)!.changeFailed);
+                                      CustomSnackBar.showError(context, errorMessage);
+                                    }
+                                  } finally {
+                                    if (mounted && switchSeq == _familySwitchSeq) {
+                                      setState(() => _familySwitching = false);
                                     }
                                   }
+                                  if (!mounted || switchSeq != _familySwitchSeq) return;
+                                  // 后台补齐（不阻塞加载态，失败静默）：
+                                  // 成员数 N、用户角色、服务端当前家庭
+                                  unawaited(_loadMembers(
+                                    expectedFamilyId: selectedFamily.id,
+                                    seq: switchSeq,
+                                  ));
+                                  unawaited(_refreshUserQuietly(authProvider));
+                                  _enqueueServerSwitch(selectedFamily.id);
                                 },
                               )
                             : Row(
@@ -630,6 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             try {
                               await provider.fetchHomeData();
                               await _loadFamilies();
+                              _flushPendingFamilySwitch();
                             } finally {
                               if (mounted) {
                                 setState(() => _manualRefreshing = false);
@@ -936,62 +1072,81 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            alignment: Alignment.centerLeft,
-                                            child: ScaledText(
-                                              '$currency${AmountFormat.format(budget['used'] as num?)}',
-                                              style: const TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
+                                      if (budgetSwitching)
+                                        const SizedBox(
+                                          height: 74,
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white24,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                      else ...[
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              alignment: Alignment.centerLeft,
+                                              child: ScaledText(
+                                                '$currency${AmountFormat.format(budget['used'] as num?)}',
+                                                style: const TextStyle(
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                                maxLines: 1,
+                                              ),
+                                            ),
+                                            ScaledText(
+                                              ' / ${AmountFormat.format((budget['budget'] ?? budget['total']) as num?)}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.white.withValues(alpha: 0.2),
                                               ),
                                               maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ),
-                                          ScaledText(
-                                            ' / ${AmountFormat.format((budget['budget'] ?? budget['total']) as num?)}',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.white.withValues(alpha: 0.2),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        BudgetProgressBar(
+                                          used: budget['used'] as num?,
+                                          total: budget['total'] as num?,
+                                        ),
+                                        // 8.5：预算口径标注——预算与支出同为
+                                        // 「已设预算成员」口径，X/N 提示覆盖范围；
+                                        // N<=1（单人家庭）或 X=0（无人设预算）
+                                        // 时整行不显示
+                                        Builder(builder: (context) {
+                                          final memberCount =
+                                              (budget['memberCount'] as num?)?.toInt() ?? 0;
+                                          final syncingCount = _members
+                                              .where((m) => m.isSyncing)
+                                              .length;
+                                          if (memberCount <= 0 || syncingCount <= 1) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return Padding(
+                                            padding: const EdgeInsets.only(top: 8),
+                                            child: ScaledText(
+                                              AppLocalizations.of(context)!
+                                                  .budgetMemberNote(memberCount, syncingCount),
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                color: Colors.white.withValues(alpha: 0.4),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      BudgetProgressBar(
-                                        used: budget['used'] as num?,
-                                        total: budget['total'] as num?,
-                                      ),
-                                      // 8.5：预算口径标注——预算与支出同为
-                                      // 「已设预算成员」口径，X/N 提示覆盖范围；
-                                      // 单人家庭（N<=1）不显示避免噪音
-                                      Builder(builder: (context) {
-                                        final memberCount =
-                                            (budget['memberCount'] as num?)?.toInt() ?? 0;
-                                        final syncingCount = _members
-                                            .where((m) => m.isSyncing)
-                                            .length;
-                                        if (syncingCount <= 1) return const SizedBox.shrink();
-                                        return Padding(
-                                          padding: const EdgeInsets.only(top: 8),
-                                          child: ScaledText(
-                                            AppLocalizations.of(context)!
-                                                .budgetMemberNote(memberCount, syncingCount),
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              color: Colors.white.withValues(alpha: 0.4),
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        );
-                                      }),
+                                          );
+                                        }),
+                                      ],
                                     ],
                                   ),
                                 ),

@@ -103,11 +103,15 @@ class VaultSyncService {
   /// （false = 云端无 vault / 已配置 / 失败静默）。
   /// 免口令：传输密钥 = HKDF(userId)，登录即得——重装/换设备后
   /// 开关状态（enabled 字段随 vault 漫游）在登录瞬间即恢复。
+  /// [throwOnError] 为 true 时不再静默：网络失败、家庭上下文未就绪等
+  /// 无法判定的情况向上抛出，供冷启动口令框协调器重试——否则「首次
+  /// 探测失败」会被误判为「云端无 vault」，导致本次启动不再提示。
   static Future<bool> restoreFromCloud({
     SyncPullPort? port,
     KeyVault? vault,
     String? userId,
     String? familyId,
+    bool throwOnError = false,
   }) async {
     final vault_ = vault ?? VaultProvider.vault;
     try {
@@ -117,8 +121,13 @@ class VaultSyncService {
         await vault_.autoUnlock();
         return false;
       }
+      final effectiveFamily = familyId ?? await CurrentFamilyStore.get();
+      // 家庭上下文未就绪：探测无意义，需等就绪后重试
+      if (effectiveFamily.isEmpty && throwOnError) {
+        throw StateError('family not ready');
+      }
       final cloudDoc = await pullVaultDoc(
-          port: port, userId: userId, familyId: familyId);
+          port: port, userId: userId, familyId: effectiveFamily);
       if (cloudDoc == null) return false;
       final imported = await vault_.importVaultDoc(cloudDoc);
       // 重装/换设备导入成功：自动解锁（重装后无自动解锁份，静默保持
@@ -126,6 +135,7 @@ class VaultSyncService {
       if (imported) await vault_.autoUnlock();
       return imported;
     } catch (_) {
+      if (throwOnError) rethrow;
       // 网络失败等：下次登录/开 App 再探测，静默
       return false;
     }

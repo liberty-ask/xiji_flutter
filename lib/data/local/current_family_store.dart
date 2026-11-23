@@ -24,7 +24,13 @@ class CurrentFamilyStore {
     final stored = prefs.getString(_key);
     if (stored != null && stored.isNotEmpty) return stored;
     final families = await LocalFamilyCache.load();
-    if (families != null && families.isNotEmpty) return families.first.id;
+    if (families != null && families.isNotEmpty) {
+      // 兜底同样以 isCurrent 为准：返回 first 可能与真实当前家庭不一致，
+      // 导致按家庭隔离的本地缓存键错位（成员列表等读不到）
+      return families
+          .firstWhere((f) => f.isCurrent, orElse: () => families.first)
+          .id;
+    }
     return '';
   }
 

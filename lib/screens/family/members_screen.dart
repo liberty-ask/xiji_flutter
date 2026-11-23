@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../data/local/current_family_store.dart';
+import '../../data/local/family_member_cache.dart';
 import '../../services/api/family_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../widgets/common/error_widget.dart' as custom;
@@ -11,7 +13,10 @@ import '../../models/family_member.dart';
 import '../../l10n/app_localizations.dart';
 
 class MembersScreen extends StatefulWidget {
-  const MembersScreen({super.key});
+  const MembersScreen({super.key, this.memberLoader});
+
+  /// 测试注入用：默认走 FamilyService 网络 + 本地缓存回退
+  final Future<List<FamilyMember>> Function()? memberLoader;
 
   @override
   State<MembersScreen> createState() => _MembersScreenState();
@@ -21,7 +26,8 @@ class _MembersScreenState extends State<MembersScreen> {
   final FamilyService _familyService = FamilyService();
   List<FamilyMember> _members = [];
   bool _isLoading = true;
-  String? _error;
+  // 无缓存且加载失败：展示可读提示（不暴露原始异常文本）
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -32,24 +38,40 @@ class _MembersScreenState extends State<MembersScreen> {
   Future<void> _loadMembers() async {
     setState(() {
       _isLoading = true;
-      _error = null;
+      _loadFailed = false;
     });
 
-    try {
-      final members = await _familyService.getMembers();
+    // 先展示本地缓存（离线可用、切换家庭后立即更新），再静默刷新
+    final familyId = await CurrentFamilyStore.get();
+    final cached = await FamilyMemberCache.load(familyId);
+    if (cached != null && cached.isNotEmpty && mounted) {
       setState(() {
-        _members = members;
-        _error = null;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _members = [];
-      });
-    } finally {
-      setState(() {
+        _members = cached;
         _isLoading = false;
       });
+    }
+
+    try {
+      // 服务层网络失败会回退同一份缓存，无缓存才抛错
+      final members =
+          await (widget.memberLoader?.call() ?? _familyService.getMembers());
+      if (!mounted) return;
+      setState(() {
+        _members = members;
+        _loadFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        // 已有缓存/已展示成员时保留列表、静默降级；无成员才提示可读文案
+        _loadFailed = _members.isEmpty;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -61,9 +83,9 @@ class _MembersScreenState extends State<MembersScreen> {
       ),
       body: _isLoading
           ? const LoadingIndicator()
-          : _error != null
+          : _loadFailed
               ? custom.CustomErrorWidget(
-                  message: _error!,
+                  message: AppLocalizations.of(context)!.membersLoadFailed,
                   onRetry: _loadMembers,
                 )
               : _members.isEmpty
