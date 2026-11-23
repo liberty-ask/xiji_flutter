@@ -3,7 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
-import '../../services/api/family_service.dart';
+import '../../data/local/current_family_store.dart';
+import '../../data/local/local_family_cache.dart';
 import '../../models/family.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../l10n/app_localizations.dart';
@@ -16,8 +17,8 @@ class InviteScreen extends StatefulWidget {
 }
 
 class _InviteScreenState extends State<InviteScreen> {
-  final FamilyService _familyService = FamilyService();
   Family? _currentFamily;
+  String? _qrData;
   bool _isLoading = true;
 
   @override
@@ -26,37 +27,26 @@ class _InviteScreenState extends State<InviteScreen> {
     _loadCurrentFamily();
   }
 
+  /// 纯本地：当前家庭 ID → 家庭缓存 → 本地生成 `family:<id>` 二维码。
+  /// 在线/离线同一路径，不发起任何网络请求。
   Future<void> _loadCurrentFamily() async {
     setState(() {
       _isLoading = true;
     });
 
-    try {
-      final families = await _familyService.getFamiliesList();
-      if (families.isNotEmpty) {
-        setState(() {
-          _currentFamily = families.firstWhere(
-            (f) => f.isCurrent,
-            orElse: () => families.first,
-          );
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
+    final currentId = await CurrentFamilyStore.get();
+    final cachedFamilies = await LocalFamilyCache.load();
+    final family = cachedFamilies == null
+        ? null
+        : (LocalFamilyCache.resolveCurrent(cachedFamilies, currentId) ??
+            LocalFamilyCache.resolveCurrent(cachedFamilies, ''));
 
-  String _getQrCodeData() {
-    if (_currentFamily == null) return '';
-    // 二维码内容格式：family:familyId
-    return 'family:${_currentFamily!.id}';
+    if (!mounted) return;
+    setState(() {
+      _currentFamily = family;
+      _qrData = family == null ? null : 'family:${family.id}';
+      _isLoading = false;
+    });
   }
 
   @override
@@ -77,27 +67,8 @@ class _InviteScreenState extends State<InviteScreen> {
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : _currentFamily == null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.white.withValues(alpha: 0.6),
-                        ),
-                        const SizedBox(height: 16),
-                        ScaledText(
-                          AppLocalizations.of(context)!.error,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+            : _currentFamily == null || _qrData == null
+                ? _buildNoLocalFamilyPlaceholder(context)
                 : SingleChildScrollView(
                     child: Padding(
                       padding: ResponsiveHelper.containerMargin(context),
@@ -158,7 +129,7 @@ class _InviteScreenState extends State<InviteScreen> {
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: QrImageView(
-                                    data: _getQrCodeData(),
+                                    data: _qrData ?? '',
                                     version: QrVersions.auto,
                                     size: ResponsiveHelper.responsiveValue(
                                       context,
@@ -282,6 +253,64 @@ class _InviteScreenState extends State<InviteScreen> {
                       ),
                     ),
                   ),
+      ),
+    );
+  }
+
+  /// 本机没有家庭信息：可读提示 + 重试/返回（不使用通用错误态）
+  Widget _buildNoLocalFamilyPlaceholder(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Center(
+      child: Padding(
+        padding: ResponsiveHelper.containerMargin(context),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.home_outlined,
+              size: 64,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+            const SizedBox(height: 16),
+            ScaledText(
+              l10n.inviteNoLocalFamily,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: _loadCurrentFamily,
+                  icon: const Icon(Icons.refresh),
+                  label: ScaledText(l10n.retry),
+                  style: TextButton.styleFrom(
+                    foregroundColor: ThemeHelper.primary(context),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/home');
+                    }
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: ScaledText(l10n.back),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
