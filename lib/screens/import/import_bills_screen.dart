@@ -17,6 +17,7 @@ import '../../parser/bill_csv_parser.dart';
 import '../../parser/bill_xlsx_parser.dart';
 import '../../services/api/category_service.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/page_error_helper.dart';
 import '../../utils/icon_constants.dart';
 import '../../utils/amount_format.dart';
 import '../../utils/responsive_helper.dart';
@@ -420,8 +421,14 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
       });
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = PageErrorHelper.resolveLoadMessage(
+            context,
+            e,
+            networkMessage: l10n.networkConnectionError,
+            fallbackMessage: l10n.billParseFailed,
+          );
           _isLoading = false;
         });
       }
@@ -1048,8 +1055,14 @@ class _ImportBillsScreenState extends State<ImportBillsScreen> {
       });
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = PageErrorHelper.resolveLoadMessage(
+            context,
+            e,
+            networkMessage: l10n.networkConnectionError,
+            fallbackMessage: l10n.importFailed,
+          );
           _isLoading = false;
         });
       }

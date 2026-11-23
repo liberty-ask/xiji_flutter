@@ -17,6 +17,7 @@ import '../../utils/theme_helper.dart';
 import '../../utils/transaction_type_style.dart';
 import '../../utils/responsive_helper.dart';
 import '../../utils/error_helper.dart';
+import '../../utils/page_error_helper.dart';
 import '../../utils/constants.dart';
 import '../../utils/amount_format.dart';
 import '../../models/transaction.dart';
@@ -146,11 +147,18 @@ class _DetailScreenState extends State<DetailScreen> {
         _hasMore = transactions.length >= AppConstants.defaultPageSize;
       });
     } catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       setState(() {
-        _error = e.toString();
-        if (reset) {
-          _transactions = [];
-        }
+        // 已有数据时保留展示，不清空成错误页
+        _error = _transactions.isEmpty
+            ? PageErrorHelper.resolveLoadMessage(
+                context,
+                e,
+                networkMessage: l10n.transactionListLoadNetworkError,
+                fallbackMessage: l10n.transactionListLoadFailed,
+              )
+            : null;
       });
     } finally {
       setState(() {
@@ -202,11 +210,10 @@ class _DetailScreenState extends State<DetailScreen> {
         // 判断是否还有更多数据
         _hasMore = transactions.length >= AppConstants.defaultPageSize;
       });
-    } catch (e) {
-      // 加载失败，回退页码
+    } catch (_) {
+      // 加载更多失败：回退页码，保留已展示的列表
       setState(() {
         _currentPage--;
-        _error = e.toString();
       });
     } finally {
       setState(() {

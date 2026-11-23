@@ -323,7 +323,8 @@ class _VoiceTransactionScreenState extends State<VoiceTransactionScreen>
         }
       } else {
         if (mounted) {
-          CustomSnackBar.showError(context, '${AppLocalizations.of(context)!.speechRecognitionFailed}: ${e.toString()}');
+          CustomSnackBar.showError(
+              context, AppLocalizations.of(context)!.speechRecognitionFailed);
         }
       }
     }

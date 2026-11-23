@@ -11,6 +11,7 @@ import '../../utils/transaction_type_style.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/date_picker_helper.dart';
 import '../../utils/icon_constants.dart';
+import '../../utils/page_error_helper.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/category_l10n.dart';
 
@@ -66,9 +67,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
         }
       });
     } catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       setState(() {
-        _error = e.toString();
-        _calendarData = null;
+        // 已有数据时保留展示，不清空成错误页
+        _error = _calendarData == null
+            ? PageErrorHelper.resolveLoadMessage(
+                context,
+                e,
+                networkMessage: l10n.calendarLoadNetworkError,
+                fallbackMessage: l10n.calendarLoadFailed,
+              )
+            : null;
       });
     } finally {
       setState(() {

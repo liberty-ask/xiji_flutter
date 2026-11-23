@@ -16,6 +16,7 @@ import '../../utils/date_picker_helper.dart';
 import '../../utils/icon_constants.dart';
 import '../../utils/amount_format.dart';
 import '../../models/transaction.dart';
+import '../../utils/page_error_helper.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/category_l10n.dart';
 
@@ -151,9 +152,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _error = null;
       });
     } catch (e) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       setState(() {
-        _error = e.toString();
-        _statsData = null;
+        // 已有数据时保留展示，不清空成错误页
+        _error = _statsData == null
+            ? PageErrorHelper.resolveLoadMessage(
+                context,
+                e,
+                networkMessage: l10n.statisticsLoadNetworkError,
+                fallbackMessage: l10n.statisticsLoadFailed,
+              )
+            : null;
       });
     } finally {
       setState(() {
@@ -211,10 +221,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         setState(() {
           _isLoadingTrend = false;
-          _trendData = null;
-          _trendError = e.toString();
+          // 已有趋势数据时保留，不清空成错误页
+          _trendError = _trendData == null
+              ? PageErrorHelper.resolveLoadMessage(
+                  context,
+                  e,
+                  networkMessage: l10n.statisticsLoadNetworkError,
+                  fallbackMessage: l10n.statisticsLoadFailed,
+                )
+              : null;
         });
       }
     }
