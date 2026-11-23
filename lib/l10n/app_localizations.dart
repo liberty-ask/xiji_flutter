@@ -184,6 +184,12 @@ abstract class AppLocalizations {
   /// **'Family Invite'**
   String get familyInvite;
 
+  /// No description provided for @inviteNoLocalFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to read local family info. Go back to Home and refresh, then retry.'**
+  String get inviteNoLocalFamily;
+
   /// No description provided for @audit.
   ///
   /// In en, this message translates to:
@@ -585,6 +591,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No member data available'**
   String get noMemberData;
+
+  /// No description provided for @membersLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load family members. Check your network and try again.'**
+  String get membersLoadFailed;
+
+  /// No description provided for @calendarLoadNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error. Unable to load calendar data. Check your network and try again.'**
+  String get calendarLoadNetworkError;
+
+  /// No description provided for @calendarLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load calendar data. Please try again later.'**
+  String get calendarLoadFailed;
+
+  /// No description provided for @statisticsLoadNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error. Unable to load statistics. Check your network and try again.'**
+  String get statisticsLoadNetworkError;
+
+  /// No description provided for @statisticsLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load statistics. Please try again later.'**
+  String get statisticsLoadFailed;
+
+  /// No description provided for @auditLoadNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error. Unable to load pending applications. Check your network and try again.'**
+  String get auditLoadNetworkError;
+
+  /// No description provided for @auditLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load pending applications. Please try again later.'**
+  String get auditLoadFailed;
+
+  /// No description provided for @transactionListLoadNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error. Unable to load transactions. Check your network and try again.'**
+  String get transactionListLoadNetworkError;
+
+  /// No description provided for @transactionListLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load transactions. Please try again later.'**
+  String get transactionListLoadFailed;
 
   /// No description provided for @noDateData.
   ///

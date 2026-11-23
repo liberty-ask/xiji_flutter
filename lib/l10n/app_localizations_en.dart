@@ -51,6 +51,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get familyInvite => 'Family Invite';
 
   @override
+  String get inviteNoLocalFamily =>
+      'Unable to read local family info. Go back to Home and refresh, then retry.';
+
+  @override
   String get audit => 'Audit';
 
   @override
@@ -255,6 +259,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noMemberData => 'No member data available';
+
+  @override
+  String get membersLoadFailed =>
+      'Unable to load family members. Check your network and try again.';
+
+  @override
+  String get calendarLoadNetworkError =>
+      'Network error. Unable to load calendar data. Check your network and try again.';
+
+  @override
+  String get calendarLoadFailed =>
+      'Unable to load calendar data. Please try again later.';
+
+  @override
+  String get statisticsLoadNetworkError =>
+      'Network error. Unable to load statistics. Check your network and try again.';
+
+  @override
+  String get statisticsLoadFailed =>
+      'Unable to load statistics. Please try again later.';
+
+  @override
+  String get auditLoadNetworkError =>
+      'Network error. Unable to load pending applications. Check your network and try again.';
+
+  @override
+  String get auditLoadFailed =>
+      'Unable to load pending applications. Please try again later.';
+
+  @override
+  String get transactionListLoadNetworkError =>
+      'Network error. Unable to load transactions. Check your network and try again.';
+
+  @override
+  String get transactionListLoadFailed =>
+      'Unable to load transactions. Please try again later.';
 
   @override
   String get noDateData => 'No date data available';

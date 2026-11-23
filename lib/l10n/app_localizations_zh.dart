@@ -51,6 +51,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get familyInvite => '家庭邀请';
 
   @override
+  String get inviteNoLocalFamily => '暂时读不到本机家庭信息，请回到首页刷新后重试';
+
+  @override
   String get audit => '审核';
 
   @override
@@ -117,8 +120,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get successfullySaved => '已保存';
 
   @override
-  String get languageDescription =>
-      'Select the display language for the app. Settings will be saved locally and retained even after logging out.';
+  String get languageDescription => '选择应用的显示语言，设置会保存到本机，即使退出登录也会保留。';
 
   @override
   String get recentActivities => '近期动态';
@@ -254,6 +256,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noMemberData => '暂无成员数据';
+
+  @override
+  String get membersLoadFailed => '暂时无法加载家庭成员，请检查网络后重试';
+
+  @override
+  String get calendarLoadNetworkError => '网络连接异常，暂时无法加载日历数据，请检查网络后重试';
+
+  @override
+  String get calendarLoadFailed => '暂时无法加载日历数据，请稍后重试';
+
+  @override
+  String get statisticsLoadNetworkError => '网络连接异常，暂时无法加载统计数据，请检查网络后重试';
+
+  @override
+  String get statisticsLoadFailed => '暂时无法加载统计数据，请稍后重试';
+
+  @override
+  String get auditLoadNetworkError => '网络连接异常，暂时无法加载待审批申请，请检查网络后重试';
+
+  @override
+  String get auditLoadFailed => '暂时无法加载待审批申请，请稍后重试';
+
+  @override
+  String get transactionListLoadNetworkError => '网络连接异常，暂时无法加载交易记录，请检查网络后重试';
+
+  @override
+  String get transactionListLoadFailed => '暂时无法加载交易记录，请稍后重试';
 
   @override
   String get noDateData => '暂无日期数据';
@@ -715,8 +744,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get networkConnectionError => '网络连接异常，请检查网络后重试';
 
   @override
-  String get recognitionTextEmpty =>
-      'Recognition text is empty, please re-enter';
+  String get recognitionTextEmpty => '未识别到内容，请重新输入';
 
   @override
   String get recordingCanceled => '录音已取消';
@@ -776,7 +804,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '语音识别服务需要网络连接（本机无离线语音包），请检查网络或改用手动记账';
 
   @override
-  String get speechRecognitionFailed => 'Speech recognition failed';
+  String get speechRecognitionFailed => '语音识别失败';
 
   @override
   String get noVoiceContentRecognized => '未识别到语音内容，请重试';
@@ -1379,28 +1407,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get billAssignHint => '点击分组上的分类，可按收支分别批量指认该商户的交易';
 
   @override
-  String get billDuplicateSkip => 'Already imported, will skip';
+  String get billDuplicateSkip => '已导入，将跳过';
 
   @override
-  String get billParseFailed => 'Cannot recognize this bill file';
+  String get billParseFailed => '无法识别该账单文件';
 
   @override
   String billNoTransactions(Object platform) {
-    return 'No transactions found in the $platform bill';
+    return '未在$platform账单中发现交易记录';
   }
 
   @override
-  String get billHeaderUnrecognized =>
-      'Bill header not recognized, please make sure the file is complete';
+  String get billHeaderUnrecognized => '无法识别账单表头，请确认文件完整';
 
   @override
   String billRowsUnparsed(int count) {
-    return 'Parsed $count rows but none could be read';
+    return '解析到$count行数据但均无法读取';
   }
 
   @override
   String billGroupCount(Object count) {
-    return '$count transactions';
+    return '$count笔';
   }
 
   @override
@@ -1448,12 +1475,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncRestoringData(int count) {
-    return 'Restoring data, $count restored';
+    return '正在恢复数据，已恢复 $count 条';
   }
 
   @override
   String syncUploadingHistory(int done, int total) {
-    return 'Uploading history, $done/$total';
+    return '正在上传历史数据，已上传 $done/$total';
   }
 
   @override
@@ -1587,6 +1614,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get familyInvite => '家庭邀请';
 
   @override
+  String get inviteNoLocalFamily => '暂时读不到本机家庭信息，请回到首页刷新后重试';
+
+  @override
   String get audit => '审核';
 
   @override
@@ -1651,6 +1681,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get successfullySaved => '已保存';
+
+  @override
+  String get languageDescription => '选择应用的显示语言，设置会保存到本机，即使退出登录也会保留。';
 
   @override
   String get recentActivities => '近期动态';
@@ -1786,6 +1819,33 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
 
   @override
   String get noMemberData => '暂无成员数据';
+
+  @override
+  String get membersLoadFailed => '暂时无法加载家庭成员，请检查网络后重试';
+
+  @override
+  String get calendarLoadNetworkError => '网络连接异常，暂时无法加载日历数据，请检查网络后重试';
+
+  @override
+  String get calendarLoadFailed => '暂时无法加载日历数据，请稍后重试';
+
+  @override
+  String get statisticsLoadNetworkError => '网络连接异常，暂时无法加载统计数据，请检查网络后重试';
+
+  @override
+  String get statisticsLoadFailed => '暂时无法加载统计数据，请稍后重试';
+
+  @override
+  String get auditLoadNetworkError => '网络连接异常，暂时无法加载待审批申请，请检查网络后重试';
+
+  @override
+  String get auditLoadFailed => '暂时无法加载待审批申请，请稍后重试';
+
+  @override
+  String get transactionListLoadNetworkError => '网络连接异常，暂时无法加载交易记录，请检查网络后重试';
+
+  @override
+  String get transactionListLoadFailed => '暂时无法加载交易记录，请稍后重试';
 
   @override
   String get noDateData => '暂无日期数据';
@@ -2247,6 +2307,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   String get networkConnectionError => '网络连接异常，请检查网络后重试';
 
   @override
+  String get recognitionTextEmpty => '未识别到内容，请重新输入';
+
+  @override
   String get recordingCanceled => '录音已取消';
 
   @override
@@ -2302,6 +2365,9 @@ class AppLocalizationsZhCn extends AppLocalizationsZh {
   @override
   String get speechRecognitionNetworkRequired =>
       '语音识别服务需要网络连接（本机无离线语音包），请检查网络或改用手动记账';
+
+  @override
+  String get speechRecognitionFailed => '语音识别失败';
 
   @override
   String get noVoiceContentRecognized => '未识别到语音内容，请重试';
@@ -3111,6 +3177,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get familyInvite => '家庭邀請';
 
   @override
+  String get inviteNoLocalFamily => '暫時讀不到本機家庭資訊，請回到首頁重新整理後再試';
+
+  @override
   String get audit => '審核';
 
   @override
@@ -3313,6 +3382,33 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get noMemberData => '暫無成員數據';
+
+  @override
+  String get membersLoadFailed => '暫時無法載入家庭成員，請檢查網路後重試';
+
+  @override
+  String get calendarLoadNetworkError => '網路連線異常，暫時無法載入日曆資料，請檢查網路後重試';
+
+  @override
+  String get calendarLoadFailed => '暫時無法載入日曆資料，請稍後重試';
+
+  @override
+  String get statisticsLoadNetworkError => '網路連線異常，暫時無法載入統計資料，請檢查網路後重試';
+
+  @override
+  String get statisticsLoadFailed => '暫時無法載入統計資料，請稍後重試';
+
+  @override
+  String get auditLoadNetworkError => '網路連線異常，暫時無法載入待審批申請，請檢查網路後重試';
+
+  @override
+  String get auditLoadFailed => '暫時無法載入待審批申請，請稍後重試';
+
+  @override
+  String get transactionListLoadNetworkError => '網路連線異常，暫時無法載入交易記錄，請檢查網路後重試';
+
+  @override
+  String get transactionListLoadFailed => '暫時無法載入交易記錄，請稍後重試';
 
   @override
   String get noDateData => '暫無日期數據';
@@ -3775,6 +3871,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get networkConnectionError => '網絡連接異常，請檢查網絡後重試';
 
   @override
+  String get recognitionTextEmpty => '未辨識到內容，請重新輸入';
+
+  @override
   String get recordingCanceled => '錄音已取消';
 
   @override
@@ -3830,6 +3929,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   @override
   String get speechRecognitionNetworkRequired =>
       '語音識別服務需要網絡連接（本機無離線語音包），請檢查網絡或改用手動記帳';
+
+  @override
+  String get speechRecognitionFailed => '語音辨識失敗';
 
   @override
   String get noVoiceContentRecognized => '未識別到語音內容，請重試';
