@@ -36,6 +36,17 @@ class User {
         'role': role,
         'familyId': familyId,
       };
+
+  /// 仅用于「当前家庭角色」这类会随切换家庭变化的字段做局部更新
+  User copyWith({int? role, String? familyId}) => User(
+        id: id,
+        nickname: nickname,
+        phone: phone,
+        email: email,
+        avatar: avatar,
+        role: role ?? this.role,
+        familyId: familyId ?? this.familyId,
+      );
 }
 
 class UserRole {

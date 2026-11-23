@@ -18,7 +18,6 @@ import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/scaled_text.dart';
 import '../../utils/theme_helper.dart';
 import '../../utils/responsive_helper.dart';
-import '../../models/user.dart';
 import '../../l10n/app_localizations.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -51,9 +50,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadAuditCount() async {
     final authProvider = context.read<AuthProvider>();
-    final user = authProvider.user;
 
-    if (UserRole.isAdmin(user?.role)) {
+    if (authProvider.isAdminOfCurrentFamily) {
       try {
         final profile = await _familyService.getUserProfile();
         if (mounted) {
@@ -294,7 +292,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       subtitle: AppLocalizations.of(context)!.monthlyBudgetSubtitle,
                       onTap: () => context.push('/budget'),
                     ),
-                    if (UserRole.isAdmin(user?.role))
+                    // 仅家庭管理员可见：角色来自服务端按当前家庭计算的 User.role；
+                    // 切换家庭后经 AuthProvider 刷新（服务端另有鉴权）
+                    if (authProvider.isAdminOfCurrentFamily)
                       _buildMenuCard(
                         icon: Icons.category,
                         title: AppLocalizations.of(context)!.categoryManagement,
@@ -313,7 +313,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       subtitle: AppLocalizations.of(context)!.memberManagementSubtitle,
                       onTap: () => context.push('/members'),
                     ),
-                    if (UserRole.isAdmin(user?.role))
+                    // 仅家庭管理员可见：角色来自服务端按当前家庭计算的 User.role；
+                    // 切换家庭后经 AuthProvider 刷新（服务端另有鉴权）
+                    if (authProvider.isAdminOfCurrentFamily)
                       _buildMenuCard(
                         icon: Icons.verified_user,
                         title: AppLocalizations.of(context)!.joinAudit,

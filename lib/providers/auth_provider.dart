@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../crypto/vault_provider.dart';
 import '../data/local/current_family_store.dart';
 import '../data/local/db_provider.dart';
+import '../data/local/family_member_cache.dart';
 import '../data/local/local_family_cache.dart';
 import '../data/local/local_user.dart';
 import '../data/local/member_nicknames.dart';
@@ -36,6 +37,29 @@ class AuthProvider with ChangeNotifier {
 
   User? get user => _user;
 
+  /// 当前家庭的管理员身份（唯一判据）。
+  ///
+  /// `User.role` 由服务端 `/user/profile` 按 `current_family_id` 计算，
+  /// 但它是登录时的快照——切换家庭后必须由 [updateCurrentFamilyRole]
+  /// 刷新，否则会拿旧家庭角色做鉴权（例如在个人家庭是管理员、加入
+  /// 别人家庭后仍被当成管理员，看到「加入审核」）。
+  bool get isAdminOfCurrentFamily => UserRole.isAdmin(_user?.role);
+
+  /// 会话内切换家庭后同步当前家庭角色（服务端家庭列表/资料接口的真值）
+  Future<void> updateCurrentFamilyRole(int? role) async {
+    final current = _user;
+    if (current == null || role == null || current.role == role) return;
+    _user = current.copyWith(role: role);
+    await LocalUser.cache(_user!);
+    notifyListeners();
+  }
+
+  /// 测试注入当前用户（用于鉴权/入口可见性用例）
+  @visibleForTesting
+  void debugSetUser(User? user) {
+    _user = user;
+  }
+
   /// 登录态：本地凭证存在性判定（乐观认证，离线可进主界面）
   bool get isAuthenticated => _hasToken;
 
@@ -48,6 +72,7 @@ class AuthProvider with ChangeNotifier {
     await _apiClient.removeToken();
     await LocalUser.clear();
     await MemberNicknames.clear();
+    await FamilyMemberCache.clearAll();
     await LocalFamilyCache.clear();
     await CurrentFamilyStore.clear();
     VaultProvider.vault.lock(); // 清密钥解锁内存态：防切账号串用上一账号私钥

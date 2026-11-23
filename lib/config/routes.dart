@@ -31,7 +31,6 @@ import '../providers/auth_provider.dart';
 import '../providers/home_provider.dart';
 import '../providers/transaction_provider.dart';
 import '../providers/category_provider.dart';
-import '../models/user.dart';
 
 class AppRouter {
   static GoRouter createRouter(AuthProvider authProvider) {
@@ -83,11 +82,10 @@ class AppRouter {
             return '/login?redirect=$currentPath';
           }
 
-          // 检查管理员权限
+          // 检查管理员权限（当前家庭角色，随切换家庭刷新）
           final requireAdminRoutes = ['/audit'];
           if (requireAdminRoutes.contains(currentPath)) {
-            final user = authProvider.user;
-            if (user?.role == null || !UserRole.isAdmin(user!.role)) {
+            if (!authProvider.isAdminOfCurrentFamily) {
               return '/home'; // 没有权限，重定向到首页
             }
           }
