@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:async';
+import '../../providers/language_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/error_helper.dart';
 
@@ -86,9 +87,14 @@ class ApiClient {
       },
     ));
 
-    // 请求拦截器：添加 Token；错误拦截器：401无感刷新
+    // 请求拦截器：添加Token与Accept-Language；错误拦截器：401无感刷新
     _dio.interceptors.add(QueuedInterceptorsWrapper(
       onRequest: (options, handler) async {
+        // 语言与App显示语言同源（LanguageProvider维护），后端按此返回对应文案
+        final languageTag = LanguageProvider.resolvedLanguageTag;
+        if (languageTag != null && languageTag.isNotEmpty) {
+          options.headers['Accept-Language'] = languageTag;
+        }
         final token = await getToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';

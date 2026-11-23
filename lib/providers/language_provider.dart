@@ -1,18 +1,38 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/app_localizations.dart';
 
 class LanguageProvider with ChangeNotifier {
   static const String _languageKey = 'app_language';
-  
+
   Locale? _currentLocale;
-  
+
+  /// 与App显示语言同源的HTTP Accept-Language标签（简中zh-CN/繁中zh-TW/英文en）。
+  /// 由_loadLanguage与setLanguage同步更新，供ApiClient请求拦截器读取，
+  /// 后端按该语言返回用户可见文案。偏好未加载完成时为null（跟随系统）。
+  static String? resolvedLanguageTag;
+
   Locale? get currentLocale => _currentLocale;
-  
+
+  /// 把Locale归一化为后端支持的语言标签：zh_TW→zh-TW，zh/zh_CN→zh-CN，en*→en
+  static String? _languageTagFor(Locale? locale) {
+    if (locale == null) return null;
+    if (locale.languageCode == 'zh') {
+      return locale.countryCode == 'TW' ? 'zh-TW' : 'zh-CN';
+    }
+    return locale.languageCode;
+  }
+
+  /// 更新请求头同源标签：跟随系统时取平台locale（与MaterialApp的解析一致）
+  static void _syncResolvedLanguageTag(Locale? locale) {
+    resolvedLanguageTag = _languageTagFor(locale ?? PlatformDispatcher.instance.locale);
+  }
+
   LanguageProvider() {
     _loadLanguage();
   }
-  
+
   Future<void> _loadLanguage() async {
     final prefs = await SharedPreferences.getInstance();
     final languageStr = prefs.getString(_languageKey);
@@ -27,9 +47,10 @@ class LanguageProvider with ChangeNotifier {
         _currentLocale = Locale(languageStr);
       }
     }
+    _syncResolvedLanguageTag(_currentLocale);
     notifyListeners();
   }
-  
+
   Future<void> setLanguage(Locale? locale) async {
     _currentLocale = locale;
     final prefs = await SharedPreferences.getInstance();
@@ -39,6 +60,7 @@ class LanguageProvider with ChangeNotifier {
     } else {
       await prefs.setString(_languageKey, '${locale.languageCode}_${locale.countryCode}');
     }
+    _syncResolvedLanguageTag(_currentLocale);
     notifyListeners();
   }
   
