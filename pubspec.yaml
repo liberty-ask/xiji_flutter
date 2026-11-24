@@ -1,7 +1,7 @@
 name: xiji_flutter
 description: 玺记 - 智能家庭记账应用，支持语音记账、家庭协作、统计分析
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
